@@ -1034,17 +1034,21 @@ def init_db():
                 db.commit()
                 print("Admin creat: usuari=admin / contrasenya=admin123")
 
-# Init DB always (tant en gunicorn com en local)
-print(f"DATABASE_URL present: {bool(DATABASE_URL)}")
-print(f"USE_PG: {USE_PG}")
-with app.app_context():
-    try:
-        init_db()
-        print("init_db OK")
-    except Exception as e:
-        import traceback
-        print(f"init_db ERROR: {e}")
-        traceback.print_exc()
+# Init DB via before_first_request equivalent
+_db_initialized = False
+
+@app.before_request
+def ensure_db():
+    global _db_initialized
+    if not _db_initialized:
+        _db_initialized = True
+        try:
+            init_db()
+            print("init_db OK")
+        except Exception as e:
+            import traceback
+            print(f"init_db ERROR: {e}")
+            traceback.print_exc()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
