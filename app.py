@@ -1034,6 +1034,17 @@ def init_db():
                 db.commit()
                 print("Admin creat: usuari=admin / contrasenya=admin123")
 
+# Init DB always (tant en gunicorn com en local)
+print(f"DATABASE_URL present: {bool(DATABASE_URL)}")
+print(f"USE_PG: {USE_PG}")
+with app.app_context():
+    try:
+        init_db()
+        print("init_db OK")
+    except Exception as e:
+        import traceback
+        print(f"init_db ERROR: {e}")
+        traceback.print_exc()
+
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
