@@ -911,66 +911,63 @@ def init_db():
     with app.app_context():
         db = get_db()
         if USE_PG:
-            cur = db.cursor()
-            statements = [
+            # Use a SEPARATE connection with autocommit for DDL
+            import psycopg2 as _pg2
+            ddl_conn = _pg2.connect(DATABASE_URL)
+            ddl_conn.autocommit = True
+            ddl_cur = ddl_conn.cursor()
+            ddl = [
                 """CREATE TABLE IF NOT EXISTS usuaris (
-                    id SERIAL PRIMARY KEY,
-                    username TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL,
-                    nom TEXT NOT NULL,
-                    is_admin INTEGER DEFAULT 0,
-                    marge REAL DEFAULT 60,
-                    marge_impressio REAL DEFAULT 0,
-                    nom_empresa TEXT DEFAULT ''
+                    id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL, nom TEXT NOT NULL,
+                    is_admin INTEGER DEFAULT 0, marge REAL DEFAULT 60,
+                    marge_impressio REAL DEFAULT 0, nom_empresa TEXT DEFAULT ''
                 )""",
                 """CREATE TABLE IF NOT EXISTS impressio (
-                    referencia TEXT PRIMARY KEY,
-                    descripcio TEXT, preu REAL
-                )""",
+                    referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL)""",
                 """CREATE TABLE IF NOT EXISTS moldures (
-                    referencia TEXT PRIMARY KEY,
-                    preu_taller REAL, gruix REAL, cost REAL,
-                    proveidor TEXT, ref2 TEXT, ubicacio TEXT,
-                    descripcio TEXT, foto TEXT
-                )""",
+                    referencia TEXT PRIMARY KEY, preu_taller REAL, gruix REAL,
+                    cost REAL, proveidor TEXT, ref2 TEXT, ubicacio TEXT,
+                    descripcio TEXT, foto TEXT)""",
                 """CREATE TABLE IF NOT EXISTS vidres (
-                    referencia TEXT PRIMARY KEY, preu REAL
-                )""",
+                    referencia TEXT PRIMARY KEY, preu REAL)""",
                 """CREATE TABLE IF NOT EXISTS passpartout (
-                    referencia TEXT PRIMARY KEY, preu REAL
-                )""",
+                    referencia TEXT PRIMARY KEY, preu REAL)""",
                 """CREATE TABLE IF NOT EXISTS encolat_pro (
-                    referencia TEXT PRIMARY KEY, preu REAL
-                )""",
+                    referencia TEXT PRIMARY KEY, preu REAL)""",
                 """CREATE TABLE IF NOT EXISTS comandes (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER, data TEXT,
-                    client_nom TEXT, client_tel TEXT,
-                    pre_marc TEXT, marc_principal TEXT,
-                    amplada REAL, alcada REAL, copia REAL,
+                    id SERIAL PRIMARY KEY, user_id INTEGER, data TEXT,
+                    client_nom TEXT, client_tel TEXT, pre_marc TEXT,
+                    marc_principal TEXT, amplada REAL, alcada REAL, copia REAL,
                     encolat TEXT, vidre TEXT, passpartout TEXT, impressio TEXT,
                     marge REAL, descompte REAL, quantitat REAL,
-                    preu_net REAL, preu_final REAL,
-                    entrega REAL, pendent REAL, observacions TEXT,
-                    sessio_id TEXT, opcio_nom TEXT DEFAULT 'Opció A'
-                )""",
+                    preu_net REAL, preu_final REAL, entrega REAL, pendent REAL,
+                    observacions TEXT, sessio_id TEXT,
+                    opcio_nom TEXT DEFAULT 'Opció A')""",
                 """CREATE TABLE IF NOT EXISTS config (
-                    clau TEXT PRIMARY KEY, valor TEXT
-                )""",
+                    clau TEXT PRIMARY KEY, valor TEXT)""",
             ]
-            for s in statements:
-                cur.execute(s)
-            # Add missing columns if upgrading
-            for col, typ in [('impressio','TEXT'),('sessio_id','TEXT'),
-                             ('opcio_nom','TEXT'),('nom_empresa','TEXT')]:
+            for s in ddl:
                 try:
-                    cur.execute(f"ALTER TABLE comandes ADD COLUMN {col} {typ}")
-                except: pass
-            try:
-                cur.execute("ALTER TABLE usuaris ADD COLUMN nom_empresa TEXT DEFAULT ''")
-            except: pass
-            db.commit()
-            # Admin per defecte
+                    ddl_cur.execute(s)
+                    print("DDL OK:", s[:40])
+                except Exception as e:
+                    print("DDL err:", e)
+            for tbl, col, typ in [
+                ('comandes','impressio','TEXT'),
+                ('comandes','sessio_id','TEXT'),
+                ('comandes','opcio_nom','TEXT'),
+                ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
+            ]:
+                try:
+                    ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
+                except Exception as e:
+                    print("ALTER skip:", e)
+            ddl_cur.close()
+            ddl_conn.close()
+            print("DDL done, checking admin...")
+            # Now use normal connection for DML
+            cur = db.cursor()
             cur.execute("SELECT id FROM usuaris WHERE username=%s", ['admin'])
             if not cur.fetchone():
                 cur.execute("INSERT INTO usuaris (username,password,nom,is_admin) VALUES (%s,%s,%s,%s)",
