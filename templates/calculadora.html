@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Calculadora</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
+nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px}.brand em{color:#C8873A;font-style:normal}
+.nav-r{display:flex;align-items:center;gap:1.25rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}.nav-r a:hover{color:#fff}
+.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:3px 11px;border-radius:20px;font-weight:500}
+.wrap{max-width:1060px;margin:0 auto;padding:1.75rem 1.25rem 3rem}
+.ph h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;letter-spacing:-.3px;margin-bottom:4px}
+.ph p{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1.1rem}
+.card-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.1px;color:var(--hint);margin-bottom:1.1rem;padding-bottom:.6rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.card-t::after{content:'';flex:1;height:1px;background:var(--border)}
+.f{margin-bottom:.85rem}.f:last-child{margin-bottom:0}
+.f label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;letter-spacing:.2px}
+.f input,.f select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fff;outline:none;transition:border-color .15s}
+.f input:focus,.f select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.f input[readonly]{background:var(--bg);color:var(--hint);cursor:default}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem}
+
+/* SEARCH SELECT */
+.ss{position:relative}
+.ss input{cursor:pointer}
+.ss-list{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.1);margin-top:2px}
+.ss-list.open{display:block}
+.ss-item{padding:8px 12px;font-size:13px;cursor:pointer;color:var(--text);transition:background .1s}
+.ss-item:hover,.ss-item.active{background:var(--green-l);color:var(--green)}
+.ss-item.empty{color:var(--hint);font-style:italic;cursor:default}
+.ss-item:hover.empty{background:transparent;color:var(--hint)}
+.chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;min-height:22px}
+.chip{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.chip-g{background:var(--green-l);color:var(--green)}
+.chip-n{background:var(--bg);color:var(--hint)}
+.chip-r{background:var(--red-l);color:var(--red)}
+.desc{font-size:11px;color:var(--hint);margin-top:3px;font-style:italic}
+.foto-box{margin-top:.85rem;border:1px dashed #D4D0C8;border-radius:7px;background:var(--bg);height:130px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.foto-box img{max-width:100%;max-height:100%;object-fit:contain}
+.foto-box .no-foto{font-size:12px;color:var(--hint);text-align:center;line-height:1.6}
+.nota{font-size:11px;color:var(--muted);background:var(--amber-l);border-left:3px solid var(--amber);padding:7px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.6}
+#bloc-passpartu{animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+/* GRUPS DE MATERIALS */
+.grup{margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.grup:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.grup-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--hint);margin-bottom:.5rem}
+.grup-opcions{display:flex;flex-wrap:wrap;gap:.4rem}
+.opt-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s;background:#fff;user-select:none}
+.opt-btn:hover{border-color:var(--green);background:var(--green-l)}
+.opt-btn input{display:none}
+.opt-btn.selected{background:var(--green-l);border-color:var(--green);color:var(--green)}
+.opt-btn.opt-none{border-style:dashed}
+.opt-btn.opt-none.selected{background:var(--bg);border-color:var(--border2);color:var(--muted)}
+.opt-btn.opt-conservar{border-color:#B8DCC9;color:var(--green)}
+.opt-btn.opt-conservar.selected{background:var(--green-l);border-color:var(--green)}
+.opt-text{font-size:13px;font-weight:500}
+.opt-preu{font-size:11px;font-weight:600;color:var(--green);background:var(--green-l);padding:1px 6px;border-radius:4px;margin-left:2px}
+.opt-btn.selected .opt-preu{background:rgba(26,107,69,.15)}
+.opt-btn.disabled{opacity:.35;pointer-events:none}
+
+/* DARK CARD (marge) */
+.dcard{background:#1C1B18;border-color:#333;color:#fff;margin-bottom:1.1rem}
+.dcard .card-t{color:rgba(255,255,255,.35);border-bottom-color:rgba(255,255,255,.1)}
+.dcard .card-t::after{background:rgba(255,255,255,.1)}
+.dcard .f label{color:rgba(255,255,255,.55)}
+.dcard .f input{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:#fff;font-weight:600}
+.dcard .f input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.25)}
+.save-btn{padding:9px 15px;background:rgba(255,255,255,.12);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background .15s;white-space:nowrap}
+.save-btn:hover{background:rgba(255,255,255,.2)}
+.saved-ok{font-size:11px;color:#6BBA8A;margin-top:4px;display:none}
+.cost-panel{display:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:.85rem;margin-top:.7rem}
+.cost-panel.vis{display:block}
+.cp-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:rgba(255,255,255,.5)}
+.cp-row strong{color:#fff}
+.cp-row.tot{border-top:1px solid rgba(255,255,255,.1);margin-top:4px;padding-top:7px}
+.tog{display:flex;background:rgba(255,255,255,.07);border-radius:7px;padding:3px;margin-bottom:1rem}
+.tog button{flex:1;padding:6px;border:none;border-radius:5px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;background:transparent;color:rgba(255,255,255,.45);transition:all .15s}
+.tog button.on{background:var(--green);color:#fff}
+
+/* RESULT */
+.res-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-top:1.1rem}
+.res-head{background:#1C1B18;padding:.9rem 1.25rem;display:flex;align-items:center;justify-content:space-between}
+.res-head span{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.4)}
+.rtog{display:flex;gap:3px}
+.rtog button{font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif;padding:3px 10px;border-radius:4px;border:none;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.45);transition:all .15s}
+.rtog button.on{background:var(--green);color:#fff}
+.res-body{padding:1.1rem 1.25rem}
+.r-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px}
+.r-row:last-child{border-bottom:none}
+.r-lbl{color:var(--muted);font-size:13px}
+.r-val{font-weight:600;color:var(--text)}
+.r-val.big{font-size:21px;color:var(--green);font-family:'DM Serif Display',serif}
+.r-val.red{font-size:18px;color:var(--red);font-family:'DM Serif Display',serif}
+.e-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+.e-row label{font-size:13px;color:var(--muted)}
+.e-row input{width:105px;text-align:right;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .15s}
+.e-row input:focus{border-color:var(--green)}
+
+/* BUTTONS */
+.actions{display:flex;gap:.65rem;flex-wrap:wrap;margin-top:1.1rem}
+.btn{padding:10px 20px;border-radius:7px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#155c3a}
+.btn-d{background:#1C1B18;color:#fff}.btn-d:hover{background:#333}
+.btn-a{background:var(--amber-l);color:var(--amber);border:1px solid #E8C89A}.btn-a:hover{background:#F5E6CE}
+.btn-o{background:transparent;border:1px solid #D4D0C8;color:var(--muted)}.btn-o:hover{background:var(--bg)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ALERT */
+.alert{border-radius:7px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:1.25rem;display:none}
+.alert-ok{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}
+.alert-err{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:var(--r);padding:1.75rem;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:.4rem;font-weight:400}
+.modal p{font-size:13px;color:var(--muted);margin-bottom:1.1rem;line-height:1.6}
+.steps-box{background:var(--amber-l);border-left:3px solid var(--amber);padding:9px 12px;border-radius:0 6px 6px 0;font-size:12px;color:var(--text);line-height:1.7;margin-bottom:1.1rem}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">OBJECT<em>IU</em></div>
+  <div class="nav-r">
+    <span class="nav-u">{{ session.nom }}</span>
+    <a href="/historial">Historial</a>
+    <a href="/ajustos" title="Ajustos de preu">⚙</a>
+    {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ph">
+    <h1>Nova comanda</h1>
+    <p>Emplena les dades, calcula el preu i genera el PDF per al client</p>
+  </div>
+  <div id="alert" class="alert"></div>
+
+  <!-- TABS -->
+  <div id="tabs-bar" style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+    <div id="tabs-list" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
+    <button onclick="afegirOpcio()" style="padding:6px 14px;border:1px dashed var(--border2);border-radius:7px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">+ Nova opció</button>
+    <div id="btn-comparativa" style="display:none">
+      <button onclick="pdfComparativa()" style="padding:6px 14px;border:1px solid #B8DCC9;border-radius:7px;background:var(--green-l);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">PDF comparativa</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <!-- COL ESQUERRA -->
+    <div>
+      <div class="card">
+        <div class="card-t">Client</div>
+        <div class="f"><label>Nom del client</label><input type="text" id="client_nom" placeholder="Joan Martí"></div>
+        <div class="f2">
+          <div class="f"><label>Telèfon</label><input type="text" id="client_tel" placeholder="620 123 456"></div>
+          <div class="f"><label>Data</label><input type="text" id="data_comanda" readonly></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-t">Motllures</div>
+        <div class="f">
+          <label>Pre-Marc <span style="color:var(--hint);font-weight:400">(marc interior opcional, segon marc)</span></label>
+          <div class="ss" id="ss-pre">
+            <input type="text" id="pre_marc" placeholder="Escriu per cercar o deixa buit..." autocomplete="off"
+                   onfocus="openSS('pre')" oninput="filterSS('pre')" onblur="closeSS('pre')">
+            <div class="ss-list" id="list-pre"></div>
+          </div>
+          <div class="chip-row" id="chips-pre"></div>
+          <div class="desc" id="desc-pre"></div>
+        </div>
+        <div class="f">
+          <label style="font-weight:700;color:var(--text)">Marc principal <span style="font-size:11px;font-weight:400;color:var(--hint)">(marc exterior/principal)</span></label>
+          <div class="ss" id="ss-marc">
+            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off" oninput="onMarcInput()"
+                   onfocus="openSS('marc')" oninput="filterSS('marc')" onblur="closeSS('marc')">
+            <div class="ss-list" id="list-marc"></div>
+          </div>
+          <div class="chip-row" id="chips-marc"></div>
+          <div class="desc" id="desc-marc"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.85rem" id="fotos-grid">
+          <div>
+            <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Pre-Marc</div>
+            <div class="foto-box" id="foto-box-pre"><div class="no-foto">—</div></div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Marc principal</div>
+            <div class="foto-box" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure la foto</div></div>
+          </div>
+        </div>
+      </div>
+
+      <input type="hidden" id="mida-manual-w" value="0">
+      <input type="hidden" id="mida-manual-h" value="0">
+
+      <div class="card">
+        <div class="card-t">Mides</div>
+        <div class="f2">
+          <div class="f"><label>Amplada foto (cm)</label><input type="number" id="amplada" value="0" min="0" oninput="recalcMides()"></div>
+          <div class="f"><label>Alçada foto (cm)</label><input type="number" id="alcada" value="0" min="0" oninput="recalcMides()"></div>
+        </div>
+
+
+        <div id="mida-total-simple" style="margin-top:.5rem;font-size:12px;color:var(--hint)"></div>
+      </div>
+    </div>
+
+    <!-- COL DRETA -->
+    <div>
+      <div class="card">
+        <div class="card-t">Materials <span id="mida-hint" style="font-weight:400;color:var(--hint);font-size:10px;margin-left:4px"></span></div>
+
+        <!-- GRUP 1: Encolat / Protter -->
+        <div class="grup">
+          <div class="grup-label">Muntatge</div>
+          <div class="grup-opcions">
+            <label class="opt-btn" id="opt-encolat">
+              <input type="radio" name="muntatge" value="encolat" onchange="onGrupChange('muntatge')">
+              <span class="opt-text">Encolat</span>
+              <span class="opt-preu" id="preu-encolat">—</span>
+            </label>
+            <label class="opt-btn" id="opt-protter" title="No disponible amb marc (usa ProEco)">
+              <input type="radio" name="muntatge" value="protter" onchange="onGrupChange('muntatge')">
+              <span class="opt-text">Protter</span>
+              <span class="opt-preu" id="preu-protter">—</span>
+            </label>
+            <label class="opt-btn opt-none" id="opt-muntatge-cap">
+              <input type="radio" name="muntatge" value="" checked onchange="onGrupChange('muntatge')">
+              <span class="opt-text">Cap</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- GRUP 2: Vidre / Mirall -->
+        <div class="grup">
+          <div class="grup-label">Protecció <span id="vidre-obligatori" style="display:none;color:var(--amber);font-size:10px;font-weight:600"> · obligatori amb passpartú</span></div>
+          <div class="grup-opcions">
+            <label class="opt-btn" id="opt-vidre">
+              <input type="radio" name="proteccio" value="vidre" onchange="onGrupChange('proteccio')">
+              <span class="opt-text">Vidre</span>
+              <span class="opt-preu" id="preu-vidre">—</span>
+            </label>
+            <label class="opt-btn" id="opt-doble_vidre">
+              <input type="radio" name="proteccio" value="doble_vidre" onchange="onGrupChange('proteccio')">
+              <span class="opt-text">Doble vidre</span>
+              <span class="opt-preu" id="preu-doble_vidre">—</span>
+            </label>
+            <label class="opt-btn" id="opt-mirall">
+              <input type="radio" name="proteccio" value="mirall" onchange="onGrupChange('proteccio')">
+              <span class="opt-text">Mirall</span>
+              <span class="opt-preu" id="preu-mirall">—</span>
+            </label>
+            <label class="opt-btn opt-conservar" id="opt-conservar-vidre">
+              <input type="radio" name="proteccio" value="conservar" onchange="onGrupChange('proteccio')">
+              <span class="opt-text">Conservar vidre</span>
+              <span class="opt-preu" style="background:#E8F3EE;color:#1A6B45">0,00 €</span>
+            </label>
+            <label class="opt-btn opt-none" id="opt-proteccio-cap">
+              <input type="radio" name="proteccio" value="" checked onchange="onGrupChange('proteccio')">
+              <span class="opt-text">Cap</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- GRUP 3: Passpartú / ProEco -->
+        <div class="grup">
+          <div class="grup-label">Interior</div>
+          <div class="grup-opcions">
+            <label class="opt-btn" id="opt-passpartu">
+              <input type="radio" name="interior" value="passpartu" onchange="onGrupChange('interior')">
+              <span class="opt-text">Passpartú</span>
+              <span class="opt-preu" id="preu-passpartu">—</span>
+            </label>
+            <label class="opt-btn" id="opt-doble_pas">
+              <input type="radio" name="interior" value="doble_pas" onchange="onGrupChange('interior')">
+              <span class="opt-text">Doble passpartú</span>
+              <span class="opt-preu" id="preu-doble_pas">—</span>
+            </label>
+            <label class="opt-btn" id="opt-proeco">
+              <input type="radio" name="interior" value="proeco" onchange="onGrupChange('interior')">
+              <span class="opt-text">ProEco</span>
+              <span class="opt-preu" id="preu-proeco">—</span>
+            </label>
+            <label class="opt-btn opt-none" id="opt-interior-cap">
+              <input type="radio" name="interior" value="" checked onchange="onGrupChange('interior')">
+              <span class="opt-text">Cap</span>
+            </label>
+          </div>
+          <!-- Bloc passpartú: apareix quan es selecciona passpartú -->
+          <div id="bloc-passpartu" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
+            <div class="f2" style="margin-bottom:.5rem">
+              <div class="f">
+                <label>Marge passpartú (cm per banda)</label>
+                <input type="number" id="cm-passpartu" value="4" min="0" step="0.5" oninput="recalcMides()">
+              </div>
+              <div class="f">
+                <label>Mida total del marc</label>
+                <input type="text" id="mida-total" readonly style="font-weight:600;color:var(--green)">
+              </div>
+            </div>
+            <div class="nota" style="margin-top:0">Marc i vidre es calculen amb la mida gran (foto + passpartú). La impressió usa la mida de la foto.</div>
+          </div>
+        </div>
+
+        <!-- GRUP 4: Impressió (independent) -->
+        <div class="grup">
+          <div class="grup-label">Impressió fotogràfica</div>
+          <div class="grup-opcions">
+            <label class="opt-btn" id="opt-impressio">
+              <input type="checkbox" id="chk-impressio" onchange="onImpressioChange()">
+              <span class="opt-text">Impressió</span>
+              <span class="opt-preu" id="preu-impressio">—</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Refs seleccionades (per al càlcul) -->
+        <input type="hidden" id="ref-muntatge" value="">
+        <input type="hidden" id="ref-proteccio" value="">
+        <input type="hidden" id="ref-interior" value="">
+        <input type="hidden" id="ref-impressio-val" value="">
+      </div>
+
+      <div class="card">
+        <div class="card-t">Preu i descompte</div>
+        <div class="f2">
+          <div class="f"><label>Descompte client (%)</label><input type="number" id="descompte" value="0" min="0" max="100" oninput="calcular()"></div>
+          <div class="f"><label>Quantitat</label><input type="number" id="quantitat" value="1" min="1" oninput="calcular()"></div>
+        </div>
+        <input type="hidden" id="marge_val" value="60">
+        <input type="hidden" id="copia" value="0">
+        <div id="cost-panel" style="display:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:.85rem;margin-top:.7rem">
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost materials</span><strong id="ci-mat" style="color:#fff">—</strong></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost motllures</span><strong id="ci-mol" style="color:#fff">—</strong></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total</span><strong id="ci-tot" style="color:#fff">—</strong></div>
+        </div>
+        <input type="hidden" id="marc-w" value="30">
+        <input type="hidden" id="marc-h" value="40">
+      </div>
+
+      <div class="card">
+        <div class="card-t">Notes</div>
+        <div class="f"><label>Observacions</label><input type="text" id="observacions" placeholder="Data d'entrega, instruccions..."></div>
+      </div>
+
+      <div class="res-card">
+        <div class="res-head">
+          <span>Resum econòmic</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="res-mode-lbl" style="font-size:10px;color:rgba(255,255,255,.3)"></span>
+            <button id="rb-cost" onclick="toggleCost()" title="Veure preu de cost"
+              style="width:26px;height:26px;border:none;border-radius:5px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.4);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .15s;font-family:monospace"
+              onmouseover="this.style.background='rgba(255,255,255,.2)';this.style.color='#fff'"
+              onmouseout="this.style.background=this.dataset.on==='1'?'#1A6B45':'rgba(255,255,255,.1)';this.style.color=this.dataset.on==='1'?'#fff':'rgba(255,255,255,.4)'"
+              data-on="0">€</button>
+          </div>
+        </div>
+        <div class="res-body">
+          <div class="r-row"><span class="r-lbl" id="r-lbl-net">Preu net PVP (sense IVA)</span><span class="r-val" id="r-net">0,00 €</span></div>
+          <div class="r-row" id="r-row-desc" style="display:none"><span class="r-lbl" id="r-lbl-desc">Descompte</span><span class="r-val" style="color:var(--amber)" id="r-desc">— €</span></div>
+          <div class="r-row"><span class="r-lbl">Amb IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
+          <div class="r-row"><span class="r-lbl" id="r-lbl-final">Total amb IVA</span><span class="r-val big" id="r-final">0,00 €</span></div>
+          <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="calcular()"></div>
+          <div class="r-row"><span class="r-lbl">PENDENT de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-g" onclick="guardar()">Guardar</button>
+        <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
+        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="WhatsApp al client">WA Client</button>
+        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="WhatsApp a Objectiu">WA Objectiu</button>
+        <button class="btn btn-o" onclick="novaComanda()">Nova comanda</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+
+// ── Variables globals ─────────────────────────────────────────────────────
+var REFS    = {pre:[], marc:[]};
+var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
+var GRUIX   = {pre:0, marc:0};
+var CLOSEST = {};
+var marge = 60, marge_impressio = 0, rmode = 'pvp', uid = null;
+var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
+var _lastFetchKey = '';
+var empresa_nom = 'Objectiu Emmarcació', empresa_adreca = '', empresa_tel = '';
+
+var valToId = {
+  encolat:'encolat', protter:'protter',
+  vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar-vidre',
+  passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'
+};
+var allKeys = {
+  muntatge:  ['encolat','protter','muntatge-cap'],
+  proteccio: ['vidre','doble_vidre','mirall','conservar-vidre','proteccio-cap'],
+  interior:  ['passpartu','doble_pas','proeco','interior-cap']
+};
+var _tipusGrupMap = {
+  muntatge:  {encolat:'encolat', protter:'protter'},
+  proteccio: {vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar'},
+  interior:  {passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'}
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function fmt(n){ return n.toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function fmtCost(n){ return n.toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €*'; }
+function preuDisplay(cost, isImp){
+  if(rmode==='cost') return fmtCost(cost);
+  return fmt(cost*(1+(isImp?(marge_impressio||marge):marge)/100));
+}
+function showAlert(msg,t){
+  var a=document.getElementById('alert');
+  a.className='alert alert-'+t; a.textContent=msg;
+  a.style.display='block';
+  setTimeout(function(){a.style.display='none';},5000);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.getElementById('data_comanda').value = new Date().toLocaleDateString('ca-ES');
+
+fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
+  marge = d.marge; marge_impressio = d.marge_impressio||0;
+  empresa_nom    = d.empresa_nom    || 'Objectiu Emmarcació';
+  empresa_adreca = d.empresa_adreca || '';
+  empresa_tel    = d.empresa_tel    || '';
+  document.getElementById('marge_val').value = marge;
+  calcular();
+});
+
+// Load moldura refs once, shared for both pre and marc
+fetch('/api/refs?tipus=moldura').then(function(r){return r.json();}).then(function(refs){
+  REFS.pre = refs;
+  REFS.marc = refs;
+});
+
+// ── Preus als botons ──────────────────────────────────────────────────────
+function updateBtnPreus(){
+  ['encolat','protter','vidre','doble_vidre','mirall','passpartu','doble_pas','proeco'].forEach(function(k){
+    var el = document.getElementById('preu-'+k); if(!el) return;
+    if(CLOSEST[k]) el.textContent = preuDisplay(CLOSEST[k].preu, false);
+    else el.textContent = '—';
+  });
+  if(CLOSEST.impressio){
+    var el = document.getElementById('preu-impressio');
+    if(el) el.textContent = preuDisplay(CLOSEST.impressio.preu, true);
+  }
+}
+
+// ── Search Select ─────────────────────────────────────────────────────────
+function openSS(t){ filterSS(t); }
+function filterSS(t){
+  clearTimeout(_filterTimer[t]);
+  _filterTimer[t] = setTimeout(function(){
+    var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
+    var q  = document.getElementById(id).value.toLowerCase().trim();
+    var list = document.getElementById('list-'+t);
+    var refs = REFS[t]||[];
+    var filtered = q==='' ? refs.slice(0,40) : refs.filter(function(r){return r.toLowerCase().includes(q);}).slice(0,40);
+    list.innerHTML = filtered.length===0
+      ? '<div class="ss-item empty">Cap resultat</div>'
+      : filtered.map(function(r){return '<div class="ss-item" onmousedown="selectRef(\''+t+'\',\''+r+'\')">'+r+'</div>';}).join('');
+    list.classList.add('open');
+  }, 150);
+}
+function closeSS(t){ setTimeout(function(){var l=document.getElementById('list-'+t);if(l)l.classList.remove('open');},200); }
+function selectRef(t,ref){
+  var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
+  document.getElementById(id).value=ref;
+  document.getElementById('list-'+t).classList.remove('open');
+  lookupRef(t,ref);
+}
+
+// ── Lookup motllura ───────────────────────────────────────────────────────
+function resetFoto(){ document.getElementById('foto-box').innerHTML='<div class="no-foto">Selecciona un marc<br>per veure la foto</div>'; }
+function setChips(t,items){ document.getElementById('chips-'+t).innerHTML=items.map(function(i){return '<span class="chip '+i.cls+'">'+i.txt+'</span>';}).join(''); }
+
+function lookupRef(t,ref){
+  if(!ref||ref==='-'){
+    PREUS[t]=0; GRUIX[t]=0; setChips(t,[]);
+    if(t==='pre'){ document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
+    if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); setProtterDisabled(false); _lastFetchKey=''; recalcMides(); }
+    calcular(); return;
+  }
+  fetch('/api/lookup?tipus=moldura&ref='+encodeURIComponent(ref))
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        PREUS[t]=d.preu; GRUIX[t]=d.gruix;
+        setChips(t,[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
+        if(t==='pre'){
+          document.getElementById('desc-pre').textContent=d.descripcio||'';
+          document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense foto</div>';
+        }
+        if(t==='marc'){
+          document.getElementById('desc-marc').textContent=d.descripcio||'';
+          document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense foto</div>';
+          setProtterDisabled(true);
+          _lastFetchKey=''; recalcMides(); return;
+        }
+      } else {
+        PREUS[t]=0; GRUIX[t]=0;
+        setChips(t,[{txt:'No trobada',cls:'chip-r'}]);
+      }
+      calcular();
+    });
+}
+
+// ── Fetch closest ─────────────────────────────────────────────────────────
+function recalcMides(){
+  var w = parseFloat(document.getElementById('amplada').value)||0;
+  var h = parseFloat(document.getElementById('alcada').value)||0;
+  var interior = document.querySelector('input[name="interior"]:checked');
+  var hasP = interior && (interior.value==='passpartu'||interior.value==='doble_pas');
+  var cms = hasP ? (parseFloat(document.getElementById('cm-passpartu').value)||0) : 0;
+  var mW = w>0 ? w+cms*2 : 0;
+  var mH = h>0 ? h+cms*2 : 0;
+  document.getElementById('marc-w').value=mW;
+  document.getElementById('marc-h').value=mH;
+  if(hasP&&cms>0){
+    document.getElementById('mida-total').value=mW+' x '+mH+' cm';
+    document.getElementById('mida-total-simple').textContent='Mida marc: '+mW+'x'+mH+' cm (foto '+w+'x'+h+')';
+  } else {
+    document.getElementById('mida-total').value='';
+    document.getElementById('mida-total-simple').textContent=(w>0&&h>0)?'Mida: '+w+' x '+h+' cm':'';
+  }
+  _lastFetchKey='';
+  fetchClosest();
+}
+
+function fetchClosest(){
+  var w = parseFloat(document.getElementById('marc-w').value)||0;
+  var h = parseFloat(document.getElementById('marc-h').value)||0;
+  if(w<=0||h<=0){ CLOSEST={}; updateBtnPreus(); calcular(); return; }
+  var fW = parseFloat(document.getElementById('amplada').value)||w;
+  var fH = parseFloat(document.getElementById('alcada').value)||h;
+  var key = w+'x'+h+'_'+fW+'x'+fH;
+  if(key===_lastFetchKey){ calcular(); return; }
+  _lastFetchKey=key;
+  fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH)
+    .then(function(r){return r.json();}).then(function(d){
+      CLOSEST=d;
+      updateBtnPreus();
+      // Update PREUS for currently selected options
+      ['muntatge','proteccio','interior'].forEach(function(g){
+        var sel=document.querySelector('input[name="'+g+'"]:checked');
+        if(sel&&sel.value){
+          var k=_tipusGrupMap[g]&&_tipusGrupMap[g][sel.value];
+          if(k&&CLOSEST[k]){
+            PREUS[g]=CLOSEST[k].preu;
+            var hid=document.getElementById('ref-'+g); if(hid) hid.value=CLOSEST[k].ref;
+          }
+        }
+      });
+      if(document.getElementById('chk-impressio').checked) updateImpressioPreu();
+      calcular();
+    });
+}
+
+// ── Materials ─────────────────────────────────────────────────────────────
+function costGrup(grup){
+  var sel=document.querySelector('input[name="'+grup+'"]:checked');
+  var val=sel?sel.value:'';
+  if(!val||val==='conservar') return 0;
+  var k=_tipusGrupMap[grup]&&_tipusGrupMap[grup][val];
+  return (k&&CLOSEST[k])?CLOSEST[k].preu:(PREUS[grup]||0);
+}
+function costImpressio(){
+  if(!document.getElementById('chk-impressio').checked) return 0;
+  return CLOSEST.impressio?CLOSEST.impressio.preu:(PREUS.impressio||0);
+}
+function updateImpressioPreu(){
+  PREUS.impressio = document.getElementById('chk-impressio').checked&&CLOSEST.impressio?CLOSEST.impressio.preu:0;
+  document.getElementById('ref-impressio-val').value = document.getElementById('chk-impressio').checked&&CLOSEST.impressio?CLOSEST.impressio.ref:'';
+}
+function updateGrupPreu(grup,val){
+  var k=_tipusGrupMap[grup]&&_tipusGrupMap[grup][val];
+  var ref=val==='conservar'?'CONSERVAR':(k&&CLOSEST[k]?CLOSEST[k].ref:'');
+  var cost=val==='conservar'?0:(k&&CLOSEST[k]?CLOSEST[k].preu:0);
+  var hid=document.getElementById('ref-'+grup); if(hid) hid.value=ref;
+  PREUS[grup]=cost;
+}
+
+// ── Incompatibilitats ─────────────────────────────────────────────────────
+function setProtterDisabled(dis){
+  var el=document.getElementById('opt-protter'); if(!el) return;
+  el.classList.toggle('disabled',dis);
+  if(dis){
+    var r=el.querySelector('input[type=radio]');
+    if(r&&r.checked){
+      document.querySelector('input[name="muntatge"][value=""]').checked=true;
+      onGrupChange('muntatge');
+    }
+  }
+}
+
+function applyIncompatibilities(){
+  var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
+  var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var hasPasspartu = interior==='passpartu'||interior==='doble_pas';
+  var hasProeco    = interior==='proeco';
+  var hasDoblVidre = proteccio==='doble_vidre';
+  var hasMarc      = document.getElementById('marc_principal').value.trim()!=='';
+
+  var rules = {
+    encolat:           hasProeco||hasDoblVidre||hasPasspartu,
+    protter:           hasProeco||hasDoblVidre||hasPasspartu||hasMarc,
+    vidre:             hasProeco,
+    doble_vidre:       hasProeco,
+    mirall:            hasProeco||hasPasspartu||hasDoblVidre,
+    'conservar-vidre': hasProeco||hasDoblVidre,
+    passpartu:         hasProeco||hasDoblVidre,
+    doble_pas:         hasProeco||hasDoblVidre,
+    proeco:            hasPasspartu||hasDoblVidre,
+    'proteccio-cap':   hasPasspartu,
+  };
+
+  Object.keys(rules).forEach(function(k){
+    var el=document.getElementById('opt-'+k); if(!el) return;
+    el.classList.toggle('disabled',rules[k]);
+    if(rules[k]){
+      var r=el.querySelector('input');
+      if(r&&r.checked){
+        var grp=r.name;
+        var empty=document.querySelector('input[name="'+grp+'"][value=""]');
+        if(empty){ empty.checked=true; onGrupChange(grp); }
+      }
+    }
+  });
+
+  // Force vidre when passpartú
+  if(hasPasspartu){
+    var pSel=document.querySelector('input[name="proteccio"]:checked');
+    if(!pSel||!pSel.value||pSel.value===''||pSel.value==='mirall'||pSel.value==='conservar'){
+      var vr=document.querySelector('input[name="proteccio"][value="vidre"]');
+      if(vr){
+        vr.checked=true;
+        allKeys['proteccio'].forEach(function(k){var el=document.getElementById('opt-'+k);if(el)el.classList.remove('selected');});
+        var elv=document.getElementById('opt-vidre'); if(elv) elv.classList.add('selected');
+        updateGrupPreu('proteccio','vidre');
+      }
+    }
+  }
+
+  document.getElementById('bloc-passpartu').style.display=hasPasspartu?'block':'none';
+  document.getElementById('vidre-obligatori').style.display=hasPasspartu?'inline':'none';
+}
+
+// ── Grups canvi ───────────────────────────────────────────────────────────
+function onGrupChange(grup){
+  var sel=document.querySelector('input[name="'+grup+'"]:checked');
+  var val=sel?sel.value:'';
+  // Reset visual, mark selected
+  allKeys[grup].forEach(function(k){
+    var el=document.getElementById('opt-'+k); if(el) el.classList.remove('selected');
+  });
+  var targetId = val===''?('opt-'+grup+'-cap'):(val==='conservar'?'opt-conservar-vidre':('opt-'+(valToId[val]||val)));
+  var targetEl=document.getElementById(targetId); if(targetEl) targetEl.classList.add('selected');
+
+  applyIncompatibilities();
+  if(grup==='interior') recalcMides();
+  updateGrupPreu(grup,val);
+  calcular();
+}
+
+function onImpressioChange(){
+  document.getElementById('opt-impressio').classList.toggle('selected',document.getElementById('chk-impressio').checked);
+  updateImpressioPreu();
+  calcular();
+}
+
+function onMarcInput(){
+  var val=document.getElementById('marc_principal').value.trim();
+  setProtterDisabled(val!=='');
+  if(val===''){
+    PREUS.marc=0; GRUIX.marc=0; setChips('marc',[]);
+    document.getElementById('desc-marc').textContent=''; resetFoto();
+    _lastFetchKey=''; recalcMides();
+  }
+}
+
+// ── Càlcul ────────────────────────────────────────────────────────────────
+function calcular(){
+  var amp  = parseFloat(document.getElementById('amplada').value)||0;
+  var alt  = parseFloat(document.getElementById('alcada').value)||0;
+  var mW   = parseFloat(document.getElementById('marc-w').value)||amp;
+  var mH   = parseFloat(document.getElementById('marc-h').value)||alt;
+  var desc = parseFloat(document.getElementById('descompte').value)||0;
+  var qty  = parseFloat(document.getElementById('quantitat').value)||1;
+  var ent  = parseFloat(document.getElementById('entrega').value)||0;
+  marge    = parseFloat(document.getElementById('marge_val').value)||marge||60;
+
+  var cMuntatge  = costGrup('muntatge');
+  var cProteccio = costGrup('proteccio');
+  var cInterior  = costGrup('interior');
+  var cImpressio = costImpressio();
+
+  var cMol=0;
+  if((PREUS.marc>0||GRUIX.marc>0)&&(mW>0||mH>0)){
+    var per=(mW*2)+(mH*2);
+    cMol=(per+(GRUIX.marc||0)*8)*((PREUS.marc||0)/100)
+        +(per+((GRUIX.pre||0)+(GRUIX.marc||0))*8)*((PREUS.pre||0)/100);
+  }
+  var cTot=cMuntatge+cProteccio+cInterior+cImpressio+cMol;
+
+  // PVP net (amb marge, sense IVA, sense descompte)
+  var pvpMarc = cMol*(1+marge/100);
+  var pvpExt  = (cMuntatge+cProteccio+cInterior)*(1+marge/100);
+  var pvpImp  = cImpressio*(1+(marge_impressio||marge)/100);
+  var pNet    = (pvpMarc+pvpExt+pvpImp)*qty;
+
+  // Descompte sobre PVP, mai sobre cost
+  var descEur  = pNet*(desc/100);
+  var pNetDisc = pNet-descEur;
+  var pFin     = pNetDisc*1.21;
+  var pIva     = pNetDisc*0.21;
+  var pend     = pFin-ent;
+
+  // Mode cost
+  var isCost=rmode==='cost';
+  var cTotQty=cTot*qty;
+
+  document.getElementById('r-net').textContent    = fmt(isCost?cTotQty:pNet);
+  document.getElementById('r-iva').textContent    = fmt(isCost?cTotQty*0.21:pIva);
+  document.getElementById('r-final').textContent  = fmt(isCost?cTotQty*1.21:pFin);
+  document.getElementById('r-pend').textContent   = isCost?'—':fmt(pend);
+  document.getElementById('r-lbl-net').textContent= isCost?'Cost net (sense IVA)':'Preu net PVP (sense IVA)';
+
+  var showDesc=desc>0&&!isCost;
+  document.getElementById('r-row-desc').style.display=showDesc?'':'none';
+  if(showDesc){
+    document.getElementById('r-lbl-desc').textContent='Descompte '+desc+'% sobre PVP';
+    document.getElementById('r-desc').textContent='- '+fmt(descEur);
+  }
+  document.getElementById('r-lbl-final').textContent=isCost?'Cost total (amb IVA)':(desc>0?'Total amb IVA (desc. inclòs)':'Total amb IVA 21%');
+  // Cost detail (only update if elements exist)
+  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior);
+  var ecm=document.getElementById('ci-mol'); if(ecm) ecm.textContent=fmt(cMol);
+  var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
+
+  window._c={preu_net:pNet, preu_final:pFin, pendent:pend, descEur:descEur};
+}
+
+// ── Toggle cost/pvp ───────────────────────────────────────────────────────
+function toggleCost(){
+  rmode=rmode==='cost'?'pvp':'cost';
+  var on=rmode==='cost';
+  var btn=document.getElementById('rb-cost');
+  btn.dataset.on=on?'1':'0';
+  btn.style.background=on?'#1A6B45':'rgba(255,255,255,.1)';
+  btn.style.color=on?'#fff':'rgba(255,255,255,.4)';
+  var cp=document.getElementById('cost-panel'); if(cp) cp.style.display=on?'block':'none';
+  updateBtnPreus();
+  calcular();
+}
+
+// ── Desar marge ───────────────────────────────────────────────────────────
+function desarMarge(){
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({marge:parseFloat(document.getElementById('marge_val').value)||60,marge_impressio:marge_impressio})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){var e=document.getElementById('saved-ok');e.style.display='block';setTimeout(function(){e.style.display='none';},2500);}
+    });
+}
+
+// ── Guardar ───────────────────────────────────────────────────────────────
+function guardar(){
+  var d={
+    sessio_id:sessioId, opcio_nom:opcions[opcioActual].nom,
+    client_nom:document.getElementById('client_nom').value,
+    client_tel:document.getElementById('client_tel').value,
+    pre_marc:document.getElementById('pre_marc').value||'-',
+    marc_principal:document.getElementById('marc_principal').value,
+    amplada:parseFloat(document.getElementById('amplada').value)||0,
+    alcada:parseFloat(document.getElementById('alcada').value)||0,
+    copia:0,
+    encolat:document.getElementById('ref-muntatge').value||'-',
+    vidre:document.getElementById('ref-proteccio').value||'-',
+    passpartout:document.getElementById('ref-interior').value||'-',
+    impressio:document.getElementById('ref-impressio-val').value||'-',
+    marge:marge,
+    descompte:parseFloat(document.getElementById('descompte').value)||0,
+    quantitat:parseFloat(document.getElementById('quantitat').value)||1,
+    entrega:parseFloat(document.getElementById('entrega').value)||0,
+    observacions:document.getElementById('observacions').value,
+    preu_net:   window._c ? parseFloat(window._c.preu_net.toFixed(2))   : 0,
+    preu_final: window._c ? parseFloat(window._c.preu_final.toFixed(2)) : 0,
+    pendent:    window._c ? parseFloat(window._c.pendent.toFixed(2))    : 0,
+  };
+  fetch('/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        uid=d.id; opcions[opcioActual].id=d.id;
+        if(!sessioId) sessioId=d.sessio_id;
+        document.getElementById('btn-pdf').disabled=false;
+        document.getElementById('btn-wa-client').disabled=false;
+        document.getElementById('btn-wa-objectiu').disabled=false;
+        showAlert('Comanda guardada ('+opcions[opcioActual].nom+' #'+d.id+')','ok');
+        renderTabs();
+      }
+    });
+}
+
+function generarPDF(){if(!uid){alert('Primer guarda la comanda.');return;}window.open('/pdf/'+uid,'_blank');}
+
+// ── Pestanyes ─────────────────────────────────────────────────────────────
+function renderTabs(){
+  var list=document.getElementById('tabs-list'); list.innerHTML='';
+  opcions.forEach(function(op,i){
+    var btn=document.createElement('button');
+    btn.innerHTML=op.nom+(op.id?' <span style="font-size:10px;color:var(--green)">✓</span>':'');
+    var on=i===opcioActual;
+    btn.style.cssText='padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:"DM Sans",sans-serif;transition:all .15s;border:1px solid '+(on?'var(--green)':'var(--border)')+';background:'+(on?'var(--green-l)':'#fff')+';color:'+(on?'var(--green)':'var(--muted)')+';';
+    btn.onclick=(function(idx){return function(){canviarOpcio(idx);};})(i);
+    list.appendChild(btn);
+  });
+  document.getElementById('btn-comparativa').style.display=opcions.filter(function(o){return o.id;}).length>1?'block':'none';
+}
+
+function capturaEstat(){
+  return {
+    client_nom:document.getElementById('client_nom').value,
+    client_tel:document.getElementById('client_tel').value,
+    pre_marc:document.getElementById('pre_marc').value||'',
+    marc_principal:document.getElementById('marc_principal').value||'',
+    amplada:document.getElementById('amplada').value,
+    alcada:document.getElementById('alcada').value,
+    cm_passpartu:document.getElementById('cm-passpartu').value,
+    muntatge:(document.querySelector('input[name="muntatge"]:checked')||{}).value||'',
+    proteccio:(document.querySelector('input[name="proteccio"]:checked')||{}).value||'',
+    interior:(document.querySelector('input[name="interior"]:checked')||{}).value||'',
+    impressio:document.getElementById('chk-impressio').checked,
+    descompte:document.getElementById('descompte').value,
+    quantitat:document.getElementById('quantitat').value,
+    entrega:document.getElementById('entrega').value,
+    observacions:document.getElementById('observacions').value,
+    _closest:JSON.parse(JSON.stringify(CLOSEST)),
+    _preus:JSON.parse(JSON.stringify(PREUS)),
+    _gruix:JSON.parse(JSON.stringify(GRUIX)),
+    _lastKey:_lastFetchKey,
+  };
+}
+
+function restauraEstat(e){
+  document.getElementById('client_nom').value=e.client_nom||'';
+  document.getElementById('client_tel').value=e.client_tel||'';
+  document.getElementById('amplada').value=e.amplada||30;
+  document.getElementById('alcada').value=e.alcada||40;
+  document.getElementById('cm-passpartu').value=e.cm_passpartu||4;
+  document.getElementById('descompte').value=e.descompte||0;
+  document.getElementById('quantitat').value=e.quantitat||1;
+  document.getElementById('entrega').value=e.entrega||0;
+  document.getElementById('observacions').value=e.observacions||'';
+  ['muntatge','proteccio','interior'].forEach(function(g){
+    var val=e[g]||'';
+    var r=document.querySelector('input[name="'+g+'"][value="'+val+'"]');
+    if(r) r.checked=true;
+  });
+  document.getElementById('chk-impressio').checked=!!e.impressio;
+  if(e._closest) CLOSEST=e._closest;
+  if(e._preus)   PREUS=e._preus;
+  if(e._gruix)   GRUIX=e._gruix;
+  if(e._lastKey) _lastFetchKey=e._lastKey;
+  onGrupChange('interior');
+  onGrupChange('proteccio');
+  onGrupChange('muntatge');
+  onImpressioChange();
+  document.getElementById('pre_marc').value=e.pre_marc||'';
+  document.getElementById('marc_principal').value=e.marc_principal||'';
+  if(e.pre_marc)       lookupRef('pre',e.pre_marc);
+  if(e.marc_principal) lookupRef('marc',e.marc_principal);
+  else setProtterDisabled(false);
+  recalcMides();
+}
+
+function canviarOpcio(idx){
+  if(idx===opcioActual) return;
+  opcions[opcioActual].estat=capturaEstat();
+  opcioActual=idx; uid=opcions[idx].id||null;
+  document.getElementById('btn-pdf').disabled=!uid;
+  document.getElementById('btn-wa-client').disabled=!uid;
+  document.getElementById('btn-wa-objectiu').disabled=!uid;
+  if(opcions[idx].estat) restauraEstat(opcions[idx].estat);
+  else netejar();
+  renderTabs();
+}
+
+function afegirOpcio(){
+  var ll=['A','B','C','D','E','F'];
+  opcions[opcioActual].estat=capturaEstat();
+  opcions.push({nom:'Opció '+(ll[opcions.length]||opcions.length+1),id:null});
+  opcioActual=opcions.length-1; uid=null;
+  netejar(); renderTabs();
+}
+
+function pdfComparativa(){
+  if(opcions.filter(function(o){return o.id;}).length<2){showAlert('Guarda almenys dues opcions per fer la comparativa.','err');return;}
+  window.open('/pdf-comparativa/'+sessioId,'_blank');
+}
+
+// ── Netejar ───────────────────────────────────────────────────────────────
+function netejar(){
+  ['client_nom','client_tel','pre_marc','marc_principal','observacions'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('amplada').value=0;
+  document.getElementById('alcada').value=0;
+  ['descompte','entrega'].forEach(function(id){document.getElementById(id).value=0;});
+  document.getElementById('quantitat').value=1;
+  PREUS={pre:0,marc:0,muntatge:0,proteccio:0,interior:0,impressio:0};
+  GRUIX={pre:0,marc:0}; CLOSEST={}; _lastFetchKey='';
+  // Reset radios
+  document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){r.checked=true;});
+  allKeys.muntatge.concat(allKeys.proteccio).concat(allKeys.interior).forEach(function(k){
+    var el=document.getElementById('opt-'+k); if(el) el.classList.remove('selected');
+  });
+  document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
+    var cap=document.getElementById('opt-'+r.name+'-cap'); if(cap) cap.classList.add('selected');
+  });
+  ['encolat','protter','vidre','doble_vidre','mirall','conservar-vidre','passpartu','doble_pas','proeco'].forEach(function(k){
+    var el=document.getElementById('opt-'+k); if(el) el.classList.remove('disabled');
+  });
+  document.getElementById('chk-impressio').checked=false;
+  document.getElementById('opt-impressio').classList.remove('selected');
+  ['ref-muntatge','ref-proteccio','ref-interior','ref-impressio-val'].forEach(function(id){document.getElementById(id).value='';});
+  ['pre','marc'].forEach(function(t){setChips(t,[]);});
+  document.getElementById('desc-pre').textContent='';
+  document.getElementById('desc-marc').textContent='';
+  document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>';
+  resetFoto();
+  document.getElementById('bloc-passpartu').style.display='none';
+  document.getElementById('mida-total').value='';
+  document.getElementById('mida-total-simple').textContent='';
+  document.getElementById('marc-w').value=0;
+  document.getElementById('marc-h').value=0;
+  document.getElementById('vidre-obligatori').style.display='none';
+  calcular();
+}
+
+function novaComanda(){
+  opcions=[{nom:'Opció A',id:null}]; opcioActual=0; sessioId=null; uid=null;
+  document.getElementById('btn-pdf').disabled=true;
+  document.getElementById('btn-wa-client').disabled=true;
+  document.getElementById('btn-wa-objectiu').disabled=true;
+  netejar(); renderTabs();
+}
+
+// ── WhatsApp ──────────────────────────────────────────────────────────────
+function buildWAtext(){
+  var client    = document.getElementById('client_nom').value||'—';
+  var marc      = document.getElementById('marc_principal').value||'';
+  var pre       = document.getElementById('pre_marc').value||'';
+  var w         = document.getElementById('amplada').value||'0';
+  var h         = document.getElementById('alcada').value||'0';
+  var desc      = parseFloat(document.getElementById('descompte').value)||0;
+  var obs       = document.getElementById('observacions').value||'';
+  var pFin = (window._c && window._c.preu_final) ? window._c.preu_final.toFixed(2) : '0.00';
+  var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
+  var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var muntatge  = (document.querySelector('input[name="muntatge"]:checked') ||{}).value||'';
+  var chkImp    = document.getElementById('chk-impressio').checked;
+  var nomMuntatge  = {encolat:'Encolat',protter:'Protter'}[muntatge]||'';
+  var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
+  var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
+  var lines = ['Hola! Us envio el pressupost d\'emmarcacio:','','Client: '+client];
+  if(marc) lines.push('Marc: '+marc+(pre&&pre!=='-'?' + '+pre+' (pre-marc)':''));
+  lines.push('Mides: '+w+' x '+h+' cm');
+  if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
+  if(nomProteccio) lines.push('Proteccio: '+nomProteccio);
+  if(nomInterior)  lines.push('Interior: '+nomInterior);
+  if(chkImp)       lines.push('Impressio fotografica inclosa');
+  if(obs)          lines.push('Notes: '+obs);
+  lines.push('');
+  if(desc>0) lines.push('Descompte '+desc+'% aplicat');
+  lines.push('*TOTAL: '+pFin+' EUR (IVA inclos)*');
+  lines.push('');
+  lines.push('Gracies! ' + empresa_nom);
+  if(empresa_adreca) lines.push(empresa_adreca);
+  if(empresa_tel) lines.push('Tel: ' + empresa_tel);
+  return encodeURIComponent(lines.join('\n'));
+}
+
+function whatsappClient(){
+  var tel=document.getElementById('client_tel').value.replace(/\D/g,'');
+  if(!tel){showAlert('Introdueix el telefon del client primer.','err');return;}
+  if(tel.length===9) tel='34'+tel;
+  window.open('https://web.whatsapp.com/send?phone='+tel+'&text='+buildWAtext(),'_blank');
+}
+
+function whatsappObjectiu(){
+  window.open('https://web.whatsapp.com/send?phone=34977316111&text='+buildWAtext(),'_blank');
+}
+
+// ── Init UI ───────────────────────────────────────────────────────────────
+document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
+  var c=document.getElementById('opt-'+r.name+'-cap'); if(c) c.classList.add('selected');
+});
+renderTabs();
+applyIncompatibilities();
+recalcMides();
+
+</script>
+</body>
+</html>

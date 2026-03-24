@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Historial</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px}.brand em{color:#C8873A;font-style:normal}
+.nav-r{display:flex;align-items:center;gap:1.25rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}.nav-r a:hover{color:#fff}
+.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:3px 11px;border-radius:20px;font-weight:500}
+.wrap{max-width:1060px;margin:0 auto;padding:1.75rem 1.25rem 3rem}
+.ph{margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem}
+.ph h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;letter-spacing:-.3px}
+.search-bar input{padding:9px 13px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;width:260px;transition:border-color .15s}
+.search-bar input:focus{border-color:var(--green)}
+.sessio-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:1rem;overflow:hidden}
+.sessio-head{padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s;gap:1rem}
+.sessio-head:hover{background:var(--bg)}
+.sessio-client{font-size:15px;font-weight:600;color:var(--text)}
+.sessio-meta{font-size:12px;color:var(--hint);margin-top:2px}
+.sessio-badges{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:5px;font-weight:600;white-space:nowrap}
+.badge-n{background:var(--bg);color:var(--hint);border:1px solid var(--border)}
+.badge-multi{background:var(--amber-l);color:var(--amber);border:1px solid #E8C89A}
+.badge-pend{background:var(--red-l);color:var(--red)}
+.badge-pagat{background:var(--green-l);color:var(--green)}
+.chevron{font-size:12px;color:var(--hint);transition:transform .2s;flex-shrink:0}
+.chevron.open{transform:rotate(90deg)}
+.sessio-body{display:none;border-top:1px solid var(--border)}
+.sessio-body.open{display:block}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:var(--bg)}
+th{padding:9px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--hint);border-bottom:1px solid var(--border)}
+td{padding:9px 12px;border-bottom:1px solid var(--bg);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#FAFAF8}
+.opcio-pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--green-l);color:var(--green)}
+.btn-sm{padding:5px 11px;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;font-family:'DM Sans',sans-serif;transition:all .15s}
+.btn-pdf{background:#1C1B18;color:#fff}.btn-pdf:hover{background:#333}
+.btn-cmp{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}.btn-cmp:hover{background:#D5EDE3}
+.sessio-actions{padding:.75rem 1.1rem;display:flex;gap:.5rem;background:var(--bg);border-top:1px solid var(--border)}
+.empty{text-align:center;padding:3rem;color:var(--hint);font-size:14px}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">OBJECT<em>IU</em></div>
+  <div class="nav-r">
+    <span class="nav-u">{{ session.nom }}</span>
+    <a href="/">Calculadora</a>
+    {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ph">
+    <h1>Historial de comandes</h1>
+    <div class="search-bar">
+      <input type="text" id="cerca" placeholder="Cerca per client o marc..." oninput="filtrar()">
+    </div>
+  </div>
+
+  {% if sessio_list %}
+    {% for opcions in sessio_list %}
+    {% set c0 = opcions[0] %}
+    {% set sessio_id = c0.sessio_id or c0.id %}
+    {% set multi = opcions|length > 1 %}
+    <div class="sessio-card" data-text="{{ c0.client_nom }} {{ c0.marc_principal }}">
+      <div class="sessio-head" onclick="toggleSessio(this)">
+        <div style="flex:1;min-width:0">
+          <div class="sessio-client">{{ c0.client_nom or '(sense nom)' }}</div>
+          <div class="sessio-meta">{{ c0.data }}{% if session.is_admin %} · {{ c0.usuari_nom }}{% endif %} · {{ c0.marc_principal or 'sense marc' }}</div>
+        </div>
+        <div class="sessio-badges">
+          {% if multi %}
+            <span class="badge badge-multi">{{ opcions|length }} opcions</span>
+          {% endif %}
+          {% set total_pend = namespace(v=0) %}
+          {% for op in opcions %}{% set total_pend.v = total_pend.v + (op.pendent or 0) %}{% endfor %}
+          {% if total_pend.v > 0.01 %}
+            <span class="badge badge-pend">{{ "%.2f"|format(total_pend.v) }} € pendent</span>
+          {% else %}
+            <span class="badge badge-pagat">Pagat</span>
+          {% endif %}
+        </div>
+        <span class="chevron">▶</span>
+      </div>
+
+      <div class="sessio-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Opció</th>
+              <th>Marc</th>
+              <th>Mides</th>
+              <th>Vidre</th>
+              <th>Interior</th>
+              <th>Total (€)</th>
+              <th>Pendent</th>
+              <th>PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for op in opcions %}
+          <tr>
+            <td><span class="opcio-pill">{{ op.opcio_nom or 'Opció A' }}</span></td>
+            <td>
+              <strong>{{ op.marc_principal or '—' }}</strong>
+              {% if op.pre_marc and op.pre_marc != '-' %}
+              <br><span style="font-size:11px;color:var(--hint)">+ {{ op.pre_marc }}</span>
+              {% endif %}
+            </td>
+            <td>{{ op.amplada|int }} × {{ op.alcada|int }}</td>
+            <td style="font-size:12px">{{ op.vidre or '—' }}</td>
+            <td style="font-size:12px">{{ op.passpartout or '—' }}</td>
+            <td><strong>{{ "%.2f"|format(op.preu_final) }} €</strong></td>
+            <td>
+              {% if op.pendent and op.pendent > 0.01 %}
+                <span class="badge badge-pend">{{ "%.2f"|format(op.pendent) }} €</span>
+              {% else %}
+                <span class="badge badge-pagat">Pagat</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if multi %}
+        <div class="sessio-actions">
+          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">PDF comparativa</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Encara no hi ha comandes guardades.</div>
+  {% endif %}
+</div>
+
+<script>
+function toggleSessio(head) {
+  var body = head.nextElementSibling;
+  var chev = head.querySelector('.chevron');
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+function filtrar() {
+  var q = document.getElementById('cerca').value.toLowerCase();
+  document.querySelectorAll('.sessio-card').forEach(function(card) {
+    card.style.display = card.dataset.text.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+// Auto-open first card
+var first = document.querySelector('.sessio-head');
+if (first) toggleSessio(first);
+</script>
+</body>
+</html>

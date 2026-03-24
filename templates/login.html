@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Accés</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f5f6fa;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border-radius:12px;border:1px solid #dfe6e9;padding:2.5rem 2rem;width:100%;max-width:380px;box-shadow:0 2px 16px rgba(0,0,0,.06)}
+.logo{text-align:center;margin-bottom:2rem}
+.logo h1{font-size:22px;color:#2f3640;font-weight:700;letter-spacing:.5px}
+.logo p{font-size:13px;color:#636e72;margin-top:4px}
+label{display:block;font-size:13px;font-weight:600;color:#2f3640;margin-bottom:5px}
+input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid #dfe6e9;border-radius:8px;font-size:14px;color:#2f3640;outline:none;transition:border .2s}
+input:focus{border-color:#0984e3}
+.field{margin-bottom:1.2rem}
+button{width:100%;padding:11px;background:#0984e3;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
+button:hover{background:#0773c5}
+.alert{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1.2rem}
+.bar{width:40px;height:4px;background:#0984e3;border-radius:2px;margin:0 auto 1.5rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="bar"></div>
+    <h1>OBJECTIU</h1>
+    <p>Emmarcació · Reus</p>
+  </div>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="alert">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <form method="post">
+    <div class="field">
+      <label>Usuari</label>
+      <input type="text" name="username" autocomplete="username" required autofocus>
+    </div>
+    <div class="field">
+      <label>Contrasenya</label>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+</body>
+</html>

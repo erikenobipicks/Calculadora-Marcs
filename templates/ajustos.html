@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Ajustos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px}.brand em{color:#C8873A;font-style:normal}
+.nav-r{display:flex;align-items:center;gap:1.25rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:#fff}
+.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:3px 11px;border-radius:20px;font-weight:500}
+.wrap{max-width:580px;margin:0 auto;padding:2rem 1.25rem 3rem}
+.ph h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;margin-bottom:4px}
+.ph p{font-size:13px;color:var(--muted);margin-bottom:1.75rem}
+.section{margin-bottom:1.5rem}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--hint);margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem}
+.f{margin-bottom:1rem}.f:last-child{margin-bottom:0}
+.f label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.f input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none;transition:border-color .15s}
+.f input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.hint-box{background:#F0F9F4;border:1px solid #B8DCC9;border-radius:7px;padding:11px 14px;font-size:13px;color:#2D6E4E;line-height:1.6;margin-bottom:1rem}
+.marge-big{font-size:40px;font-family:'DM Serif Display',serif;color:var(--green);text-align:center;padding:.75rem 0;letter-spacing:-1px}
+.marge-big span{font-size:22px;color:var(--muted)}
+.btn-g{display:block;width:100%;padding:13px;border-radius:7px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;background:var(--green);color:#fff;margin-top:1.25rem;transition:background .15s}
+.btn-g:hover{background:#155c3a}
+.alert{border-radius:7px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:1.25rem;display:none}
+.alert-ok{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}
+.alert-err{background:#FAEAEA;color:#B84040;border:1px solid #E8B4B4}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">OBJECT<em>IU</em></div>
+  <div class="nav-r">
+    <span class="nav-u">{{ session.nom }}</span>
+    <a href="/">Calculadora</a>
+    <a href="/historial">Historial</a>
+    {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+<div class="wrap">
+  <div class="ph"><h1>Ajustos</h1><p>Marge de benefici i dades del comerç</p></div>
+  <div id="alert" class="alert"></div>
+
+  <div class="section">
+    <div class="section-title">Dades del comerç</div>
+    <div class="card">
+      <div class="hint-box">Apareixeran als PDFs i als missatges de WhatsApp.</div>
+      <div class="f"><label>Nom del comerç</label><input type="text" id="nom-empresa" value="{{ nom_empresa }}" placeholder="Objectiu Emmarcació"></div>
+      <div class="f"><label>Adreça</label><input type="text" id="empresa-adreca" value="{{ empresa_adreca }}" placeholder="C/ Mare Molas, 26 - Reus"></div>
+      <div class="f"><label>Telèfon</label><input type="text" id="empresa-tel" value="{{ empresa_tel }}" placeholder="977 316 111"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Marge de benefici general</div>
+    <div class="card">
+      <div class="hint-box">Preu client = cost × (1 + marge%). Privat — el client no el veurà.</div>
+      <div class="marge-big"><span id="marge-preview">{{ marge_actual }}</span><span>%</span></div>
+      <div class="f"><label>Marge (%)</label><input type="number" id="marge-input" value="{{ marge_actual }}" min="0" max="500" oninput="document.getElementById('marge-preview').textContent=this.value||0"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Marge impressió fotogràfica</div>
+    <div class="card">
+      <div class="hint-box">Marge addicional <strong>només</strong> sobre impressió. Posa <strong>0</strong> per usar el marge general.</div>
+      <div class="marge-big" style="font-size:32px"><span id="imp-preview">{{ marge_imp }}</span><span>%</span></div>
+      <div class="f"><label>Marge impressió (%)</label><input type="number" id="imp-input" value="{{ marge_imp }}" min="0" max="500" oninput="document.getElementById('imp-preview').textContent=this.value||0"></div>
+    </div>
+  </div>
+
+  <button class="btn-g" onclick="desarTot()">Desar tots els canvis</button>
+</div>
+<script>
+function showAlert(msg,t){var a=document.getElementById('alert');a.className='alert alert-'+t;a.textContent=msg;a.style.display='block';setTimeout(function(){a.style.display='none';},4000);}
+function desarTot(){
+  var m=parseFloat(document.getElementById('marge-input').value)||60;
+  var mi=parseFloat(document.getElementById('imp-input').value)||0;
+  var ne=document.getElementById('nom-empresa').value||'';
+  var ea=document.getElementById('empresa-adreca').value||'';
+  var et=document.getElementById('empresa-tel').value||'';
+  Promise.all([
+    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:ne})}).then(function(r){return r.json();}),
+    fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();})
+  ]).then(function(res){
+    if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
+    else showAlert('Error en desar.','err');
+  });
+}
+</script>
+</body>
+</html>

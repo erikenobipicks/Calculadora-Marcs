@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f5f6fa;color:#2d3436}
+nav{background:#2f3640;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:52px}
+nav .brand{color:#fff;font-weight:700;font-size:16px}
+nav .links a{color:#b2bec3;text-decoration:none;font-size:13px;margin-left:1.2rem}
+nav .links a:hover{color:#fff}
+.container{max-width:860px;margin:0 auto;padding:1.5rem 1rem}
+.page-title{font-size:20px;font-weight:700;color:#2f3640;margin-bottom:1.2rem}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.section{background:#fff;border:1px solid #dfe6e9;border-radius:10px;padding:1.2rem;margin-bottom:1rem}
+.section-title{font-size:12px;font-weight:700;color:#0984e3;text-transform:uppercase;letter-spacing:.8px;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #f0f0f0}
+label{display:block;font-size:12px;font-weight:600;color:#636e72;margin-bottom:4px}
+input,select{width:100%;padding:8px 10px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;color:#2d3436;outline:none;margin-bottom:.7rem}
+input:focus,select:focus{border-color:#0984e3}
+.btn{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-primary{background:#0984e3;color:#fff}
+.btn-danger{background:#e17055;color:#fff}
+.btn-sm{padding:4px 10px;font-size:12px}
+.alert-ok{background:#d5f5e3;border:1px solid #a9dfbf;color:#1e8449;border-radius:7px;padding:9px 14px;font-size:13px;margin-bottom:1rem}
+.alert-err{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:7px;padding:9px 14px;font-size:13px;margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px;border-bottom:1px solid #dfe6e9;font-weight:600;color:#636e72;font-size:12px}
+td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:middle}
+.badge-admin{background:#e8f4fd;color:#0984e3;font-size:11px;padding:2px 6px;border-radius:3px;font-weight:600}
+.hint{font-size:11px;color:#b2bec3;margin-top:-4px;margin-bottom:.6rem}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">OBJECTIU — Admin</span>
+  <div class="links">
+    <a href="/">Calculadora</a>
+    <a href="/historial">Historial</a>
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+<div class="container">
+  <div class="page-title">Panell d'administració</div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="grid">
+    <!-- Crear usuari -->
+    <div class="section">
+      <div class="section-title">Crear nou usuari</div>
+      <form method="post" action="/admin/usuari">
+        <input type="hidden" name="action" value="crear">
+        <label>Nom complet</label>
+        <input type="text" name="nom" placeholder="Anna García" required>
+        <label>Nom d'usuari (per fer login)</label>
+        <input type="text" name="username" placeholder="anna" required>
+        <label>Contrasenya</label>
+        <input type="password" name="password" required>
+        <label>Rol</label>
+        <select name="is_admin">
+          <option value="0">Usuari normal</option>
+          <option value="1">Administrador</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Crear usuari</button>
+      </form>
+    </div>
+
+    <!-- Config -->
+    <div>
+      <div class="section">
+        <div class="section-title">Configuració global</div>
+        <form method="post" action="/admin/config">
+          <label>Marge de benefici per defecte (%)</label>
+          <p class="hint">Tots els usuaris usaran aquest marge. Recomanació: 60</p>
+          <input type="number" name="marge" value="{{ config.get('marge_defecte', 60) }}" min="0" max="200">
+          <button type="submit" class="btn btn-primary">Desar</button>
+        </form>
+      </div>
+      </div>
+
+  <!-- Gestió impressió -->
+  <div class="section">
+    <div class="section-title">Tarifes impressió fotogràfica ({{ impressio|length }} formats)</div>
+    <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+      <input type="hidden" name="action" value="crear">
+      <div><label>Referència</label><input type="text" name="referencia" placeholder="IMP30x40" required></div>
+      <div><label>Descripció</label><input type="text" name="descripcio" placeholder="30x40 cm" required></div>
+      <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="2.80" required></div>
+      <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
+    </form>
+    <table style="font-size:12px">
+      <thead><tr><th>Referència</th><th>Descripció</th><th>Preu cost</th><th></th></tr></thead>
+      <tbody>
+      {% for f in impressio %}
+      <tr>
+        <td style="font-weight:600;color:#0984e3">{{ f.referencia }}</td>
+        <td>{{ f.descripcio }}</td>
+        <td>{{ "%.2f"|format(f.preu) }} €</td>
+        <td>
+          <form method="post" action="/admin/impressio" style="display:inline">
+            <input type="hidden" name="action" value="eliminar">
+            <input type="hidden" name="ref" value="{{ f.referencia }}">
+            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Llista usuaris -->
+  <div class="section">
+    <div class="section-title">Usuaris actuals ({{ usuaris|length }})</div>
+    <table>
+      <thead>
+        <tr><th>Nom</th><th>Usuari</th><th>Rol</th><th>Marge</th><th>Marge imp.</th><th>Canviar contrasenya</th><th>Eliminar</th></tr>
+      </thead>
+      <tbody>
+      {% for u in usuaris %}
+      <tr>
+        <td><strong>{{ u.nom }}</strong></td>
+        <td style="color:#636e72">{{ u.username }}</td>
+        <td>{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</td>
+        <td style="font-weight:600;color:#0984e3;text-align:center">{{ u.marge or 60 }}%</td>
+        <td style="font-weight:600;color:#00b894;text-align:center">{{ u.marge_impressio or 0 }}%</td>
+        <td>
+          <form method="post" action="/admin/usuari" style="display:flex;gap:.4rem">
+            <input type="hidden" name="action" value="canviar_pw">
+            <input type="hidden" name="uid" value="{{ u.id }}">
+            <input type="password" name="password" placeholder="Nova contrasenya" style="margin:0;padding:4px 8px;font-size:12px;width:140px">
+            <button type="submit" class="btn btn-primary btn-sm">OK</button>
+          </form>
+        </td>
+        <td>
+          {% if u.username != 'admin' %}
+          <form method="post" action="/admin/usuari" onsubmit="return confirm('Eliminar {{ u.nom }}?')">
+            <input type="hidden" name="action" value="eliminar">
+            <input type="hidden" name="uid" value="{{ u.id }}">
+            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
+</html>
