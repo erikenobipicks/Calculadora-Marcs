@@ -556,7 +556,7 @@ def crear_pdf(c):
     # ── Capçalera ────────────────────────────────────────────────────────
     # Get empresa info for this user
     u_data = query('SELECT nom_empresa FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
-    nom_empresa = (u_data['nom_empresa'] if u_data and u_data['nom_empresa'] else '') or                   query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)['valor'] or                   'Objectiu Emmarcació'
+    nom_empresa = (u_data['nom_empresa'] if u_data and u_data['nom_empresa'] else '') or                   (lambda _r: _r['valor'] if _r else '')(query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)) or                   'Objectiu Emmarcació'
     r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
     adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
@@ -1063,6 +1063,9 @@ def ensure_db():
         _db_initialized = True
         try:
             init_db()
+            # Ensure config rows exist
+            for clau, valor in [('empresa_nom','Reus Revela'), ('empresa_adreca',''), ('empresa_tel',''), ('marge_defecte','60')]:
+                execute('INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)', [clau, valor])
             print("init_db OK")
         except Exception as e:
             import traceback
