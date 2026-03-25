@@ -345,14 +345,6 @@ def guardar():
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
 
-
-@app.route('/sessio/<sessio_id>/pagat', methods=['POST'])
-@login_required
-def marcar_pagat(sessio_id):
-    pagat = request.json.get('pagat', 1)
-    execute('UPDATE comandes SET pagat=? WHERE sessio_id=?', [pagat, sessio_id])
-    return jsonify({'ok': True})
-
 @app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
 @login_required
 def eliminar_comanda(cid):
@@ -394,12 +386,8 @@ def historial():
         sid = c['sessio_id'] or str(c['id'])
         if sid not in sessions:
             sessions[sid] = []
-        d = dict(c)
-        sessions[sid].append(d)
+        sessions[sid].append(dict(c))
     sessio_list = list(sessions.values())
-    # Add pagat flag to first item of each session
-    for grp in sessio_list:
-        grp[0]['pagat'] = any(op.get('pagat') for op in grp)
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list)
 
 @app.route('/pdf-comparativa/<sessio_id>')
@@ -1132,7 +1120,6 @@ def init_db():
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
                 ('comandes','num_pressupost','TEXT DEFAULT '''),
-                ('comandes','pagat','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
