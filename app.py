@@ -47,9 +47,13 @@ def close_db(e=None):
         except: pass
 
 def _fix_sql(sql):
-    """Convert SQLite ? placeholders to PostgreSQL %s"""
+    """Convert SQLite ? placeholders to PostgreSQL %s, and escape % in LIKE"""
     if USE_PG:
-        return sql.replace('?', '%s')
+        import re as _re
+        # First escape existing % that are part of LIKE patterns (not already %s or %%)
+        # Replace LIKE '...%...' patterns to use %%
+        sql = _re.sub(r"LIKE '([^']*)'", lambda m: "LIKE '" + m.group(1).replace('%','%%') + "'", sql)
+        sql = sql.replace('?', '%s')
     return sql
 
 def query(sql, args=(), one=False):
