@@ -827,7 +827,9 @@ function guardar(){
         document.getElementById('btn-pdf').disabled=false;
         document.getElementById('btn-wa-client').disabled=false;
         document.getElementById('btn-wa-objectiu').disabled=false;
-        showAlert('Comanda guardada ('+opcions[opcioActual].nom+' #'+d.id+')','ok');
+        var numLabel = d.num ? ' · ' + d.num : ' #'+d.id;
+        showAlert('Comanda guardada ('+opcions[opcioActual].nom + numLabel + ')','ok');
+        window._numPressupost = d.num || ('#'+d.id);
         renderTabs();
       }
     });
@@ -1023,8 +1025,45 @@ function whatsappClient(){
   window.open('https://wa.me/'+tel+'?text='+buildWAtext(),'_blank');
 }
 
+function buildWAtext_intern(){
+  // Internal message to Reus Revela: cost price, prep tone
+  var client  = document.getElementById('client_nom').value||'—';
+  var marc    = document.getElementById('marc_principal').value||'';
+  var pre     = document.getElementById('pre_marc').value||'';
+  var w       = document.getElementById('amplada').value||'0';
+  var h       = document.getElementById('alcada').value||'0';
+  var num     = window._numPressupost || '—';
+  var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
+  var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var muntatge  = (document.querySelector('input[name="muntatge"]:checked') ||{}).value||'';
+  var chkImp    = document.getElementById('chk-impressio').checked;
+  var nomMuntatge  = {encolat:'Encolat',protter:'Protter'}[muntatge]||'';
+  var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
+  var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
+
+  // Cost price (not client price)
+  var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
+
+  var lines = [
+    '*PRESSUPOST ACCEPTAT — Preparació marc*','',
+    'Num. pressupost: *' + num + '*',
+    'Client: ' + client,'',
+    'MARC: ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' (pre-marc)':''),
+    'Mides: ' + w + ' x ' + h + ' cm',
+  ];
+  if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
+  if(nomProteccio) lines.push('Proteccio: '+nomProteccio);
+  if(nomInterior)  lines.push('Interior: '+nomInterior);
+  if(chkImp)       lines.push('Impressio fotografica: SÍ');
+  lines.push('');
+  lines.push('Cost materials: *' + cTot + ' EUR*');
+  lines.push('');
+  lines.push('⚠ Si el marc va associat a una fotografia, recordeu enviar-la al nostre Dropbox compartit o via mail a reusrevela@gmail.com');
+  return encodeURIComponent(lines.join('\n'));
+}
+
 function whatsappObjectiu(){
-  window.open('https://wa.me/34977316111?text='+buildWAtext(),'_blank');
+  window.open('https://wa.me/34977316111?text='+buildWAtext_intern(),'_blank');
 }
 
 // ── Init UI ───────────────────────────────────────────────────────────────
