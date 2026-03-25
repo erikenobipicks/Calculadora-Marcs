@@ -77,6 +77,18 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     </div>
   </div>
 
+    <div class="section">
+    <div class="section-title">Logo del comerç (opcional)</div>
+    <div class="card">
+      <div class="hint-box">El logo apareixerà als PDFs dels pressupostos. Formats acceptats: PNG, JPG. Mida recomanada: 300×100 px.</div>
+      <div id="logo-preview" style="margin-bottom:.85rem;min-height:50px;display:flex;align-items:center">
+        <span style="color:var(--hint);font-size:13px" id="logo-txt">Cap logo carregat</span>
+      </div>
+      <input type="file" id="logo-file" accept=".png,.jpg,.jpeg" style="display:none" onchange="pujarLogo()">
+      <button onclick="document.getElementById('logo-file').click()" class="btn-g" style="width:auto;padding:9px 20px;margin-top:0">Seleccionar logo</button>
+    </div>
+  </div>
+
   <button class="btn-g" onclick="desarTot()">Desar tots els canvis</button>
 </div>
 <script>
@@ -94,6 +106,26 @@ function desarTot(){
     if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
     else showAlert('Error en desar.','err');
   });
+}
+
+// Load existing logo
+fetch('/api/logo').then(r=>r.json()).then(function(d){
+  if(d.url){
+    document.getElementById('logo-preview').innerHTML='<img src="'+d.url+'" style="max-height:80px;max-width:300px;border-radius:4px">';
+  }
+});
+
+function pujarLogo(){
+  var file = document.getElementById('logo-file').files[0];
+  if(!file) return;
+  var fd = new FormData(); fd.append('logo', file);
+  fetch('/api/logo', {method:'POST', body:fd})
+    .then(r=>r.json()).then(function(d){
+      if(d.ok){
+        document.getElementById('logo-preview').innerHTML='<img src="'+d.url+'?t='+Date.now()+'" style="max-height:80px;max-width:300px;border-radius:4px">';
+        showAlert('Logo desat correctament.','ok');
+      }
+    });
 }
 </script>
 </body>

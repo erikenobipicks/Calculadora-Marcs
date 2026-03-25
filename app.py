@@ -222,6 +222,32 @@ def get_marge():
         'empresa_tel': cfg.get('empresa_tel',''),
     })
 
+
+@app.route('/api/logo', methods=['POST'])
+@login_required
+def upload_logo():
+    f = request.files.get('logo')
+    if not f: return jsonify({'ok': False})
+    import os
+    logo_dir = os.path.join(app.root_path, 'static', 'logos')
+    os.makedirs(logo_dir, exist_ok=True)
+    # Save per user
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else 'png'
+    nom = f'logo_{session["user_id"]}.{ext}'
+    path = os.path.join(logo_dir, nom)
+    f.save(path)
+    # Save path in config
+    execute("UPDATE config SET valor=? WHERE clau='empresa_logo'", [f'/static/logos/{nom}'])
+    if not query("SELECT clau FROM config WHERE clau='empresa_logo'", one=True):
+        execute("INSERT INTO config (clau,valor) VALUES ('empresa_logo',?)", [f'/static/logos/{nom}'])
+    return jsonify({'ok': True, 'url': f'/static/logos/{nom}'})
+
+@app.route('/api/logo', methods=['GET'])
+@login_required  
+def get_logo():
+    r = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
+    return jsonify({'url': r['valor'] if r else ''})
+
 @app.route('/api/empresa', methods=['POST'])
 @login_required
 def api_empresa():
@@ -271,6 +297,31 @@ def guardar():
         sessio_id, d.get('opcio_nom','Opció A')
     ])
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id})
+
+
+@app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
+@login_required
+def eliminar_comanda(cid):
+    c = query('SELECT user_id FROM comandes WHERE id=?', [cid], one=True)
+    if not c:
+        return jsonify({'ok': False, 'error': 'No trobada'})
+    if not session.get('is_admin') and c['user_id'] != session['user_id']:
+        return jsonify({'ok': False, 'error': 'No autoritzat'})
+    execute('DELETE FROM comandes WHERE id=?', [cid])
+    return jsonify({'ok': True})
+
+@app.route('/comanda/<int:cid>/acceptar', methods=['POST'])
+@login_required
+def acceptar_comanda(cid):
+    c = query('SELECT user_id FROM comandes WHERE id=?', [cid], one=True)
+    if not c:
+        return jsonify({'ok': False})
+    if not session.get('is_admin') and c['user_id'] != session['user_id']:
+        return jsonify({'ok': False})
+    estat = request.json.get('estat', 'acceptat')
+    execute('UPDATE comandes SET observacions = CASE WHEN observacions IS NULL OR observacions=\'\' THEN ? ELSE observacions || \' | \' || ? END WHERE id=?',
+            [f'[{estat.upper()}]', f'[{estat.upper()}]', cid])
+    return jsonify({'ok': True})
 
 @app.route('/historial')
 @login_required
@@ -347,7 +398,7 @@ def admin_usuari():
 @app.route('/admin/config', methods=['POST'])
 @admin_required
 def admin_config():
-    execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("marge_defecte", ?)',
+    execute("UPDATE config SET valor=? WHERE clau='marge_defecte'",
             [request.form.get('marge', 60)])
     if request.form.get('save_gmail'):
         gu = request.form.get('gmail_user','').strip()
@@ -577,7 +628,22 @@ def crear_pdf(c):
         ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
     ]))
     story.append(header)
-    story.append(Spacer(1, 5*mm))
+    story.append(Spacer(1, 3*mm))
+
+    # ── Logo (si existeix) ────────────────────────────────────────────────
+    try:
+        r_logo = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
+        if r_logo and r_logo['valor']:
+            import os as _os2
+            logo_path = _os2.path.join(app.root_path, r_logo['valor'].lstrip('/'))
+            if _os2.path.exists(logo_path):
+                from reportlab.platypus import Image as RLImg2
+                logo_img = RLImg2(logo_path, height=18*mm, width=None)
+                logo_img.hAlign = 'RIGHT'
+                story.append(logo_img)
+                story.append(Spacer(1, 2*mm))
+    except Exception as _e:
+        print(f"Logo PDF error: {_e}")
 
     # ── Dades client + data ───────────────────────────────────────────────
     opcio_txt = c.get('opcio_nom','') or ''

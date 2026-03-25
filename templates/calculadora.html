@@ -384,7 +384,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         <button class="btn btn-g" onclick="guardar()">Guardar</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="WhatsApp al client">WA Client</button>
-        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="WhatsApp a Objectiu">WA Objectiu</button>
+        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="WhatsApp a Reus Revela">WA Reus Revela</button>
         <button class="btn btn-o" onclick="novaComanda()">Nova comanda</button>
       </div>
     </div>
@@ -1003,6 +1003,12 @@ function buildWAtext(){
   lines.push('');
   if(desc>0) lines.push('Descompte '+desc+'% aplicat');
   lines.push('*TOTAL: '+pFin+' EUR (IVA inclos)*');
+  var entrega = parseFloat(document.getElementById('entrega').value)||0;
+  var pendent = window._c ? Math.max(0,window._c.pendent).toFixed(2) : pFin;
+  if(entrega > 0){
+    lines.push('Pagament a compte: '+entrega.toFixed(2)+' EUR');
+    lines.push('*Pendent de cobrar: '+pendent+' EUR*');
+  }
   lines.push('');
   lines.push('Gracies! ' + empresa_nom);
   if(empresa_adreca) lines.push(empresa_adreca);
@@ -1014,11 +1020,11 @@ function whatsappClient(){
   var tel=document.getElementById('client_tel').value.replace(/\D/g,'');
   if(!tel){showAlert('Introdueix el telefon del client primer.','err');return;}
   if(tel.length===9) tel='34'+tel;
-  window.open('https://web.whatsapp.com/send?phone='+tel+'&text='+buildWAtext(),'_blank');
+  window.open('https://wa.me/'+tel+'?text='+buildWAtext(),'_blank');
 }
 
 function whatsappObjectiu(){
-  window.open('https://web.whatsapp.com/send?phone=34977316111&text='+buildWAtext(),'_blank');
+  window.open('https://wa.me/34977316111?text='+buildWAtext(),'_blank');
 }
 
 // ── Init UI ───────────────────────────────────────────────────────────────

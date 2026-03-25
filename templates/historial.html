@@ -44,6 +44,9 @@ tr:hover td{background:#FAFAF8}
 .btn-sm{padding:5px 11px;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;font-family:'DM Sans',sans-serif;transition:all .15s}
 .btn-pdf{background:#1C1B18;color:#fff}.btn-pdf:hover{background:#333}
 .btn-cmp{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}.btn-cmp:hover{background:#D5EDE3}
+.btn-acc{background:#E8F3EE;color:#1A6B45;border:1px solid #B8DCC9}.btn-acc:hover{background:#C8E6D9}
+.btn-del{background:#FAEAEA;color:#B84040;border:1px solid #E8B4B4}.btn-del:hover{background:#F5D0D0}
+.acceptat td{background:#F0FAF5!important}
 .sessio-actions{padding:.75rem 1.1rem;display:flex;gap:.5rem;background:var(--bg);border-top:1px solid var(--border)}
 .empty{text-align:center;padding:3rem;color:var(--hint);font-size:14px}
 </style>
@@ -130,6 +133,8 @@ tr:hover td{background:#FAFAF8}
             </td>
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
+              <button onclick="acceptarComanda({{ op.id }}, this)" class="btn-sm btn-acc" title="Marcar com acceptat">✓</button>
+              <button onclick="eliminarComanda({{ op.id }}, this)" class="btn-sm btn-del" title="Eliminar">×</button>
             </td>
           </tr>
           {% endfor %}
@@ -164,6 +169,29 @@ function filtrar() {
 // Auto-open first card
 var first = document.querySelector('.sessio-head');
 if (first) toggleSessio(first);
+
+function eliminarComanda(id, btn) {
+  if(!confirm('Segur que vols eliminar aquest pressupost?')) return;
+  fetch('/comanda/'+id+'/eliminar', {method:'POST'})
+    .then(r=>r.json()).then(function(d){
+      if(d.ok){ btn.closest('tr').remove(); }
+      else alert('Error: ' + (d.error||'desconegut'));
+    });
+}
+function acceptarComanda(id, btn) {
+  var tr = btn.closest('tr');
+  var estat = tr.classList.contains('acceptat') ? 'pendent' : 'acceptat';
+  fetch('/comanda/'+id+'/acceptar', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({estat: estat})
+  }).then(r=>r.json()).then(function(d){
+    if(d.ok){
+      tr.classList.toggle('acceptat');
+      btn.style.background = estat==='acceptat' ? '#1A6B45' : '';
+      btn.style.color = estat==='acceptat' ? '#fff' : '';
+    }
+  });
+}
 </script>
 </body>
 </html>
