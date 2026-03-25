@@ -486,6 +486,7 @@ function closeSS(t){ setTimeout(function(){var l=document.getElementById('list-'
 function selectRef(t,ref){
   var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
   document.getElementById(id).value=ref;
+  if(id==='marc_principal') document.getElementById(id).dataset.lastLooked=ref;
   document.getElementById('list-'+t).classList.remove('open');
   lookupRef(t,ref);
 }
@@ -687,14 +688,27 @@ function onImpressioChange(){
   calcular();
 }
 
+var _marcLookupTimer = null;
 function onMarcInput(){
-  var val=document.getElementById('marc_principal').value.trim();
-  setProtterDisabled(val!=='');
-  if(val===''){
+  var val = document.getElementById('marc_principal').value.trim();
+  setProtterDisabled(val !== '');
+  if(val === ''){
     PREUS.marc=0; GRUIX.marc=0; setChips('marc',[]);
     document.getElementById('desc-marc').textContent=''; resetFoto();
     _lastFetchKey=''; recalcMides();
+    return;
   }
+  // Auto-lookup after 400ms if value matches a known ref (case-insensitive)
+  clearTimeout(_marcLookupTimer);
+  _marcLookupTimer = setTimeout(function(){
+    var upper = val.toUpperCase();
+    var match = REFS.marc.find(function(r){ return r.toUpperCase() === upper; });
+    if(match && match !== document.getElementById('marc_principal').dataset.lastLooked){
+      document.getElementById('marc_principal').dataset.lastLooked = match;
+      document.getElementById('marc_principal').value = match; // normalize case
+      lookupRef('marc', match);
+    }
+  }, 400);
 }
 
 // ── Càlcul ────────────────────────────────────────────────────────────────
