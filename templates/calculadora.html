@@ -133,7 +133,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 </head>
 <body>
 <nav>
-  <div class="brand">OBJECT<em>IU</em></div>
+  <div class="brand"><a href="/" style="text-decoration:none;color:inherit">{{ session.get("empresa_nom", "Calculadora") }}</a></div>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="/historial">Historial</a>

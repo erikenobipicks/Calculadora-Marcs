@@ -144,6 +144,15 @@ def login():
             session['username'] = user['username']
             session['is_admin'] = bool(user['is_admin'])
             session['nom'] = user['nom']
+            # Load empresa_nom for nav
+            try:
+                nom_emp = user['nom_empresa'] if user['nom_empresa'] else ''
+                if not nom_emp:
+                    r_cfg = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+                    nom_emp = r_cfg['valor'] if r_cfg and r_cfg['valor'] else ''
+                session['empresa_nom'] = nom_emp or 'Calculadora'
+            except:
+                session['empresa_nom'] = 'Calculadora'
             # First time setup
             try:
                 u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user['id']], one=True)
@@ -303,6 +312,7 @@ def desar_marge():
     mi = float(d.get('marge_impressio', 0))
     ne = d.get('nom_empresa', '')
     execute('UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=? WHERE id=?', [m, mi, ne, session['user_id']])
+    if ne: session['empresa_nom'] = ne
     return jsonify({'ok': True})
 
 # ── Routes: Guardar comanda i historial ──────────────────────────────────

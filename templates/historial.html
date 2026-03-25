@@ -53,7 +53,7 @@ tr:hover td{background:#FAFAF8}
 </head>
 <body>
 <nav>
-  <div class="brand">OBJECT<em>IU</em></div>
+  <div class="brand"><a href="/" style="text-decoration:none;color:inherit">{{ session.get("empresa_nom", "Calculadora") }}</a></div>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="/">Calculadora</a>
