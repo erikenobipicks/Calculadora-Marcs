@@ -187,7 +187,8 @@ def refs():
     if tipus not in tables: return jsonify([])
     t, col = tables[tipus]
     rows = query(f'SELECT {col} FROM {t} ORDER BY {col}')
-    return jsonify([r[0] for r in rows])
+    col = list(rows[0].keys())[0] if rows else 'referencia'
+    return jsonify([r[col] for r in rows])
 
 @app.route('/api/marge')
 @login_required
@@ -196,7 +197,8 @@ def get_marge():
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
-    cfg = {r['clau']: r['valor'] for r in query("SELECT * FROM config WHERE clau LIKE 'empresa_%'")}
+    cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
+    cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', 'Objectiu Emmarcació')
     return jsonify({
@@ -693,7 +695,8 @@ def ajustos():
     marge_actual = int(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = int(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
-    cfg = {r['clau']: r['valor'] for r in query("SELECT * FROM config WHERE clau LIKE 'empresa_%'")}
+    cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
+    cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
@@ -974,6 +977,12 @@ def init_db():
                            ['admin', hash_pw('admin123'), 'Administrador', 1])
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
                            ['marge_defecte','60'])
+                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                           ['empresa_nom','Reus Revela'])
+                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                           ['empresa_adreca',''])
+                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                           ['empresa_tel',''])
                 db.commit()
                 print("Admin creat: usuari=admin / contrasenya=admin123")
         else:
