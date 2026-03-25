@@ -321,14 +321,15 @@ def desar_marge():
 def guardar():
     d = request.json
     sessio_id = d.get('sessio_id') or secrets.token_hex(8)
+    num_pressupost = generar_num_pressupost()
     cid = execute('''INSERT INTO comandes
         (user_id, data, client_nom, client_tel,
          pre_marc, marc_principal, amplada, alcada, copia,
          encolat, vidre, passpartout, impressio,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
-         sessio_id, opcio_nom)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+         sessio_id, opcio_nom, num_pressupost)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
@@ -339,10 +340,18 @@ def guardar():
         d.get('preu_net',0), d.get('preu_final',0),
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''),
-        sessio_id, d.get('opcio_nom','Opció A')
+        sessio_id, d.get('opcio_nom','Opció A'), num_pressupost
     ])
-    return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id})
+    return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
+
+
+@app.route('/sessio/<sessio_id>/pagat', methods=['POST'])
+@login_required
+def marcar_pagat(sessio_id):
+    pagat = request.json.get('pagat', 1)
+    execute('UPDATE comandes SET pagat=? WHERE sessio_id=?', [pagat, sessio_id])
+    return jsonify({'ok': True})
 
 @app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
 @login_required
@@ -385,8 +394,12 @@ def historial():
         sid = c['sessio_id'] or str(c['id'])
         if sid not in sessions:
             sessions[sid] = []
-        sessions[sid].append(dict(c))
+        d = dict(c)
+        sessions[sid].append(d)
     sessio_list = list(sessions.values())
+    # Add pagat flag to first item of each session
+    for grp in sessio_list:
+        grp[0]['pagat'] = any(op.get('pagat') for op in grp)
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list)
 
 @app.route('/pdf-comparativa/<sessio_id>')
@@ -485,6 +498,29 @@ def admin_foto():
     return redirect(url_for('admin'))
 
 # ── PDF generator ─────────────────────────────────────────────────────────
+
+def generar_num_pressupost():
+    """Genera número tipus RR-2503-001"""
+    from datetime import datetime
+    # Get initials from empresa_nom in config
+    r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+    nom = r['valor'] if r and r['valor'] else 'XX'
+    # Take first letters of each word (max 3)
+    inicials = ''.join(w[0].upper() for w in nom.split()[:3] if w)[:3] or 'XX'
+    # YYMM
+    yymm = datetime.now().strftime('%y%m')
+    prefix = f"{inicials}-{yymm}-"
+    # Find last number with same prefix
+    r2 = query("SELECT num_pressupost FROM comandes WHERE num_pressupost LIKE ? ORDER BY id DESC LIMIT 1",
+               [prefix + '%'], one=True)
+    if r2 and r2['num_pressupost']:
+        try:
+            last_n = int(r2['num_pressupost'].split('-')[-1])
+            return f"{prefix}{last_n+1:03d}"
+        except:
+            pass
+    return f"{prefix}001"
+
 
 def crear_pdf_comparativa(comandes):
     from reportlab.lib.pagesizes import landscape
@@ -693,11 +729,14 @@ def crear_pdf(c):
 
     # ── Dades client + data ───────────────────────────────────────────────
     opcio_txt = c.get('opcio_nom','') or ''
+    num_pres = c.get('num_pressupost','') or ''
     t1_rows = [
+        fila('Num. Pressupost:', num_pres, color_val=colors.HexColor('#1A6B45')) if num_pres else None,
         fila('Client:', c['client_nom'] or '—'),
         fila('Telèfon:', c['client_tel'] or '—'),
         fila('Data:', c['data']),
     ]
+    t1_rows = [r for r in t1_rows if r is not None]
     if opcio_txt and opcio_txt != 'Opció A':
         t1_rows.append(fila('Opció:', opcio_txt))
 
@@ -1092,6 +1131,8 @@ def init_db():
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
+                ('comandes','num_pressupost','TEXT DEFAULT '''),
+                ('comandes','pagat','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")

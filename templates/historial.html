@@ -49,6 +49,10 @@ tr:hover td{background:#FAFAF8}
 .acceptat td{background:#F0FAF5!important}
 .sessio-actions{padding:.75rem 1.1rem;display:flex;gap:.5rem;background:var(--bg);border-top:1px solid var(--border)}
 .empty{text-align:center;padding:3rem;color:var(--hint);font-size:14px}
+.btn-pagat{background:#F0F9F4;color:#1A6B45;border:1px solid #B8DCC9}
+.btn-pagat:hover{background:#C8E6D9}
+.btn-pagat-on{background:#1A6B45;color:#fff;border:1px solid #155c3a}
+.pagat-badge{display:inline-block;background:#1A6B45;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -79,7 +83,10 @@ tr:hover td{background:#FAFAF8}
       <div class="sessio-head" onclick="toggleSessio(this)">
         <div style="flex:1;min-width:0">
           <div class="sessio-client">{{ c0.client_nom or '(sense nom)' }}</div>
-          <div class="sessio-meta">{{ c0.data }}{% if session.is_admin %} · {{ c0.usuari_nom }}{% endif %} · {{ c0.marc_principal or 'sense marc' }}</div>
+          <div class="sessio-meta">
+            {% if c0.num_pressupost %}<span style="font-weight:700;color:var(--green);margin-right:6px">{{ c0.num_pressupost }}</span>{% endif %}
+            {{ c0.data }}{% if session.is_admin %} · {{ c0.usuari_nom }}{% endif %} · {{ c0.marc_principal or 'sense marc' }}
+          </div>
         </div>
         <div class="sessio-badges">
           {% if multi %}
@@ -113,7 +120,12 @@ tr:hover td{background:#FAFAF8}
           <tbody>
           {% for op in opcions %}
           <tr>
-            <td><span class="opcio-pill">{{ op.opcio_nom or 'Opció A' }}</span></td>
+            <td>
+              <span class="opcio-pill">{{ op.opcio_nom or 'Opció A' }}</span>
+              {% if op.num_pressupost %}
+              <div style="font-size:11px;font-weight:600;color:var(--green);margin-top:3px">{{ op.num_pressupost }}</div>
+              {% endif %}
+            </td>
             <td>
               <strong>{{ op.marc_principal or '—' }}</strong>
               {% if op.pre_marc and op.pre_marc != '-' %}
@@ -140,11 +152,16 @@ tr:hover td{background:#FAFAF8}
           {% endfor %}
           </tbody>
         </table>
-        {% if multi %}
-        <div class="sessio-actions">
+        <div class="sessio-actions" id="actions-{{ sessio_id }}">
+          {% if multi %}
           <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">PDF comparativa</a>
+          {% endif %}
+          <button onclick="marcarPagat('{{ sessio_id }}', this)"
+            class="btn-sm {% if c0.pagat %}btn-pagat-on{% else %}btn-pagat{% endif %}"
+            id="pagat-{{ sessio_id }}">
+            {% if c0.pagat %}✓ Pagat{% else %}Marcar pagat{% endif %}
+          </button>
         </div>
-        {% endif %}
       </div>
     </div>
     {% endfor %}
@@ -169,6 +186,26 @@ function filtrar() {
 // Auto-open first card
 var first = document.querySelector('.sessio-head');
 if (first) toggleSessio(first);
+
+function marcarPagat(sessioId, btn) {
+  var esPagat = btn.classList.contains('btn-pagat-on');
+  var nouEstat = esPagat ? 0 : 1;
+  fetch('/sessio/'+sessioId+'/pagat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({pagat: nouEstat})
+  }).then(r=>r.json()).then(function(d){
+    if(d.ok){
+      if(nouEstat){
+        btn.classList.replace('btn-pagat','btn-pagat-on');
+        btn.textContent='✓ Pagat';
+      } else {
+        btn.classList.replace('btn-pagat-on','btn-pagat');
+        btn.textContent='Marcar pagat';
+      }
+    }
+  });
+}
 
 function eliminarComanda(id, btn) {
   if(!confirm('Segur que vols eliminar aquest pressupost?')) return;
