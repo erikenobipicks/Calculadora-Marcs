@@ -60,6 +60,10 @@ def query(sql, args=(), one=False):
     db = get_db()
     sql = _fix_sql(sql)
     if USE_PG:
+        # Rollback any failed transaction before executing
+        if db.status != 1:  # 1 = STATUS_READY
+            try: db.rollback()
+            except: pass
         cur = db.cursor()
         cur.execute(sql, list(args))
         r = cur.fetchall()
@@ -161,10 +165,15 @@ def lookup():
     ref = request.args.get('ref', '').strip()
     tipus = request.args.get('tipus', 'moldura')
     if tipus == 'moldura':
-        r = query('SELECT preu_taller, gruix, descripcio, foto FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
-        if r:
-            return jsonify({'ok': True, 'preu': r['preu_taller'], 'gruix': r['gruix'],
-                            'descripcio': r['descripcio'], 'foto': r['foto'] or ''})
+        try:
+            r = query('SELECT preu_taller, gruix, descripcio, foto FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+            print(f"lookup moldura ref={ref} result={r}")
+            if r:
+                return jsonify({'ok': True, 'preu': r['preu_taller'], 'gruix': r['gruix'],
+                                'descripcio': r['descripcio'], 'foto': r['foto'] or ''})
+        except Exception as e:
+            print(f"lookup ERROR: {e}")
+            return jsonify({'ok': False, 'error': str(e)})
     elif tipus == 'vidre':
         r = query('SELECT preu FROM vidres WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
         if r: return jsonify({'ok': True, 'preu': r['preu']})
