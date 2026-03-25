@@ -556,7 +556,12 @@ def crear_pdf(c):
     # ── Capçalera ────────────────────────────────────────────────────────
     # Get empresa info for this user
     u_data = query('SELECT nom_empresa FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
-    nom_empresa = (u_data['nom_empresa'] if u_data and u_data['nom_empresa'] else '') or                   (lambda _r: _r['valor'] if _r else '')(query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)) or                   'Objectiu Emmarcació'
+    nom_empresa = ''
+    if u_data and u_data.get('nom_empresa'):
+        nom_empresa = u_data['nom_empresa']
+    if not nom_empresa:
+        _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+        nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
     r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
     adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
