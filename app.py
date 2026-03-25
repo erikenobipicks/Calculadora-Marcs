@@ -144,6 +144,13 @@ def login():
             session['username'] = user['username']
             session['is_admin'] = bool(user['is_admin'])
             session['nom'] = user['nom']
+            # First time setup
+            try:
+                u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user['id']], one=True)
+                if u2 and not u2.get('setup_done'):
+                    return redirect(url_for('setup'))
+            except:
+                pass
             return redirect(url_for('index'))
         flash('Usuari o contrasenya incorrectes.', 'error')
     return render_template('login.html')
@@ -154,6 +161,21 @@ def logout():
     return redirect(url_for('login'))
 
 # ── Routes: App principal ─────────────────────────────────────────────────
+
+@app.route('/setup')
+@login_required
+def setup():
+    return render_template('setup.html')
+
+@app.route('/api/setup-done', methods=['POST'])
+@login_required
+def setup_done():
+    try:
+        execute('UPDATE usuaris SET setup_done=1 WHERE id=?', [session['user_id']])
+    except:
+        pass
+    return jsonify({'ok': True})
+
 @app.route('/')
 @login_required
 def index():
@@ -228,25 +250,38 @@ def get_marge():
 def upload_logo():
     f = request.files.get('logo')
     if not f: return jsonify({'ok': False})
-    import os
-    logo_dir = os.path.join(app.root_path, 'static', 'logos')
-    os.makedirs(logo_dir, exist_ok=True)
-    # Save per user
+    import base64
+    data = f.read()
     ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else 'png'
-    nom = f'logo_{session["user_id"]}.{ext}'
-    path = os.path.join(logo_dir, nom)
-    f.save(path)
-    # Save path in config
-    execute("UPDATE config SET valor=? WHERE clau='empresa_logo'", [f'/static/logos/{nom}'])
-    if not query("SELECT clau FROM config WHERE clau='empresa_logo'", one=True):
-        execute("INSERT INTO config (clau,valor) VALUES ('empresa_logo',?)", [f'/static/logos/{nom}'])
-    return jsonify({'ok': True, 'url': f'/static/logos/{nom}'})
+    mime = 'image/png' if ext == 'png' else 'image/jpeg'
+    b64 = 'data:' + mime + ';base64,' + base64.b64encode(data).decode()
+    r = query("SELECT clau FROM config WHERE clau='empresa_logo'", one=True)
+    if r:
+        execute("UPDATE config SET valor=? WHERE clau='empresa_logo'", [b64])
+    else:
+        execute("INSERT INTO config (clau,valor) VALUES ('empresa_logo',?)", [b64])
+    return jsonify({'ok': True, 'url': b64[:80] + '...'})
 
 @app.route('/api/logo', methods=['GET'])
-@login_required  
+@login_required
 def get_logo():
     r = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
     return jsonify({'url': r['valor'] if r else ''})
+
+@app.route('/static/logo-preview')
+@login_required
+def logo_preview():
+    import base64
+    r = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
+    if not r or not r['valor']: return '', 404
+    data_url = r['valor']
+    if data_url.startswith('data:'):
+        header, b64 = data_url.split(',', 1)
+        mime = header.split(':')[1].split(';')[0]
+        data = base64.b64decode(b64)
+        from flask import Response
+        return Response(data, mimetype=mime)
+    return '', 404
 
 @app.route('/api/empresa', methods=['POST'])
 @login_required
@@ -633,15 +668,16 @@ def crear_pdf(c):
     # ── Logo (si existeix) ────────────────────────────────────────────────
     try:
         r_logo = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
-        if r_logo and r_logo['valor']:
-            import os as _os2
-            logo_path = _os2.path.join(app.root_path, r_logo['valor'].lstrip('/'))
-            if _os2.path.exists(logo_path):
-                from reportlab.platypus import Image as RLImg2
-                logo_img = RLImg2(logo_path, height=18*mm, width=None)
-                logo_img.hAlign = 'RIGHT'
-                story.append(logo_img)
-                story.append(Spacer(1, 2*mm))
+        if r_logo and r_logo['valor'] and r_logo['valor'].startswith('data:'):
+            import base64 as _b64
+            data_url = r_logo['valor']
+            _, b64data = data_url.split(',', 1)
+            img_data = _b64.b64decode(b64data)
+            from reportlab.platypus import Image as RLImg2
+            logo_img = RLImg2(io.BytesIO(img_data), height=18*mm, width=None)
+            logo_img.hAlign = 'RIGHT'
+            story.append(logo_img)
+            story.append(Spacer(1, 2*mm))
     except Exception as _e:
         print(f"Logo PDF error: {_e}")
 
@@ -1045,6 +1081,7 @@ def init_db():
                 ('comandes','sessio_id','TEXT'),
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
+                ('usuaris','setup_done','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")

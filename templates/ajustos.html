@@ -53,7 +53,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     <div class="section-title">Dades del comerç</div>
     <div class="card">
       <div class="hint-box">Apareixeran als PDFs i als missatges de WhatsApp.</div>
-      <div class="f"><label>Nom del comerç</label><input type="text" id="nom-empresa" value="{{ nom_empresa }}" placeholder="Objectiu Emmarcació"></div>
+      <div class="f"><label>Nom del comerç</label><input type="text" id="nom-empresa" value="{{ nom_empresa }}" placeholder="Ex: Taller d'Emmarcació La Rambla"></div>
       <div class="f"><label>Adreça</label><input type="text" id="empresa-adreca" value="{{ empresa_adreca }}" placeholder="C/ Mare Molas, 26 - Reus"></div>
       <div class="f"><label>Telèfon</label><input type="text" id="empresa-tel" value="{{ empresa_tel }}" placeholder="977 316 111"></div>
     </div>
@@ -110,21 +110,26 @@ function desarTot(){
 
 // Load existing logo
 fetch('/api/logo').then(r=>r.json()).then(function(d){
-  if(d.url){
+  if(d.url && d.url.startsWith('data:')){
     document.getElementById('logo-preview').innerHTML='<img src="'+d.url+'" style="max-height:80px;max-width:300px;border-radius:4px">';
+    document.getElementById('logo-txt').style.display='none';
   }
 });
 
 function pujarLogo(){
   var file = document.getElementById('logo-file').files[0];
   if(!file) return;
+  // Preview immediately
+  var reader = new FileReader();
+  reader.onload = function(e){
+    document.getElementById('logo-preview').innerHTML='<img src="'+e.target.result+'" style="max-height:80px;max-width:300px;border-radius:4px">';
+  };
+  reader.readAsDataURL(file);
+  // Upload
   var fd = new FormData(); fd.append('logo', file);
   fetch('/api/logo', {method:'POST', body:fd})
     .then(r=>r.json()).then(function(d){
-      if(d.ok){
-        document.getElementById('logo-preview').innerHTML='<img src="'+d.url+'?t='+Date.now()+'" style="max-height:80px;max-width:300px;border-radius:4px">';
-        showAlert('Logo desat correctament.','ok');
-      }
+      if(d.ok) showAlert('Logo desat correctament. Apareixerà als PDFs.','ok');
     });
 }
 </script>
