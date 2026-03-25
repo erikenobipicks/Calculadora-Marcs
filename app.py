@@ -196,7 +196,7 @@ def get_marge():
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
-    cfg = {r['clau']: r['valor'] for r in query('SELECT * FROM config WHERE clau LIKE 'empresa_%'')}
+    cfg = {r['clau']: r['valor'] for r in query("SELECT * FROM config WHERE clau LIKE 'empresa_%'")}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', 'Objectiu Emmarcació')
     return jsonify({
@@ -214,9 +214,9 @@ def api_empresa():
     nom    = d.get('nom','')
     adreca = d.get('adreca','')
     tel    = d.get('tel','')
-    execute('UPDATE config SET valor=? WHERE clau='empresa_nom'',    [nom])
-    execute('UPDATE config SET valor=? WHERE clau='empresa_adreca'', [adreca])
-    execute('UPDATE config SET valor=? WHERE clau='empresa_tel'',    [tel])
+    execute("UPDATE config SET valor=? WHERE clau='empresa_nom'",    [nom])
+    execute("UPDATE config SET valor=? WHERE clau='empresa_adreca'", [adreca])
+    execute("UPDATE config SET valor=? WHERE clau='empresa_tel'",    [tel])
     return jsonify({'ok': True})
 
 @app.route('/api/desar-marge', methods=['POST'])
@@ -541,8 +541,8 @@ def crear_pdf(c):
     # ── Capçalera ────────────────────────────────────────────────────────
     # Get empresa info for this user
     u_data = query('SELECT nom_empresa FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
-    nom_empresa = (u_data['nom_empresa'] if u_data and u_data['nom_empresa'] else '') or                   query('SELECT valor FROM config WHERE clau='empresa_nom'', one=True)['valor'] or                   'Objectiu Emmarcació'
-    r_adr  = query('SELECT valor FROM config WHERE clau='empresa_adreca'', one=True)
+    nom_empresa = (u_data['nom_empresa'] if u_data and u_data['nom_empresa'] else '') or                   query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)['valor'] or                   'Objectiu Emmarcació'
+    r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
     adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
     header = Table([[
@@ -693,7 +693,7 @@ def ajustos():
     marge_actual = int(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = int(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
-    cfg = {r['clau']: r['valor'] for r in query('SELECT * FROM config WHERE clau LIKE 'empresa_%'')}
+    cfg = {r['clau']: r['valor'] for r in query("SELECT * FROM config WHERE clau LIKE 'empresa_%'")}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
@@ -1023,11 +1023,11 @@ def init_db():
                 );
             ''')
             db.commit()
-            admin = db.execute('SELECT id FROM usuaris WHERE username='admin'').fetchone()
+            admin = db.execute("SELECT id FROM usuaris WHERE username='admin'").fetchone()
             if not admin:
                 db.execute('INSERT INTO usuaris (username,password,nom,is_admin) VALUES (?,?,?,1)',
                            ['admin', hash_pw('admin123'), 'Administrador'])
-                db.execute('INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')')
+                db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
                 db.commit()
                 print("Admin creat: usuari=admin / contrasenya=admin123")
 
