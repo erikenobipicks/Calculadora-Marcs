@@ -509,17 +509,31 @@ function lookupRef(t,ref){
         setChips(t,[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
         if(t==='pre'){
           document.getElementById('desc-pre').textContent=d.descripcio||'';
+          document.getElementById('desc-pre').style.color='';
           document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense foto</div>';
         }
         if(t==='marc'){
           document.getElementById('desc-marc').textContent=d.descripcio||'';
+          document.getElementById('desc-marc').style.color='';
           document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense foto</div>';
           setProtterDisabled(true);
           _lastFetchKey=''; recalcMides(); return;
         }
       } else {
         PREUS[t]=0; GRUIX[t]=0;
-        setChips(t,[{txt: t==='pre'||t==='marc' ? 'Motllura fora de catàleg' : 'Referència no trobada', cls:'chip-r'}]);
+        var msg = (t==='pre'||t==='marc') ? '⚠ Motllura "'+ref+'" no trobada al catàleg' : 'Referència no trobada';
+        setChips(t,[{txt: (t==='pre'||t==='marc') ? '⚠ Fora de catàleg' : '⚠ No trobada', cls:'chip-r'}]);
+        if(t==='marc'){
+          document.getElementById('desc-marc').textContent = msg;
+          document.getElementById('desc-marc').style.color = 'var(--red)';
+          resetFoto();
+          _lastFetchKey=''; recalcMides();
+          showAlert(msg + ' — Comprova la referència o consulta el catàleg.', 'err');
+        } else if(t==='pre'){
+          document.getElementById('desc-pre').textContent = msg;
+          document.getElementById('desc-pre').style.color = 'var(--red)';
+          showAlert(msg, 'err');
+        }
       }
       calcular();
     });
