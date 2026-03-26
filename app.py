@@ -93,13 +93,18 @@ def execute(sql, args=()):
             sql2 = sql2.rstrip().rstrip(';')
             if is_ignore:
                 sql2 += ' ON CONFLICT DO NOTHING'
-            if 'RETURNING' not in sql2.upper():
+            # Only add RETURNING id for tables that have serial id
+            has_id = any(t in sql2.upper() for t in ['INTO USUARIS','INTO COMANDES','INTO MOLDURES',
+                         'INTO VIDRES','INTO PASSPARTOUT','INTO ENCOLAT_PRO','INTO IMPRESSIO'])
+            if has_id and 'RETURNING' not in sql2.upper():
                 sql2 += ' RETURNING id'
             cur = db.cursor()
             cur.execute(sql2, list(args))
             db.commit()
-            row = cur.fetchone()
-            return row['id'] if row else None
+            if has_id:
+                row = cur.fetchone()
+                return row['id'] if row else None
+            return None
         else:
             cur = db.cursor()
             cur.execute(sql2, list(args))
@@ -345,6 +350,14 @@ def guardar():
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
 
+
+@app.route('/sessio/<sessio_id>/pagat', methods=['POST'])
+@login_required
+def marcar_pagat(sessio_id):
+    pagat = request.json.get('pagat', 1)
+    execute('UPDATE comandes SET pagat=? WHERE sessio_id=?', [pagat, sessio_id])
+    return jsonify({'ok': True})
+
 @app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
 @login_required
 def eliminar_comanda(cid):
@@ -386,8 +399,12 @@ def historial():
         sid = c['sessio_id'] or str(c['id'])
         if sid not in sessions:
             sessions[sid] = []
-        sessions[sid].append(dict(c))
+        d = dict(c)
+        sessions[sid].append(d)
     sessio_list = list(sessions.values())
+    # Add pagat flag to first item of each session
+    for grp in sessio_list:
+        grp[0]['pagat'] = any(op.get('pagat') for op in grp)
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list)
 
 @app.route('/pdf-comparativa/<sessio_id>')
@@ -1119,7 +1136,8 @@ def init_db():
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
-                ('comandes','num_pressupost','TEXT DEFAULT '''),
+                ('comandes','num_pressupost','TEXT'),
+                ('comandes','pagat','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -1211,7 +1229,10 @@ def ensure_db():
             init_db()
             # Ensure config rows exist
             for clau, valor in [('empresa_nom','Reus Revela'), ('empresa_adreca',''), ('empresa_tel',''), ('marge_defecte','60')]:
-                execute('INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)', [clau, valor])
+                try:
+                    execute('INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)', [clau, valor])
+                except Exception as _ce:
+                    pass  # Row may already exist
             print("init_db OK")
         except Exception as e:
             import traceback
