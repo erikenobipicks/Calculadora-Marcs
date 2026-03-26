@@ -944,6 +944,13 @@ def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
             best = dict(row)
     return best
 
+def _imp_closest(fw, fh):
+    rows = [dict(r) for r in query('SELECT * FROM impressio')]
+    r = _find_min_contain(rows, fw, fh)
+    if r:
+        return {'ref': r['referencia'], 'preu': r.get('preu', 0)}
+    return None
+
 @app.route('/api/closest')
 @login_required
 def api_closest():
@@ -997,8 +1004,7 @@ def api_closest():
         'passpartu':    ca('passpartout', w, h, prefix='1PAS'),
         'doble_pas':    ca('passpartout', w, h, prefix='DOBPAS'),
         'proeco':       ca('passpartout', w, h, prefix='PROECO'),
-        'impressio':    (lambda rows: ({'ref': r['referencia'], 'preu': r.get('preu', 0)} if (r := _find_min_contain(rows, foto_w, foto_h)) else None))(
-                            [dict(r) for r in query('SELECT * FROM impressio')]),
+        'impressio':    _imp_closest(foto_w, foto_h),
     }
     return jsonify(result)
 
