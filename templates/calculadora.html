@@ -482,7 +482,24 @@ function filterSS(t){
     list.classList.add('open');
   }, 150);
 }
-function closeSS(t){ setTimeout(function(){var l=document.getElementById('list-'+t);if(l)l.classList.remove('open');},200); }
+function closeSS(t){
+  setTimeout(function(){
+    var l=document.getElementById('list-'+t); if(l) l.classList.remove('open');
+    // If user typed something not selected from dropdown, auto-lookup
+    if(t==='pre'||t==='marc'){
+      var id = t==='pre'?'pre_marc':'marc_principal';
+      var val = document.getElementById(id).value.trim();
+      if(val && val.length>=3 && val!==document.getElementById(id).dataset.lastLooked){
+        var upper = val.toUpperCase();
+        var match = REFS[t].find(function(r){return r.toUpperCase()===upper;});
+        var ref = match || val;
+        document.getElementById(id).dataset.lastLooked = ref;
+        if(match) document.getElementById(id).value = match;
+        lookupRef(t, ref);
+      }
+    }
+  },250);
+}
 function selectRef(t,ref){
   var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
   document.getElementById(id).value=ref;
@@ -708,21 +725,29 @@ function onMarcInput(){
   setProtterDisabled(val !== '');
   if(val === ''){
     PREUS.marc=0; GRUIX.marc=0; setChips('marc',[]);
-    document.getElementById('desc-marc').textContent=''; resetFoto();
-    _lastFetchKey=''; recalcMides();
+    document.getElementById('desc-marc').textContent='';
+    document.getElementById('desc-marc').style.color='';
+    resetFoto(); _lastFetchKey=''; recalcMides();
     return;
   }
-  // Auto-lookup after 400ms if value matches a known ref (case-insensitive)
+  // Auto-lookup after 600ms for any ref (exact match normalizes case, others show error)
   clearTimeout(_marcLookupTimer);
   _marcLookupTimer = setTimeout(function(){
     var upper = val.toUpperCase();
     var match = REFS.marc.find(function(r){ return r.toUpperCase() === upper; });
-    if(match && match !== document.getElementById('marc_principal').dataset.lastLooked){
-      document.getElementById('marc_principal').dataset.lastLooked = match;
-      document.getElementById('marc_principal').value = match; // normalize case
-      lookupRef('marc', match);
+    if(match){
+      // Exact match found in catalogue
+      if(match !== document.getElementById('marc_principal').dataset.lastLooked){
+        document.getElementById('marc_principal').dataset.lastLooked = match;
+        document.getElementById('marc_principal').value = match;
+        lookupRef('marc', match);
+      }
+    } else if(val.length >= 3 && val !== document.getElementById('marc_principal').dataset.lastLooked){
+      // Not in catalogue - call lookup anyway to show error
+      document.getElementById('marc_principal').dataset.lastLooked = val;
+      lookupRef('marc', val);
     }
-  }, 400);
+  }, 600);
 }
 
 // ── Càlcul ────────────────────────────────────────────────────────────────
