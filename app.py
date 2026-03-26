@@ -358,6 +358,19 @@ def marcar_pagat(sessio_id):
     execute('UPDATE comandes SET pagat=? WHERE sessio_id=?', [pagat, sessio_id])
     return jsonify({'ok': True})
 
+@app.route('/sessio/<sessio_id>/entregat', methods=['POST'])
+@login_required
+def marcar_entregat(sessio_id):
+    entregat = request.json.get('entregat', 1)
+    execute('UPDATE comandes SET entregat=? WHERE sessio_id=?', [entregat, sessio_id])
+    return jsonify({'ok': True})
+
+@app.route('/comanda/<int:cid>/liquidar', methods=['POST'])
+@login_required
+def liquidar_comanda(cid):
+    execute('UPDATE comandes SET entrega=preu_final, pendent=0, pagat=1 WHERE id=?', [cid])
+    return jsonify({'ok': True})
+
 @app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
 @login_required
 def eliminar_comanda(cid):
@@ -402,9 +415,10 @@ def historial():
         d = dict(c)
         sessions[sid].append(d)
     sessio_list = list(sessions.values())
-    # Add pagat flag to first item of each session
+    # Add pagat/entregat flag to first item of each session
     for grp in sessio_list:
-        grp[0]['pagat'] = any(op.get('pagat') for op in grp)
+        grp[0]['pagat']    = any(op.get('pagat')    for op in grp)
+        grp[0]['entregat'] = any(op.get('entregat') for op in grp)
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list)
 
 @app.route('/pdf-comparativa/<sessio_id>')
@@ -1138,6 +1152,7 @@ def init_db():
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
                 ('comandes','num_pressupost','TEXT'),
                 ('comandes','pagat','INTEGER DEFAULT 0'),
+                ('comandes','entregat','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")

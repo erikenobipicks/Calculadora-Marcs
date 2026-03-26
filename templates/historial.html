@@ -49,6 +49,13 @@ tr:hover td{background:#FAFAF8}
 .acceptat td{background:#F0FAF5!important}
 .sessio-actions{padding:.75rem 1.1rem;display:flex;gap:.5rem;background:var(--bg);border-top:1px solid var(--border)}
 .empty{text-align:center;padding:3rem;color:var(--hint);font-size:14px}
+.btn-pagat{background:#F0F9F4;color:#1A6B45;border:1px solid #B8DCC9}
+.btn-pagat:hover{background:#C8E6D9}
+.btn-pagat-on{background:#1A6B45;color:#fff;border:1px solid #155c3a}
+.btn-liq{background:#FDF3E8;color:#C8873A;border:1px solid #E8C89A}.btn-liq:hover{background:#F5E6CE}
+.btn-entregat{background:#EEF2FF;color:#4F46E5;border:1px solid #C7D2FE}.btn-entregat:hover{background:#E0E7FF}
+.btn-entregat-on{background:#4F46E5;color:#fff;border:1px solid #3730A3}
+.pagat-badge{display:inline-block;background:#1A6B45;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -79,7 +86,10 @@ tr:hover td{background:#FAFAF8}
       <div class="sessio-head" onclick="toggleSessio(this)">
         <div style="flex:1;min-width:0">
           <div class="sessio-client">{{ c0.client_nom or '(sense nom)' }}</div>
-          <div class="sessio-meta">{{ c0.data }}{% if session.is_admin %} · {{ c0.usuari_nom }}{% endif %} · {{ c0.marc_principal or 'sense marc' }}</div>
+          <div class="sessio-meta">
+            {% if c0.num_pressupost %}<span style="font-weight:700;color:var(--green);margin-right:6px">{{ c0.num_pressupost }}</span>{% endif %}
+            {{ c0.data }}{% if session.is_admin %} · {{ c0.usuari_nom }}{% endif %} · {{ c0.marc_principal or 'sense marc' }}
+          </div>
         </div>
         <div class="sessio-badges">
           {% if multi %}
@@ -145,11 +155,25 @@ tr:hover td{background:#FAFAF8}
           {% endfor %}
           </tbody>
         </table>
-        {% if multi %}
-        <div class="sessio-actions">
+        <div class="sessio-actions" id="actions-{{ sessio_id }}">
+          {% if multi %}
           <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">PDF comparativa</a>
+          {% endif %}
+          {% for op in opcions %}{% if loop.first %}
+          <button onclick="liquidarComanda({{ op.id }}, this)"
+            class="btn-sm btn-liq" title="Liquidar saldo pendent">
+            💰 Liquidar
+          </button>
+          {% endif %}{% endfor %}
+          <button onclick="marcarPagat('{{ sessio_id }}', this)"
+            class="btn-sm {% if c0.pagat %}btn-pagat-on{% else %}btn-pagat{% endif %}">
+            {% if c0.pagat %}✓ Pagat{% else %}Marcar pagat{% endif %}
+          </button>
+          <button onclick="marcarEntregat('{{ sessio_id }}', this)"
+            class="btn-sm {% if c0.entregat %}btn-entregat-on{% else %}btn-entregat{% endif %}">
+            {% if c0.entregat %}📦 Entregat{% else %}Marcar entregat{% endif %}
+          </button>
         </div>
-        {% endif %}
       </div>
     </div>
     {% endfor %}
@@ -174,6 +198,59 @@ function filtrar() {
 // Auto-open first card
 var first = document.querySelector('.sessio-head');
 if (first) toggleSessio(first);
+
+function liquidarComanda(id, btn) {
+  if(!confirm('Marcar el pagament total com a completat?')) return;
+  fetch('/comanda/'+id+'/liquidar', {method:'POST'})
+    .then(r=>r.json()).then(function(d){
+      if(d.ok){
+        btn.style.background='#1A6B45'; btn.style.color='#fff';
+        btn.textContent='✓ Liquidat';
+        btn.disabled=true;
+        // Also update pagat button
+        var pagBtn = btn.parentNode.querySelector('.btn-pagat,.btn-pagat-on');
+        if(pagBtn){ pagBtn.classList.replace('btn-pagat','btn-pagat-on'); pagBtn.innerHTML='✓ Pagat'; }
+      }
+    });
+}
+
+function marcarEntregat(sessioId, btn) {
+  var esEntregat = btn.classList.contains('btn-entregat-on');
+  fetch('/sessio/'+sessioId+'/entregat', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({entregat: esEntregat ? 0 : 1})
+  }).then(r=>r.json()).then(function(d){
+    if(d.ok){
+      if(!esEntregat){
+        btn.classList.replace('btn-entregat','btn-entregat-on');
+        btn.textContent='📦 Entregat';
+      } else {
+        btn.classList.replace('btn-entregat-on','btn-entregat');
+        btn.textContent='Marcar entregat';
+      }
+    }
+  });
+}
+
+function marcarPagat(sessioId, btn) {
+  var esPagat = btn.classList.contains('btn-pagat-on');
+  var nouEstat = esPagat ? 0 : 1;
+  fetch('/sessio/'+sessioId+'/pagat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({pagat: nouEstat})
+  }).then(r=>r.json()).then(function(d){
+    if(d.ok){
+      if(nouEstat){
+        btn.classList.replace('btn-pagat','btn-pagat-on');
+        btn.textContent='✓ Pagat';
+      } else {
+        btn.classList.replace('btn-pagat-on','btn-pagat');
+        btn.textContent='Marcar pagat';
+      }
+    }
+  });
+}
 
 function eliminarComanda(id, btn) {
   if(!confirm('Segur que vols eliminar aquest pressupost?')) return;

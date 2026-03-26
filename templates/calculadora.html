@@ -519,7 +519,7 @@ function lookupRef(t,ref){
         }
       } else {
         PREUS[t]=0; GRUIX[t]=0;
-        setChips(t,[{txt:'No trobada',cls:'chip-r'}]);
+        setChips(t,[{txt: t==='pre'||t==='marc' ? 'Motllura fora de catàleg' : 'Referència no trobada', cls:'chip-r'}]);
       }
       calcular();
     });
@@ -994,7 +994,8 @@ function buildWAtext(){
   var nomMuntatge  = {encolat:'Encolat',protter:'Protter'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
-  var lines = ['Hola! Us envio el pressupost d\'emmarcacio:','','Client: '+client];
+  var num = window._numPressupost || '';
+  var lines = ['Hola! Us envio el pressupost d\'emmarcacio:'+(num?' (Ref. '+num+')':''),'','Client: '+client];
   if(marc) lines.push('Marc: '+marc+(pre&&pre!=='-'?' + '+pre+' (pre-marc)':''));
   lines.push('Mides: '+w+' x '+h+' cm');
   if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
@@ -1058,7 +1059,6 @@ function buildWAtext_intern(){
   lines.push('');
   lines.push('Cost materials: *' + cTot + ' EUR*');
   lines.push('');
-  lines.push('⚠ Si el marc va associat a una fotografia, recordeu enviar-la al nostre Dropbox compartit o via mail a reusrevela@gmail.com');
   return encodeURIComponent(lines.join('\n'));
 }
 
