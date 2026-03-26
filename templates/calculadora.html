@@ -457,12 +457,15 @@ fetch('/api/refs?tipus=moldura').then(function(r){return r.json();}).then(functi
 function updateBtnPreus(){
   ['encolat','protter','vidre','doble_vidre','mirall','passpartu','doble_pas','proeco'].forEach(function(k){
     var el = document.getElementById('preu-'+k); if(!el) return;
-    if(CLOSEST[k]) el.textContent = preuDisplay(CLOSEST[k].preu, false);
+    if(CLOSEST[k] && CLOSEST[k].preu) el.textContent = preuDisplay(CLOSEST[k].preu, false);
     else el.textContent = '—';
   });
-  if(CLOSEST.impressio){
-    var el = document.getElementById('preu-impressio');
-    if(el) el.textContent = preuDisplay(CLOSEST.impressio.preu, true);
+  var elImp = document.getElementById('preu-impressio');
+  if(elImp){
+    if(CLOSEST.impressio && CLOSEST.impressio.preu)
+      elImp.textContent = preuDisplay(CLOSEST.impressio.preu, true);
+    else
+      elImp.textContent = '—';
   }
 }
 
@@ -715,8 +718,14 @@ function onGrupChange(grup){
 
 function onImpressioChange(){
   document.getElementById('opt-impressio').classList.toggle('selected',document.getElementById('chk-impressio').checked);
-  updateImpressioPreu();
-  calcular();
+  // If impressio checked but CLOSEST not loaded yet, force fetch
+  if(document.getElementById('chk-impressio').checked && !CLOSEST.impressio){
+    _lastFetchKey='';
+    fetchClosest();
+  } else {
+    updateImpressioPreu();
+    calcular();
+  }
 }
 
 var _marcLookupTimer = null;
@@ -953,17 +962,32 @@ function canviarOpcio(idx){
   document.getElementById('btn-pdf').disabled=!uid;
   document.getElementById('btn-wa-client').disabled=!uid;
   document.getElementById('btn-wa-objectiu').disabled=!uid;
-  if(opcions[idx].estat) restauraEstat(opcions[idx].estat);
-  else netejar();
+  if(opcions[idx].estat){
+    restauraEstat(opcions[idx].estat);
+  } else {
+    // New empty option - keep client name/tel from previous
+    var nom = document.getElementById('client_nom').value;
+    var tel = document.getElementById('client_tel').value;
+    netejar();
+    document.getElementById('client_nom').value = nom;
+    document.getElementById('client_tel').value = tel;
+  }
   renderTabs();
 }
 
 function afegirOpcio(){
   var ll=['A','B','C','D','E','F'];
+  // Save client data before clearing
+  var nom = document.getElementById('client_nom').value;
+  var tel = document.getElementById('client_tel').value;
   opcions[opcioActual].estat=capturaEstat();
   opcions.push({nom:'Opció '+(ll[opcions.length]||opcions.length+1),id:null});
   opcioActual=opcions.length-1; uid=null;
-  netejar(); renderTabs();
+  netejar();
+  // Restore client data
+  document.getElementById('client_nom').value = nom;
+  document.getElementById('client_tel').value = tel;
+  renderTabs();
 }
 
 function pdfComparativa(){
