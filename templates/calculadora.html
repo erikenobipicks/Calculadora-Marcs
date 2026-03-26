@@ -321,11 +321,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         <div class="grup">
           <div class="grup-label">Impressió fotogràfica</div>
           <div class="grup-opcions">
-            <label class="opt-btn" id="opt-impressio">
-              <input type="checkbox" id="chk-impressio" onchange="onImpressioChange()">
+            <div class="opt-btn" id="opt-impressio" onclick="toggleImpressio()" style="cursor:pointer">
+              <input type="checkbox" id="chk-impressio" style="display:none">
               <span class="opt-text">Impressió</span>
               <span class="opt-preu" id="preu-impressio">—</span>
-            </label>
+            </div>
           </div>
         </div>
 
@@ -584,9 +584,18 @@ function recalcMides(){
 function fetchClosest(){
   var w = parseFloat(document.getElementById('marc-w').value)||0;
   var h = parseFloat(document.getElementById('marc-h').value)||0;
-  if(w<=0||h<=0){ CLOSEST={}; updateBtnPreus(); calcular(); return; }
-  var fW = parseFloat(document.getElementById('amplada').value)||w;
-  var fH = parseFloat(document.getElementById('alcada').value)||h;
+  var fW = parseFloat(document.getElementById('amplada').value)||0;
+  var fH = parseFloat(document.getElementById('alcada').value)||0;
+  // If no marc dims but foto dims exist, still fetch impressio
+  if(w<=0||h<=0){
+    if(fW>0&&fH>0){
+      // Fetch only for impressio (use foto dims as both marc and foto)
+      w=fW; h=fH;
+    } else {
+      CLOSEST={}; updateBtnPreus(); calcular(); return;
+    }
+  }
+  if(!fW) fW=w; if(!fH) fH=h;
   var key = w+'x'+h+'_'+fW+'x'+fH;
   if(key===_lastFetchKey){ calcular(); return; }
   _lastFetchKey=key;
@@ -716,17 +725,17 @@ function onGrupChange(grup){
   calcular();
 }
 
-function onImpressioChange(){
-  document.getElementById('opt-impressio').classList.toggle('selected',document.getElementById('chk-impressio').checked);
-  // If impressio checked but CLOSEST not loaded yet, force fetch
-  if(document.getElementById('chk-impressio').checked && !CLOSEST.impressio){
-    _lastFetchKey='';
-    fetchClosest();
+function toggleImpressio(){
+  var chk = document.getElementById('chk-impressio');
+  chk.checked = !chk.checked;  // toggle manually
+  document.getElementById('opt-impressio').classList.toggle('selected', chk.checked);
+  if(chk.checked && !CLOSEST.impressio){
+    _lastFetchKey=''; fetchClosest();
   } else {
-    updateImpressioPreu();
-    calcular();
+    updateImpressioPreu(); calcular();
   }
 }
+function onImpressioChange(){ toggleImpressio(); }
 
 var _marcLookupTimer = null;
 function onMarcInput(){
@@ -1017,6 +1026,7 @@ function netejar(){
   });
   document.getElementById('chk-impressio').checked=false;
   document.getElementById('opt-impressio').classList.remove('selected');
+  PREUS.impressio=0;
   ['ref-muntatge','ref-proteccio','ref-interior','ref-impressio-val'].forEach(function(id){document.getElementById(id).value='';});
   ['pre','marc'].forEach(function(t){setChips(t,[]);});
   document.getElementById('desc-pre').textContent='';
