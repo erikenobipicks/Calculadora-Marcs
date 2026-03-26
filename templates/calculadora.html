@@ -792,12 +792,12 @@ function calcular(){
   var cProteccio = costGrup('proteccio');
   var cInterior  = costGrup('interior');
   // Extra windows cost (2€ each)
-  var finestresExtra = 0;
+  var finestresExtra = 0;  // PVP final (marge NOT applied)
   var interior = document.querySelector('input[name="interior"]:checked');
   var hasPassp = interior && (interior.value==='passpartu'||interior.value==='doble_pas');
   if(hasPassp){
     var nFin = parseInt(document.getElementById('finestres-extra').value)||0;
-    finestresExtra = nFin * 2.0;
+    finestresExtra = nFin * 2.0;  // Fixed PVP price per extra window
   }
   var cImpressio = costImpressio();
 
