@@ -313,6 +313,15 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
                 <input type="text" id="mida-total" readonly style="font-weight:600;color:var(--green)">
               </div>
             </div>
+            <div class="f2" style="margin-bottom:.5rem">
+              <div class="f">
+                <label>Finestres extra <span style="font-size:11px;color:var(--hint)">(+2,00€/finestra)</span></label>
+                <input type="number" id="finestres-extra" value="0" min="0" max="20" step="1" oninput="calcular()" style="max-width:100px">
+              </div>
+              <div class="f" style="display:flex;align-items:flex-end">
+                <span style="font-size:12px;color:var(--muted);padding-bottom:10px">Per defecte: 1 finestra inclosa</span>
+              </div>
+            </div>
             <div class="nota" style="margin-top:0">Marc i vidre es calculen amb la mida gran (foto + passpartú). La impressió usa la mida de la foto.</div>
           </div>
         </div>
@@ -782,6 +791,14 @@ function calcular(){
   var cMuntatge  = costGrup('muntatge');
   var cProteccio = costGrup('proteccio');
   var cInterior  = costGrup('interior');
+  // Extra windows cost (2€ each)
+  var finestresExtra = 0;
+  var interior = document.querySelector('input[name="interior"]:checked');
+  var hasPassp = interior && (interior.value==='passpartu'||interior.value==='doble_pas');
+  if(hasPassp){
+    var nFin = parseInt(document.getElementById('finestres-extra').value)||0;
+    finestresExtra = nFin * 2.0;
+  }
   var cImpressio = costImpressio();
 
   var cMol=0;
@@ -790,11 +807,11 @@ function calcular(){
     cMol=(per+(GRUIX.marc||0)*8)*((PREUS.marc||0)/100)
         +(per+((GRUIX.pre||0)+(GRUIX.marc||0))*8)*((PREUS.pre||0)/100);
   }
-  var cTot=cMuntatge+cProteccio+cInterior+cImpressio+cMol;
+  var cTot=cMuntatge+cProteccio+cInterior+cImpressio+cMol+finestresExtra;
 
   // PVP net (amb marge, sense IVA, sense descompte)
   var pvpMarc = cMol*(1+marge/100);
-  var pvpExt  = (cMuntatge+cProteccio+cInterior)*(1+marge/100);
+  var pvpExt  = (cMuntatge+cProteccio+cInterior+finestresExtra)*(1+marge/100);
   var pvpImp  = cImpressio*(1+(marge_impressio||marge)/100);
   var pNet    = (pvpMarc+pvpExt+pvpImp)*qty;
 
@@ -872,6 +889,7 @@ function guardar(){
     quantitat:parseFloat(document.getElementById('quantitat').value)||1,
     entrega:parseFloat(document.getElementById('entrega').value)||0,
     observacions:document.getElementById('observacions').value,
+    finestres_extra:document.getElementById('finestres-extra').value||'0',
     preu_net:   window._c ? parseFloat(window._c.preu_net.toFixed(2))   : 0,
     preu_final: window._c ? parseFloat(window._c.preu_final.toFixed(2)) : 0,
     pendent:    window._c ? parseFloat(window._c.pendent.toFixed(2))    : 0,
@@ -925,6 +943,7 @@ function capturaEstat(){
     quantitat:document.getElementById('quantitat').value,
     entrega:document.getElementById('entrega').value,
     observacions:document.getElementById('observacions').value,
+    finestres_extra:document.getElementById('finestres-extra').value||'0',
     _closest:JSON.parse(JSON.stringify(CLOSEST)),
     _preus:JSON.parse(JSON.stringify(PREUS)),
     _gruix:JSON.parse(JSON.stringify(GRUIX)),
@@ -942,6 +961,7 @@ function restauraEstat(e){
   document.getElementById('quantitat').value=e.quantitat||1;
   document.getElementById('entrega').value=e.entrega||0;
   document.getElementById('observacions').value=e.observacions||'';
+  document.getElementById('finestres-extra').value=e.finestres_extra||0;
   ['muntatge','proteccio','interior'].forEach(function(g){
     var val=e[g]||'';
     var r=document.querySelector('input[name="'+g+'"][value="'+val+'"]');

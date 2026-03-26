@@ -404,11 +404,19 @@ def acceptar_comanda(cid):
 @app.route('/historial')
 @login_required
 def historial():
+    filtre_uid = request.args.get('user_id', type=int)
     if session.get('is_admin'):
-        comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
-                           JOIN usuaris u ON c.user_id=u.id
-                           ORDER BY c.id DESC''')
+        if filtre_uid:
+            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                               JOIN usuaris u ON c.user_id=u.id
+                               WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
+        else:
+            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                               JOIN usuaris u ON c.user_id=u.id
+                               ORDER BY c.id DESC''')
+        usuaris_list = query('SELECT id, nom, username FROM usuaris WHERE is_admin=0 ORDER BY nom')
     else:
+        usuaris_list = []
         comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                            JOIN usuaris u ON c.user_id=u.id
                            WHERE c.user_id=? ORDER BY c.id DESC''', [session['user_id']])
@@ -425,7 +433,9 @@ def historial():
     for grp in sessio_list:
         grp[0]['pagat']    = any(op.get('pagat')    for op in grp)
         grp[0]['entregat'] = any(op.get('entregat') for op in grp)
-    return render_template('historial.html', comandes=comandes, sessio_list=sessio_list)
+    return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
+                           usuaris_list=usuaris_list if session.get('is_admin') else [],
+                           filtre_uid=filtre_uid)
 
 @app.route('/pdf-comparativa/<sessio_id>')
 @login_required
