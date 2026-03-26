@@ -746,10 +746,21 @@ def crear_pdf(c):
             _, b64data = data_url.split(',', 1)
             img_data = _b64.b64decode(b64data)
             from reportlab.platypus import Image as RLImg2
-            logo_img = RLImg2(io.BytesIO(img_data), height=18*mm, width=None)
-            logo_img.hAlign = 'RIGHT'
+            from PIL import Image as PILImg
+            import io as _io2
+            # Get real dimensions to preserve aspect ratio
+            pil = PILImg.open(_io2.BytesIO(img_data))
+            orig_w, orig_h = pil.size
+            max_h = 25 * mm
+            max_w = 60 * mm
+            ratio = min(max_w / orig_w, max_h / orig_h)
+            logo_w = orig_w * ratio
+            logo_h = orig_h * ratio
+            logo_img = RLImg2(io.BytesIO(img_data), width=logo_w, height=logo_h)
+            logo_img.hAlign = 'CENTER'
+            story.append(Spacer(1, 3*mm))
             story.append(logo_img)
-            story.append(Spacer(1, 2*mm))
+            story.append(Spacer(1, 3*mm))
     except Exception as _e:
         print(f"Logo PDF error: {_e}")
 
