@@ -9,64 +9,58 @@
 :root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem}
-.wizard{width:100%;max-width:520px}
-.step{display:none}.step.active{display:block}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:2rem;margin-bottom:1rem}
-.brand{font-family:'DM Serif Display',serif;font-size:28px;text-align:center;margin-bottom:.25rem}
-.brand em{color:var(--amber);font-style:normal}
+.wizard{width:100%;max-width:540px}
+.step{display:none}.step.active{display:block;animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:2rem}
+.brand{font-family:'DM Serif Display',serif;font-size:26px;text-align:center;margin-bottom:.25rem;color:var(--text)}
 .subtitle{text-align:center;color:var(--muted);font-size:14px;margin-bottom:2rem}
-.step-indicator{display:flex;justify-content:center;gap:.5rem;margin-bottom:1.75rem}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--border);transition:background .3s}
-.dot.active{background:var(--green)}
+.dots{display:flex;justify-content:center;gap:.5rem;margin-bottom:1.75rem}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--border);transition:all .3s}
+.dot.active{background:var(--green);transform:scale(1.2)}
 .dot.done{background:var(--green-l);border:2px solid var(--green)}
 h2{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;margin-bottom:.4rem}
-p.desc{font-size:13px;color:var(--muted);margin-bottom:1.5rem;line-height:1.6}
-.f{margin-bottom:1rem}
-.f:last-child{margin-bottom:0}
-.f label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
-.f input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .15s}
+p.desc{font-size:13px;color:var(--muted);margin-bottom:1.5rem;line-height:1.7}
+.f{margin-bottom:1rem}.f:last-child{margin-bottom:0}
+.f label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.f input[type=text],.f input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .15s}
 .f input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
-.f input.big{font-size:22px;font-weight:600;text-align:center;color:var(--green)}
-.hint-box{background:var(--green-l);border-left:3px solid var(--green);padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;color:#2D6E4E;line-height:1.6;margin-bottom:1rem}
-.actions{display:flex;gap:.75rem;margin-top:1.5rem}
-.btn{padding:11px 24px;border-radius:7px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all .15s;flex:1}
+.big-num{font-size:48px;font-family:'DM Serif Display',serif;color:var(--green);text-align:center;padding:.5rem 0;letter-spacing:-2px}
+.hint-box{background:var(--green-l);border-left:3px solid var(--green);padding:10px 14px;border-radius:0 6px 6px 0;font-size:13px;color:#2D6E4E;line-height:1.6;margin-bottom:1rem}
+.amber-box{background:#FDF3E8;border-left:3px solid var(--amber);padding:10px 14px;border-radius:0 6px 6px 0;font-size:13px;color:#7A4E1A;line-height:1.6;margin-bottom:1rem}
+.actions{display:flex;gap:.75rem;margin-top:1.75rem}
+.btn{padding:11px 20px;border-radius:7px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all .15s;flex:1;text-align:center}
 .btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#155c3a}
 .btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-o:hover{background:var(--bg)}
-.alert{border-radius:7px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:1rem;display:none}
-.alert-ok{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}
-.nota-final{background:#F8F7F4;border:1px solid var(--border);border-radius:7px;padding:1rem;font-size:13px;color:var(--muted);line-height:1.7;margin-top:1rem;text-align:center}
+.logo-area{border:2px dashed var(--border);border-radius:8px;padding:1.25rem;text-align:center;cursor:pointer;transition:border-color .2s;min-height:90px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.5rem}
+.logo-area:hover{border-color:var(--green)}
+.logo-area img{max-height:70px;max-width:100%;border-radius:4px}
+.logo-lbl{font-size:13px;color:var(--hint)}
+.nota-final{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:1rem;font-size:13px;color:var(--muted);line-height:1.7;text-align:center;margin-top:1rem}
 .nota-final strong{color:var(--text)}
+.skip-lnk{text-align:center;margin-top:.75rem;font-size:13px;color:var(--hint)}
+.skip-lnk a{color:var(--green);cursor:pointer;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="wizard">
-  <div class="brand">{{ session.nom }}<br><small style="font-family:'DM Sans',sans-serif;font-size:14px;color:var(--muted);font-weight:400">Benvingut/da a la calculadora</small></div>
-
-  <div class="step-indicator" id="dots">
+  <div class="brand">{{ session.nom }}</div>
+  <p class="subtitle">Configura el teu espai en 4 passos senzills</p>
+  <div class="dots" id="dots">
     <div class="dot active" id="dot-1"></div>
     <div class="dot" id="dot-2"></div>
     <div class="dot" id="dot-3"></div>
+    <div class="dot" id="dot-4"></div>
   </div>
 
-  <div id="alert" class="alert"></div>
-
-  <!-- PAS 1: Nom del comerç -->
+  <!-- PAS 1: Nom comerç -->
   <div class="step active" id="step-1">
     <div class="card">
       <h2>Com es diu el teu comerç?</h2>
-      <p class="desc">Aquest nom apareixerà als PDFs dels pressupostos i als missatges de WhatsApp que enviïs als teus clients.</p>
-      <div class="f">
-        <label>Nom del comerç</label>
-        <input type="text" id="s-nom" placeholder="Ex: Reus Revela Taller d'Emmarcació" autofocus>
-      </div>
-      <div class="f">
-        <label>Adreça (opcional)</label>
-        <input type="text" id="s-adreca" placeholder="Ex: C/ Mare Molas, 26 - Reus">
-      </div>
-      <div class="f">
-        <label>Telèfon (opcional)</label>
-        <input type="text" id="s-tel" placeholder="Ex: 977 316 111">
-      </div>
+      <p class="desc">El nom apareixerà als PDFs i als missatges de WhatsApp que enviïs als teus clients.</p>
+      <div class="f"><label>Nom del comerç</label><input type="text" id="s-nom" placeholder="Ex: Taller d'Emmarcació La Rambla" autofocus></div>
+      <div class="f"><label>Adreça (opcional)</label><input type="text" id="s-adreca" placeholder="Ex: C/ Major, 12 - Barcelona"></div>
+      <div class="f"><label>Telèfon (opcional)</label><input type="text" id="s-tel" placeholder="Ex: 93 000 00 00"></div>
       <div class="actions">
         <button class="btn btn-o" onclick="saltar()">Ara no</button>
         <button class="btn btn-g" onclick="pas1()">Continuar →</button>
@@ -74,85 +68,121 @@ p.desc{font-size:13px;color:var(--muted);margin-bottom:1.5rem;line-height:1.6}
     </div>
   </div>
 
-  <!-- PAS 2: Marge -->
+  <!-- PAS 2: Logo -->
   <div class="step" id="step-2">
     <div class="card">
-      <h2>Quin marge de benefici vols aplicar?</h2>
-      <p class="desc">El marge és el percentatge que s'afegeix al cost dels materials per calcular el preu al client. És privat — els teus clients no el veuran mai.</p>
-      <div class="hint-box">Exemple: amb un marge del <strong>60%</strong>, si el cost és 10€ el preu al client serà 16€. El marge recomanat és entre 50% i 70%.</div>
-      <div class="f">
-        <label>Marge de benefici (%)</label>
-        <input type="number" id="s-marge" value="60" min="0" max="500" class="big">
+      <h2>Puja el teu logo</h2>
+      <p class="desc">El logo apareixerà a la cantonada del PDF del pressupost. És opcional — sempre ho pots fer més tard des d'Ajustos.</p>
+      <div class="amber-box">Formats acceptats: PNG o JPG. Mida recomanada: 300×100 px (fons transparent si és PNG).</div>
+      <div class="logo-area" id="logo-drop" onclick="document.getElementById('logo-file').click()">
+        <div id="logo-preview-inner">
+          <div class="logo-lbl">📎 Clica per seleccionar el logo</div>
+        </div>
       </div>
+      <input type="file" id="logo-file" accept=".png,.jpg,.jpeg" style="display:none" onchange="previewLogo()">
       <div class="actions">
-        <button class="btn btn-o" onclick="anarPas(1)">← Enrere</button>
-        <button class="btn btn-g" onclick="pas2()">Continuar →</button>
+        <button class="btn btn-o" onclick="anarPas(3)">Saltar aquest pas</button>
+        <button class="btn btn-g" id="btn-logo" onclick="pujarLogoWizard()">Desar logo i continuar →</button>
       </div>
     </div>
   </div>
 
-  <!-- PAS 3: Fet! -->
+  <!-- PAS 3: Marge general -->
   <div class="step" id="step-3">
-    <div class="card" style="text-align:center">
-      <div style="font-size:48px;margin-bottom:.5rem">🎉</div>
-      <h2 style="text-align:center">Tot a punt!</h2>
-      <p class="desc" style="text-align:center">La teva calculadora ja està configurada. Pots modificar qualsevol d'aquests valors en qualsevol moment.</p>
-      <div class="nota-final">
-        Per canviar el nom del comerç, el logo o el marge, ves a<br>
-        <strong>⚙ Ajustos</strong> al menú de navegació superior dret.
-      </div>
-      <div class="actions" style="margin-top:1.5rem">
-        <button class="btn btn-g" onclick="window.location='/'">Anar a la calculadora →</button>
+    <div class="card">
+      <h2>Marge de benefici general</h2>
+      <p class="desc">El marge s'aplica sobre el cost dels materials per calcular el preu al client. Privat — mai el veurà ningú.</p>
+      <div class="hint-box">Exemple: amb un marge del <strong>60%</strong>, si el cost és 10€ el preu al client serà 16€.</div>
+      <div class="big-num"><span id="marge-preview">60</span>%</div>
+      <div class="f"><label>Marge (%)</label><input type="number" id="s-marge" value="60" min="0" max="500" oninput="document.getElementById('marge-preview').textContent=this.value||0"></div>
+      <div class="actions">
+        <button class="btn btn-o" onclick="anarPas(2)">← Enrere</button>
+        <button class="btn btn-g" onclick="pas3()">Continuar →</button>
       </div>
     </div>
   </div>
+
+  <!-- PAS 4: Marge impressió -->
+  <div class="step" id="step-4">
+    <div class="card">
+      <h2>Marge per a impressió fotogràfica</h2>
+      <p class="desc">Pots aplicar un marge diferent per a la impressió fotogràfica. Posa <strong>0</strong> per usar el marge general.</p>
+      <div class="hint-box">Si vols el mateix marge per tot, deixa-ho a <strong>0</strong>. Sempre ho pots canviar des d'Ajustos.</div>
+      <div class="big-num"><span id="mimp-preview">0</span>%</div>
+      <div class="f"><label>Marge impressió (%)</label><input type="number" id="s-mimp" value="0" min="0" max="500" oninput="document.getElementById('mimp-preview').textContent=this.value||0"></div>
+      <div class="actions">
+        <button class="btn btn-o" onclick="anarPas(3)">← Enrere</button>
+        <button class="btn btn-g" onclick="pas4()">Acabar →</button>
+      </div>
+    </div>
+    <div class="nota-final">
+      Podràs modificar qualsevol d'aquestes dades a<br>
+      <strong>⚙ Ajustos</strong> al menú superior dret en qualsevol moment.
+    </div>
+  </div>
+
 </div>
-
 <script>
-var step = 1;
-
-function showAlert(msg, t){
-  var a=document.getElementById('alert');
-  a.className='alert alert-'+t; a.textContent=msg; a.style.display='block';
-  setTimeout(function(){a.style.display='none';},4000);
-}
+var step=1, _logoFile=null;
 
 function anarPas(n){
   document.getElementById('step-'+step).classList.remove('active');
-  document.getElementById('dot-'+step).classList.replace('active','done');
-  step = n;
+  document.getElementById('dot-'+step).classList.remove('active');
+  document.getElementById('dot-'+step).classList.add('done');
+  step=n;
   document.getElementById('step-'+step).classList.add('active');
   document.getElementById('dot-'+step).classList.add('active');
 }
 
 function pas1(){
-  var nom = document.getElementById('s-nom').value.trim();
-  if(!nom){ showAlert('Introdueix el nom del teu comerç.','err'); return; }
-  var adreca = document.getElementById('s-adreca').value.trim();
-  var tel = document.getElementById('s-tel').value.trim();
-  fetch('/api/empresa', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({nom:nom, adreca:adreca, tel:tel})
-  }).then(r=>r.json()).then(function(d){
-    if(d.ok) anarPas(2);
+  var nom=document.getElementById('s-nom').value.trim();
+  if(!nom){alert('Introdueix el nom del teu comerç.');return;}
+  fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nom:nom,adreca:document.getElementById('s-adreca').value,tel:document.getElementById('s-tel').value})
+  }).then(r=>r.json()).then(function(d){if(d.ok) anarPas(2);});
+}
+
+function previewLogo(){
+  var file=document.getElementById('logo-file').files[0];
+  if(!file) return;
+  _logoFile=file;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    document.getElementById('logo-preview-inner').innerHTML='<img src="'+e.target.result+'">';
+  };
+  reader.readAsDataURL(file);
+  document.getElementById('btn-logo').textContent='Desar logo i continuar →';
+}
+
+function pujarLogoWizard(){
+  if(!_logoFile){anarPas(3);return;}
+  var fd=new FormData(); fd.append('logo',_logoFile);
+  fetch('/api/logo',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){
+    if(d.ok) anarPas(3);
   });
 }
 
-function pas2(){
-  var marge = parseFloat(document.getElementById('s-marge').value)||60;
-  fetch('/api/desar-marge', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({marge:marge, marge_impressio:0, nom_empresa:document.getElementById('s-nom').value||''})
-  }).then(r=>r.json()).then(function(d){
-    if(d.ok){
-      // Mark setup as done
-      fetch('/api/setup-done', {method:'POST'});
-      anarPas(3);
-    }
+function pas3(){
+  var m=parseFloat(document.getElementById('s-marge').value)||60;
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({marge:m,marge_impressio:0,nom_empresa:document.getElementById('s-nom').value||''})
+  }).then(r=>r.json()).then(function(d){if(d.ok) anarPas(4);});
+}
+
+function pas4(){
+  var mi=parseFloat(document.getElementById('s-mimp').value)||0;
+  var m=parseFloat(document.getElementById('s-marge').value)||60;
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:document.getElementById('s-nom').value||''})
+  }).then(r=>r.json()).then(function(){
+    fetch('/api/setup-done',{method:'POST'}).then(function(){
+      window.location='/';
+    });
   });
 }
 
 function saltar(){
-  fetch('/api/setup-done', {method:'POST'});
-  window.location='/';
+  fetch('/api/setup-done',{method:'POST'}).then(function(){window.location='/';});
 }
 </script>
 </body>

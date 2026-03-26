@@ -1101,6 +1101,7 @@ function buildWAtext(){
   if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
   if(nomProteccio) lines.push('Proteccio: '+nomProteccio);
   if(nomInterior)  lines.push('Interior: '+nomInterior);
+  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
   if(chkImp)       lines.push('Impressio fotografica inclosa');
   if(obs)          lines.push('Notes: '+obs);
   lines.push('');
@@ -1155,7 +1156,8 @@ function buildWAtext_intern(){
   if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
   if(nomProteccio) lines.push('Proteccio: '+nomProteccio);
   if(nomInterior)  lines.push('Interior: '+nomInterior);
-  if(chkImp)       lines.push('Impressio fotografica: SÍ');
+  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'format mes proper') + ')');
   lines.push('');
   lines.push('Cost materials: *' + cTot + ' EUR*');
   lines.push('');

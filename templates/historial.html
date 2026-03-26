@@ -138,6 +138,7 @@ tr:hover td{background:#FAFAF8}
             <td>{{ op.amplada|int }} × {{ op.alcada|int }}</td>
             <td style="font-size:12px">{{ op.vidre or '—' }}</td>
             <td style="font-size:12px">{{ op.passpartout or '—' }}</td>
+            <td style="font-size:12px">{% if op.impressio %}<span style="color:var(--green)">✓</span>{% else %}—{% endif %}</td>
             <td><strong>{{ "%.2f"|format(op.preu_final) }} €</strong></td>
             <td>
               {% if op.pendent and op.pendent > 0.01 %}

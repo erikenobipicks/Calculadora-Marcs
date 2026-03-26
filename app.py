@@ -163,8 +163,8 @@ def login():
                 u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user['id']], one=True)
                 if u2 and not u2.get('setup_done'):
                     return redirect(url_for('setup'))
-            except:
-                pass
+            except Exception as _se:
+                print(f'setup check error: {_se}')
             return redirect(url_for('index'))
         flash('Usuari o contrasenya incorrectes.', 'error')
     return render_template('login.html')
@@ -193,6 +193,12 @@ def setup_done():
 @app.route('/')
 @login_required
 def index():
+    try:
+        u = query('SELECT setup_done FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        if u and not u.get('setup_done'):
+            return redirect(url_for('setup'))
+    except:
+        pass
     return render_template('calculadora.html')
 
 @app.route('/api/lookup')
@@ -269,18 +275,18 @@ def upload_logo():
     ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else 'png'
     mime = 'image/png' if ext == 'png' else 'image/jpeg'
     b64 = 'data:' + mime + ';base64,' + base64.b64encode(data).decode()
-    r = query("SELECT clau FROM config WHERE clau='empresa_logo'", one=True)
-    if r:
-        execute("UPDATE config SET valor=? WHERE clau='empresa_logo'", [b64])
-    else:
-        execute("INSERT INTO config (clau,valor) VALUES ('empresa_logo',?)", [b64])
-    return jsonify({'ok': True, 'url': b64[:80] + '...'})
+    # Save per user
+    try:
+        execute('UPDATE usuaris SET logo_b64=? WHERE id=?', [b64, session['user_id']])
+    except:
+        pass
+    return jsonify({'ok': True})
 
 @app.route('/api/logo', methods=['GET'])
 @login_required
 def get_logo():
-    r = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
-    return jsonify({'url': r['valor'] if r else ''})
+    r = query('SELECT logo_b64 FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    return jsonify({'url': r['logo_b64'] if r and r.get('logo_b64') else ''})
 
 @app.route('/static/logo-preview')
 @login_required
@@ -732,10 +738,11 @@ def crear_pdf(c):
 
     # ── Logo (si existeix) ────────────────────────────────────────────────
     try:
-        r_logo = query("SELECT valor FROM config WHERE clau='empresa_logo'", one=True)
-        if r_logo and r_logo['valor'] and r_logo['valor'].startswith('data:'):
+        u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
+        logo_data_url = (u_logo['logo_b64'] if u_logo and u_logo.get('logo_b64') else '')
+        if logo_data_url and logo_data_url.startswith('data:'):
             import base64 as _b64
-            data_url = r_logo['valor']
+            data_url = logo_data_url
             _, b64data = data_url.split(',', 1)
             img_data = _b64.b64decode(b64data)
             from reportlab.platypus import Image as RLImg2
@@ -1150,6 +1157,8 @@ def init_db():
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
+                ('usuaris','logo_b64','TEXT'),
+                ('usuaris','marge_impressio_setup','INTEGER DEFAULT 0'),
                 ('comandes','num_pressupost','TEXT'),
                 ('comandes','pagat','INTEGER DEFAULT 0'),
                 ('comandes','entregat','INTEGER DEFAULT 0'),
