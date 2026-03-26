@@ -373,7 +373,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         <div class="res-body">
           <div class="r-row"><span class="r-lbl" id="r-lbl-net">Preu net PVP (sense IVA)</span><span class="r-val" id="r-net">0,00 €</span></div>
           <div class="r-row" id="r-row-desc" style="display:none"><span class="r-lbl" id="r-lbl-desc">Descompte</span><span class="r-val" style="color:var(--amber)" id="r-desc">— €</span></div>
-          <div class="r-row"><span class="r-lbl">Amb IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
+          <div class="r-row"><span class="r-lbl">IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
           <div class="r-row"><span class="r-lbl" id="r-lbl-final">Total amb IVA</span><span class="r-val big" id="r-final">0,00 €</span></div>
           <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="calcular()"></div>
           <div class="r-row"><span class="r-lbl">PENDENT de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
@@ -800,7 +800,7 @@ function calcular(){
   var showDesc=desc>0&&!isCost;
   document.getElementById('r-row-desc').style.display=showDesc?'':'none';
   if(showDesc){
-    document.getElementById('r-lbl-desc').textContent='Descompte '+desc+'% sobre PVP';
+    document.getElementById('r-lbl-desc').textContent='Descompte '+desc+'%';
     document.getElementById('r-desc').textContent='- '+fmt(descEur);
   }
   document.getElementById('r-lbl-final').textContent=isCost?'Cost total (amb IVA)':(desc>0?'Total amb IVA (desc. inclòs)':'Total amb IVA 21%');
