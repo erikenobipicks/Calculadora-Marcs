@@ -944,6 +944,27 @@ def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
             best = dict(row)
     return best
 
+def _find_min_contain(rows, w, h, prefix=None):
+    """Smallest format that physically contains the dimensions (can rotate).
+    Used for impressio: the paper must be >= the photo in both dimensions."""
+    best, best_area = None, float('inf')
+    for row in rows:
+        ref = row['referencia']
+        if prefix and not ref.upper().startswith(prefix.upper()): continue
+        rw, rh = _parse_dims(ref)
+        if rw is None: continue
+        # Try both orientations
+        fits = (rw >= w and rh >= h) or (rh >= w and rw >= h)
+        if fits:
+            area = rw * rh
+            if area < best_area:
+                best_area = area
+                best = row
+    # Fallback: if nothing contains it, take the largest available
+    if best is None:
+        best = max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
+    return best
+
 def _imp_closest(fw, fh):
     rows = [dict(r) for r in query('SELECT * FROM impressio')]
     r = _find_min_contain(rows, fw, fh)
