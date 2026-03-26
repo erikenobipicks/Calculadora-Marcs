@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajuda — Calculadora</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--red:#C0392B;--r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px;cursor:pointer}
+.brand em{color:#C8873A;font-style:normal}
+.nav-r{display:flex;align-items:center;gap:1.25rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:#fff}
+.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:3px 11px;border-radius:20px}
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 54px);max-width:1100px;margin:0 auto;gap:0}
+/* Sidebar */
+.sidebar{padding:1.5rem 1rem;border-right:1px solid var(--border);position:sticky;top:54px;height:calc(100vh - 54px);overflow-y:auto}
+.sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--hint);margin-bottom:.75rem;padding:0 .5rem}
+.nav-item{display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;border-radius:7px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);transition:all .15s;margin-bottom:2px;text-decoration:none}
+.nav-item:hover{background:var(--green-l);color:var(--green)}
+.nav-item.active{background:var(--green-l);color:var(--green);font-weight:600}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+/* Content */
+.content{padding:2rem 2.5rem;overflow-y:auto}
+.section{display:none;animation:fadeIn .2s ease}
+.section.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.section-header{margin-bottom:2rem}
+.section-header h1{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;margin-bottom:.4rem}
+.section-header p{color:var(--muted);font-size:14px;line-height:1.6}
+/* Cards */
+.help-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+.help-card h3{font-size:15px;font-weight:600;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem}
+.help-card p,.help-card li{font-size:13px;color:var(--muted);line-height:1.7}
+.help-card ul,.help-card ol{padding-left:1.2rem;margin-top:.4rem}
+.help-card li{margin-bottom:.3rem}
+/* Steps */
+.steps{counter-reset:step}
+.step-item{display:flex;gap:1rem;margin-bottom:1.25rem;align-items:flex-start}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.step-body h4{font-size:14px;font-weight:600;margin-bottom:.3rem}
+.step-body p{font-size:13px;color:var(--muted);line-height:1.6}
+/* Tip box */
+.tip{background:var(--green-l);border-left:3px solid var(--green);padding:.75rem 1rem;border-radius:0 7px 7px 0;font-size:13px;color:#2D6E4E;line-height:1.6;margin:1rem 0}
+.warn{background:#FDF3E8;border-left:3px solid var(--amber);padding:.75rem 1rem;border-radius:0 7px 7px 0;font-size:13px;color:#7A4E1A;line-height:1.6;margin:1rem 0}
+/* Keyboard shortcuts */
+.kbd{display:inline-block;background:#F0EDE8;border:1px solid var(--border);border-radius:4px;padding:1px 7px;font-size:12px;font-family:monospace;color:var(--text)}
+/* Formula */
+.formula{background:#F0F9F4;border:1px solid #B8DCC9;border-radius:7px;padding:.75rem 1rem;font-size:13px;font-family:monospace;color:var(--green);margin:.5rem 0}
+/* Badge */
+.badge{display:inline-flex;align-items:center;gap:.3rem;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-g{background:var(--green-l);color:var(--green)}
+.badge-a{background:#FDF3E8;color:var(--amber)}
+.badge-r{background:#FAEAEA;color:var(--red)}
+/* Search */
+.search-box{position:relative;margin-bottom:1.5rem}
+.search-box input{width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:var(--card)}
+.search-box input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--hint);font-size:15px}
+.no-results{text-align:center;padding:2rem;color:var(--hint);font-size:14px;display:none}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand" onclick="window.location='/'">{{ session.get('empresa_nom','Calculadora') }}</div>
+  <div class="nav-r">
+    <span class="nav-u">{{ session.nom }}</span>
+    <a href="/">Calculadora</a>
+    <a href="/historial">Historial</a>
+    <a href="/ajustos">Ajustos</a>
+    {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-title">Manual d'ús</div>
+    <a class="nav-item active" onclick="mostrarSeccio('inici')" href="#">
+      <span class="icon">🏠</span> Inici ràpid
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('calculadora')" href="#">
+      <span class="icon">🖩</span> Calculadora
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('marcs')" href="#">
+      <span class="icon">🖼</span> Marcs i motllures
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('mides')" href="#">
+      <span class="icon">📐</span> Mides i passpartú
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('materials')" href="#">
+      <span class="icon">🔧</span> Materials
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('preus')" href="#">
+      <span class="icon">💶</span> Preus i marges
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('opcions')" href="#">
+      <span class="icon">📋</span> Opcions múltiples
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('historial')" href="#">
+      <span class="icon">📦</span> Historial
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('whatsapp')" href="#">
+      <span class="icon">💬</span> WhatsApp
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('pdf')" href="#">
+      <span class="icon">📄</span> PDF
+    </a>
+    <a class="nav-item" onclick="mostrarSeccio('ajustos')" href="#">
+      <span class="icon">⚙️</span> Ajustos
+    </a>
+    {% if session.is_admin %}
+    <a class="nav-item" onclick="mostrarSeccio('admin')" href="#">
+      <span class="icon">👤</span> Administrador
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="cerca" placeholder="Cerca al manual..." oninput="cercar(this.value)">
+    </div>
+    <div class="no-results" id="no-results">Cap resultat trobat per a aquesta cerca.</div>
+
+    <!-- INICI RÀPID -->
+    <div class="section active" id="sec-inici">
+      <div class="section-header">
+        <h1>🏠 Inici ràpid</h1>
+        <p>Els passos bàsics per crear el teu primer pressupost en menys de 2 minuts.</p>
+      </div>
+      <div class="step-item"><div class="step-num">1</div><div class="step-body"><h4>Omple les dades del client</h4><p>Nom i telèfon (el telèfon permet enviar el pressupost per WhatsApp).</p></div></div>
+      <div class="step-item"><div class="step-num">2</div><div class="step-body"><h4>Selecciona el marc</h4><p>Escriu les primeres lletres al camp "Marc principal" i selecciona del desplegable. Si el marc va amb un pre-marc interior, omple també el camp "Pre-Marc".</p></div></div>
+      <div class="step-item"><div class="step-num">3</div><div class="step-body"><h4>Introdueix les mides de la foto</h4><p>Amplada × Alçada en centímetres. Si hi ha passpartú, la mida del marc es calcularà automàticament.</p></div></div>
+      <div class="step-item"><div class="step-num">4</div><div class="step-body"><h4>Escull els materials</h4><p>Muntatge (encolat/protter), Protecció (vidre/mirall), Interior (passpartú) i Impressió si cal.</p></div></div>
+      <div class="step-item"><div class="step-num">5</div><div class="step-body"><h4>Revisa el resum econòmic</h4><p>A la dreta veuràs el preu net, IVA i total. Pots aplicar descompte o registrar una entrega a compte.</p></div></div>
+      <div class="step-item"><div class="step-num">6</div><div class="step-body"><h4>Desa i comparteix</h4><p>Clica <strong>Guardar</strong> per registrar la comanda, genera el <strong>PDF</strong> per al client, o envia'l per <strong>WhatsApp</strong>.</p></div></div>
+      <div class="tip">💡 Pots crear múltiples opcions (A, B, C...) per comparar marcs o materials diferents i presentar-les al client juntes amb el PDF comparatiu.</div>
+    </div>
+
+    <!-- CALCULADORA -->
+    <div class="section" id="sec-calculadora">
+      <div class="section-header">
+        <h1>🖩 Calculadora</h1>
+        <p>Com funciona el formulari principal de càlcul de pressupostos.</p>
+      </div>
+      <div class="help-card">
+        <h3>📝 Camp "Nom del client"</h3>
+        <p>S'usa per identificar la comanda a l'historial i al PDF. El nom es manté si crees diverses opcions per al mateix client.</p>
+      </div>
+      <div class="help-card">
+        <h3>📱 Camp "Telèfon"</h3>
+        <p>Permet enviar el pressupost directament per WhatsApp amb el botó "WA Client". Format recomanat: 6XX XXX XXX (sense prefix).</p>
+      </div>
+      <div class="help-card">
+        <h3>🔢 Quantitat</h3>
+        <p>Per si el client vol diverses còpies del mateix marc. El preu final es multiplica per la quantitat.</p>
+      </div>
+      <div class="help-card">
+        <h3>💸 Descompte client (%)</h3>
+        <p>S'aplica sobre el PVP net (sense IVA). Mai s'aplica sobre el cost de producció.</p>
+        <div class="formula">PVP final = PVP net × (1 − descompte%) × 1,21</div>
+      </div>
+      <div class="help-card">
+        <h3>💳 Entrega a compte</h3>
+        <p>Import que el client ja ha pagat. El camp "Pendent de cobrar" es calcula automàticament com: Total − Entrega.</p>
+      </div>
+    </div>
+
+    <!-- MARCS -->
+    <div class="section" id="sec-marcs">
+      <div class="section-header">
+        <h1>🖼 Marcs i motllures</h1>
+        <p>Com cercar i seleccionar marcs del catàleg.</p>
+      </div>
+      <div class="help-card">
+        <h3>🔍 Cercar marcs</h3>
+        <p>Escriu les primeres lletres o números de la referència al camp. Apareixerà un desplegable amb les coincidències. Clica la referència per seleccionar-la.</p>
+        <div class="tip">💡 Si escrius la referència completa i esperes un moment, la cerca és automàtica sense necessitat de seleccionar del desplegable.</div>
+      </div>
+      <div class="help-card">
+        <h3>🖼 Pre-Marc (marc interior)</h3>
+        <p>Marc més estret que va per dins del marc principal. Crea un efecte de doble emmarcació. És completament opcional.</p>
+      </div>
+      <div class="help-card">
+        <h3>⚠️ Motllura no trobada</h3>
+        <p>Si introdueixes una referència que no existeix al catàleg, apareixerà un avís en vermell "Fora de catàleg" i el preu del marc no es calcularà. Comprova la referència o consulta el catàleg físic.</p>
+      </div>
+      <div class="help-card">
+        <h3>📸 Foto de la motllura</h3>
+        <p>Quan selecciones un marc, apareix la foto de la motllura (si n'hi ha al sistema). Ajuda a mostrar visualment el producte al client.</p>
+      </div>
+    </div>
+
+    <!-- MIDES -->
+    <div class="section" id="sec-mides">
+      <div class="section-header">
+        <h1>📐 Mides i passpartú</h1>
+        <p>Com introduir mides i calcular automàticament el passpartú.</p>
+      </div>
+      <div class="help-card">
+        <h3>📏 Mides de la fotografia</h3>
+        <p>Introdueix sempre les mides de la <strong>fotografia o obra</strong>, no del marc. En centímetres. Per exemple: 30 × 40 cm.</p>
+      </div>
+      <div class="help-card">
+        <h3>🎨 Passpartú — marge automàtic</h3>
+        <p>Quan selecciones Passpartú o Doble passpartú, apareix el camp "Marge passpartú (cm per banda)". Introdueix els cm de marge que vols a cada costat.</p>
+        <div class="formula">Mida marc = (Foto + marge×2) × (Foto + marge×2)</div>
+        <p style="margin-top:.5rem">Exemple: foto 30×40, marge 4cm → marc 38×48 cm</p>
+        <div class="tip">💡 El vidre i el marc es calculen amb la mida gran. La impressió fotogràfica s'aplica a la mida original de la foto.</div>
+      </div>
+      <div class="help-card">
+        <h3>🪟 Finestres extra</h3>
+        <p>Per defecte el passpartú té 1 finestra. Si el client vol múltiples finestres (per exemple, per a un collage), pots afegir-ne d'extra.</p>
+        <p style="margin-top:.4rem">Cada finestra extra té un cost de <strong>2,00€</strong> (sobre el qual s'aplica el marge).</p>
+      </div>
+    </div>
+
+    <!-- MATERIALS -->
+    <div class="section" id="sec-materials">
+      <div class="section-header">
+        <h1>🔧 Materials</h1>
+        <p>Guia dels quatre grups de materials i les seves opcions.</p>
+      </div>
+      <div class="help-card">
+        <h3>🔨 Muntatge</h3>
+        <ul>
+          <li><strong>Encolat</strong> — fixació estàndard amb cola. Disponible sempre.</li>
+          <li><strong>Protter</strong> — sistema de fixació especial. No disponible si s'ha seleccionat passpartú o marc.</li>
+          <li><strong>Cap</strong> — sense muntatge.</li>
+        </ul>
+      </div>
+      <div class="help-card">
+        <h3>🔲 Protecció</h3>
+        <ul>
+          <li><strong>Vidre</strong> — vidre estàndard transparent.</li>
+          <li><strong>Doble vidre</strong> — vidre amb protecció UV millorada.</li>
+          <li><strong>Mirall</strong> — acabat de mirall.</li>
+          <li><strong>Conservar vidre</strong> — el client porta el seu vidre existent.</li>
+          <li><strong>Cap</strong> — sense vidre.</li>
+        </ul>
+      </div>
+      <div class="help-card">
+        <h3>🎨 Interior</h3>
+        <ul>
+          <li><strong>Passpartú</strong> — cartró de presentació amb 1 finestra.</li>
+          <li><strong>Doble passpartú</strong> — dos capes de passpartú.</li>
+          <li><strong>ProEco</strong> — alternativa econòmica de foam.</li>
+          <li><strong>Cap</strong> — sense interior.</li>
+        </ul>
+      </div>
+      <div class="help-card">
+        <h3>📷 Impressió fotogràfica</h3>
+        <p>Activa aquest botó si el client necessita que imprimiu la fotografia. El preu s'assigna automàticament al format d'impressió mínim que contingui les mides indicades.</p>
+        <div class="warn">⚠️ Recorda: la impressió utilitza les mides de la foto (no del marc). Si hi ha passpartú, les mides de la foto no canvien.</div>
+      </div>
+    </div>
+
+    <!-- PREUS -->
+    <div class="section" id="sec-preus">
+      <div class="section-header">
+        <h1>💶 Preus i marges</h1>
+        <p>Com es calculen els preus i com funcionen els marges de benefici.</p>
+      </div>
+      <div class="help-card">
+        <h3>📐 Fórmula del marc</h3>
+        <div class="formula">Cost marc = (perímetre + gruix×8) × (preu/100)</div>
+        <p style="margin-top:.5rem">On el perímetre és (Amplada×2 + Alçada×2) en cm.</p>
+      </div>
+      <div class="help-card">
+        <h3>📈 Marge de benefici</h3>
+        <div class="formula">PVP = Cost × (1 + marge / 100)</div>
+        <p style="margin-top:.5rem">Exemple amb marge 60%: cost 10€ → PVP 16€</p>
+        <div class="tip">💡 Pots tenir un marge diferent per a la impressió fotogràfica. Configura'l a Ajustos.</div>
+      </div>
+      <div class="help-card">
+        <h3>🧾 IVA</h3>
+        <div class="formula">Total = PVP net × 1,21</div>
+        <p style="margin-top:.5rem">L'IVA s'aplica sempre sobre el PVP ja amb el marge. El camp "IVA 21%" mostra l'import de l'impost separat.</p>
+      </div>
+      <div class="help-card">
+        <h3>👁 Mode cost / PVP</h3>
+        <p>El botó <span class="kbd">€</span> al resum econòmic permet alternar entre veure els preus en mode <strong>PVP</strong> (el que veu el client) o en mode <strong>Cost</strong> (el que us costa a vosaltres). Útil per verificar el marge aplicat.</p>
+      </div>
+    </div>
+
+    <!-- OPCIONS -->
+    <div class="section" id="sec-opcions">
+      <div class="section-header">
+        <h1>📋 Opcions múltiples</h1>
+        <p>Crea i compara diverses alternatives per al mateix client.</p>
+      </div>
+      <div class="help-card">
+        <h3>➕ Crear una nova opció</h3>
+        <p>Clica el botó "+ Nova opció" per afegir una alternativa (Opció B, C...). El nom i telèfon del client es mantenen automàticament.</p>
+      </div>
+      <div class="help-card">
+        <h3>🔄 Canviar entre opcions</h3>
+        <p>Clica les pestanyes (Opció A, Opció B...) per canviar. Totes les dades de cada opció es guarden mentre treballes.</p>
+      </div>
+      <div class="help-card">
+        <h3>📊 PDF comparatiu</h3>
+        <p>Un cop guardades 2 o més opcions, apareix el botó <strong>PDF comparativa</strong>. Genera un full A4 horitzontal amb totes les opcions en columnes, molt útil per mostrar-les al client.</p>
+      </div>
+      <div class="tip">💡 Cada opció genera el seu propi número de pressupost (ex: OF-2603-001, OF-2603-002...).</div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div class="section" id="sec-historial">
+      <div class="section-header">
+        <h1>📦 Historial</h1>
+        <p>Gestió de totes les comandes i pressupostos guardats.</p>
+      </div>
+      <div class="help-card">
+        <h3>📋 Vista de l'historial</h3>
+        <p>Les comandes s'agrupen per sessió (client). Cada grup mostra el número de pressupost, data, marc i import total.</p>
+      </div>
+      <div class="help-card">
+        <h3>Botons de gestió</h3>
+        <ul>
+          <li><span class="badge badge-g">✓ Acceptat</span> — marca la comanda com acceptada pel client.</li>
+          <li><span class="badge badge-a">💰 Liquidar</span> — marca el pagament com a completat (pendent = 0).</li>
+          <li><span class="badge badge-g">✓ Marcar pagat</span> — toggle per indicar que el client ha pagat.</li>
+          <li><span class="badge" style="background:#EEF2FF;color:#4F46E5">📦 Marcar entregat</span> — toggle per indicar que el marc s'ha entregat.</li>
+          <li><span class="badge badge-r">× Eliminar</span> — elimina la comanda (demana confirmació).</li>
+        </ul>
+      </div>
+      <div class="help-card">
+        <h3>📄 PDF des de l'historial</h3>
+        <p>Pots tornar a generar el PDF de qualsevol comanda guardada clicant el botó "PDF" de la fila corresponent.</p>
+      </div>
+    </div>
+
+    <!-- WHATSAPP -->
+    <div class="section" id="sec-whatsapp">
+      <div class="section-header">
+        <h1>💬 WhatsApp</h1>
+        <p>Dos botons de WhatsApp amb missatges i destinataris diferents.</p>
+      </div>
+      <div class="help-card">
+        <h3>📱 WA Client</h3>
+        <p>Obre WhatsApp amb un missatge preparat per enviar al client. Inclou:</p>
+        <ul>
+          <li>Número de pressupost</li>
+          <li>Detall de materials seleccionats</li>
+          <li>Total amb IVA</li>
+          <li>Entrega a compte i pendent (si n'hi ha)</li>
+          <li>Signatura del teu comerç</li>
+        </ul>
+        <div class="tip">💡 El botó obre la app de WhatsApp si estàs en mòbil, o WhatsApp Web si estàs en ordinador.</div>
+      </div>
+      <div class="help-card">
+        <h3>🏪 WA Reus Revela</h3>
+        <p>Missatge intern per a preparació del marc. Inclou:</p>
+        <ul>
+          <li>Número de pressupost i nom del client</li>
+          <li>Marc, pre-marc i mides</li>
+          <li>Materials seleccionats</li>
+          <li><strong>Preu de COST</strong> (no el PVP client)</li>
+        </ul>
+        <div class="warn">⚠️ Aquest botó usa el preu de cost intern, no el preu al client. Mai confondre'ls.</div>
+      </div>
+    </div>
+
+    <!-- PDF -->
+    <div class="section" id="sec-pdf">
+      <div class="section-header">
+        <h1>📄 PDF</h1>
+        <p>Generació de documents PDF per al client.</p>
+      </div>
+      <div class="help-card">
+        <h3>📋 PDF individual</h3>
+        <p>Genera un pressupost en format A4 per a una opció. Inclou el logo del comerç (si n'has pujat un), número de pressupost, marc, mides, materials, preus i IVA.</p>
+      </div>
+      <div class="help-card">
+        <h3>📊 PDF comparativa</h3>
+        <p>Disponible quan hi ha 2 o més opcions guardades. Format A4 horitzontal amb totes les opcions en columnes per comparar ràpidament.</p>
+      </div>
+      <div class="help-card">
+        <h3>🖼 Logo al PDF</h3>
+        <p>Si has pujat el logo del teu comerç a <strong>Ajustos</strong>, apareixerà automàticament a la capçalera de tots els PDFs. Cada usuari té el seu propi logo.</p>
+        <div class="tip">💡 Formats acceptats: PNG (millor amb fons transparent) o JPG. Mida recomanada: 300×100 px.</div>
+      </div>
+    </div>
+
+    <!-- AJUSTOS -->
+    <div class="section" id="sec-ajustos">
+      <div class="section-header">
+        <h1>⚙️ Ajustos</h1>
+        <p>Personalitza el teu compte i les dades que apareixen als documents.</p>
+      </div>
+      <div class="help-card">
+        <h3>🏪 Dades del comerç</h3>
+        <p>Nom del comerç, adreça i telèfon. Apareixen als PDFs i als missatges de WhatsApp.</p>
+      </div>
+      <div class="help-card">
+        <h3>🖼 Logo</h3>
+        <p>Puja el logo del teu comerç. Apareixerà a la capçalera dels PDFs dels pressupostos.</p>
+      </div>
+      <div class="help-card">
+        <h3>📈 Marge general (%)</h3>
+        <p>S'aplica a tots els productes (marc, vidre, passpartú, encolat...). Recomanat entre 50% i 70%.</p>
+      </div>
+      <div class="help-card">
+        <h3>📷 Marge impressió (%)</h3>
+        <p>Marge addicional aplicat <em>únicament</em> sobre la impressió fotogràfica. Per defecte és 100%. Posa 0 per usar el marge general.</p>
+      </div>
+    </div>
+
+    <!-- ADMIN -->
+    {% if session.is_admin %}
+    <div class="section" id="sec-admin">
+      <div class="section-header">
+        <h1>👤 Administrador</h1>
+        <p>Funcions exclusives per a l'administrador del sistema.</p>
+      </div>
+      <div class="help-card">
+        <h3>👥 Gestió d'usuaris</h3>
+        <p>A <strong>Admin → Usuaris</strong> pots crear nous usuaris, canviar contrasenyes i assignar marges individuals.</p>
+      </div>
+      <div class="help-card">
+        <h3>📊 Historial de tots els clients</h3>
+        <p>A l'historial tens una barra de filtres que mostra tots els clients. Pots filtrar per client individual o veure-ho tot.</p>
+      </div>
+      <div class="help-card">
+        <h3>🗑 Eliminació massiva</h3>
+        <p>A l'historial pots:</p>
+        <ul>
+          <li>Seleccionar múltiples comandes amb les caselles i eliminar-les totes d'un cop.</li>
+          <li>Si filtres per un client, apareix el botó "🗑 Eliminar tot de [client]" per esborrar tot el seu historial.</li>
+        </ul>
+        <div class="warn">⚠️ L'eliminació és permanent i no es pot desfer.</div>
+      </div>
+      <div class="help-card">
+        <h3>📦 Importar catàleg</h3>
+        <p>Per actualitzar les tarifes de marcs, vidres o passpartús, cal re-importar l'Excel des de la línia de comandes:</p>
+        <div class="formula">python importar_excel.py Marcs_Objectiu_2026.xlsx</div>
+        <p style="margin-top:.5rem">Per les tarifes d'impressió:</p>
+        <div class="formula">python importar_impressio.py</div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+function mostrarSeccio(id){
+  document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
+  var sec = document.getElementById('sec-'+id);
+  if(sec) sec.classList.add('active');
+  event.currentTarget.classList.add('active');
+  document.getElementById('cerca').value='';
+  document.getElementById('no-results').style.display='none';
+}
+
+function cercar(q){
+  q = q.toLowerCase().trim();
+  if(!q){
+    document.querySelectorAll('.section').forEach(function(s){s.style.display='';});
+    document.getElementById('no-results').style.display='none';
+    // Restore active section
+    var active = document.querySelector('.nav-item.active');
+    if(active) active.click();
+    return;
+  }
+  var found = 0;
+  document.querySelectorAll('.section').forEach(function(s){
+    var text = s.textContent.toLowerCase();
+    if(text.includes(q)){
+      s.style.display='block'; s.classList.add('active'); found++;
+    } else {
+      s.style.display='none'; s.classList.remove('active');
+    }
+  });
+  document.getElementById('no-results').style.display = found ? 'none' : 'block';
+}
+</script>
+</body>
+</html>

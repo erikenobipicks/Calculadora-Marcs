@@ -176,6 +176,11 @@ def logout():
 
 # ── Routes: App principal ─────────────────────────────────────────────────
 
+@app.route('/ajuda')
+@login_required
+def ajuda():
+    return render_template('ajuda.html')
+
 @app.route('/setup')
 @login_required
 def setup():
@@ -320,7 +325,7 @@ def api_empresa():
 def desar_marge():
     d = request.json
     m = float(d.get('marge', 60))
-    mi = float(d.get('marge_impressio', 0))
+    mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
     execute('UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=? WHERE id=?', [m, mi, ne, session['user_id']])
     if ne: session['empresa_nom'] = ne
@@ -375,6 +380,19 @@ def marcar_entregat(sessio_id):
 @login_required
 def liquidar_comanda(cid):
     execute('UPDATE comandes SET entrega=preu_final, pendent=0, pagat=1 WHERE id=?', [cid])
+    return jsonify({'ok': True})
+
+
+@app.route('/admin/eliminar-tot', methods=['POST'])
+@admin_required
+def eliminar_tot():
+    uid = request.json.get('user_id')
+    sessio_ids = request.json.get('sessio_ids', [])
+    if sessio_ids:
+        for sid in sessio_ids:
+            execute('DELETE FROM comandes WHERE sessio_id=?', [sid])
+    elif uid:
+        execute('DELETE FROM comandes WHERE user_id=?', [uid])
     return jsonify({'ok': True})
 
 @app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
@@ -1168,7 +1186,7 @@ def init_db():
                     id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL,
                     password TEXT NOT NULL, nom TEXT NOT NULL,
                     is_admin INTEGER DEFAULT 0, marge REAL DEFAULT 60,
-                    marge_impressio REAL DEFAULT 0, nom_empresa TEXT DEFAULT ''
+                    marge_impressio REAL DEFAULT 100, nom_empresa TEXT DEFAULT ''
                 )""",
                 """CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL)""",
@@ -1244,7 +1262,7 @@ def init_db():
                     nom TEXT NOT NULL,
                     is_admin INTEGER DEFAULT 0,
                     marge REAL DEFAULT 60,
-                    marge_impressio REAL DEFAULT 0,
+                    marge_impressio REAL DEFAULT 100,
                     nom_empresa TEXT DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS impressio (
