@@ -947,7 +947,9 @@ function restauraEstat(e){
     var r=document.querySelector('input[name="'+g+'"][value="'+val+'"]');
     if(r) r.checked=true;
   });
-  document.getElementById('chk-impressio').checked=!!e.impressio;
+  var impChecked = !!e.impressio;
+  document.getElementById('chk-impressio').checked = impChecked;
+  document.getElementById('opt-impressio').classList.toggle('selected', impChecked);
   if(e._closest) CLOSEST=e._closest;
   if(e._preus)   PREUS=e._preus;
   if(e._gruix)   GRUIX=e._gruix;
@@ -955,13 +957,38 @@ function restauraEstat(e){
   onGrupChange('interior');
   onGrupChange('proteccio');
   onGrupChange('muntatge');
-  onImpressioChange();
+  updateImpressioPreu();
   document.getElementById('pre_marc').value=e.pre_marc||'';
   document.getElementById('marc_principal').value=e.marc_principal||'';
-  if(e.pre_marc)       lookupRef('pre',e.pre_marc);
-  if(e.marc_principal) lookupRef('marc',e.marc_principal);
-  else setProtterDisabled(false);
-  recalcMides();
+  // lookupRef is async - chain them properly
+  var marcProm = e.marc_principal
+    ? fetch('/api/lookup?tipus=moldura&ref='+encodeURIComponent(e.marc_principal))
+        .then(function(r){return r.json();}).then(function(d){
+          if(d.ok){
+            PREUS.marc=d.preu; GRUIX.marc=d.gruix;
+            setChips('marc',[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
+            document.getElementById('desc-marc').textContent=d.descripcio||'';
+            document.getElementById('desc-marc').style.color='';
+            document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="">':'<div class="no-foto">Sense foto</div>';
+            setProtterDisabled(true);
+          }
+        })
+    : Promise.resolve();
+  var preProm = e.pre_marc && e.pre_marc!=='-'
+    ? fetch('/api/lookup?tipus=moldura&ref='+encodeURIComponent(e.pre_marc))
+        .then(function(r){return r.json();}).then(function(d){
+          if(d.ok){
+            PREUS.pre=d.preu; GRUIX.pre=d.gruix;
+            setChips('pre',[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
+            document.getElementById('desc-pre').textContent=d.descripcio||'';
+            document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="">':'<div class="no-foto">Sense foto</div>';
+          }
+        })
+    : Promise.resolve();
+  Promise.all([marcProm, preProm]).then(function(){
+    _lastFetchKey='';
+    recalcMides();
+  });
 }
 
 function canviarOpcio(idx){
