@@ -997,7 +997,8 @@ def api_closest():
         'passpartu':    ca('passpartout', w, h, prefix='1PAS'),
         'doble_pas':    ca('passpartout', w, h, prefix='DOBPAS'),
         'proeco':       ca('passpartout', w, h, prefix='PROECO'),
-        'impressio':    ca('impressio',   foto_w, foto_h),
+        'impressio':    (lambda rows: ({'ref': r['referencia'], 'preu': r.get('preu', 0)} if (r := _find_min_contain(rows, foto_w, foto_h)) else None))(
+                            [dict(r) for r in query('SELECT * FROM impressio')]),
     }
     return jsonify(result)
 
