@@ -344,8 +344,8 @@ def guardar():
          encolat, vidre, passpartout, impressio,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
-         sessio_id, opcio_nom, num_pressupost)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+         sessio_id, opcio_nom, num_pressupost, lang)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
@@ -356,7 +356,7 @@ def guardar():
         d.get('preu_net',0), d.get('preu_final',0),
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''),
-        sessio_id, d.get('opcio_nom','Opció A'), num_pressupost
+        sessio_id, d.get('opcio_nom','Opció A'), num_pressupost, d.get('lang','ca')
     ])
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
@@ -652,15 +652,15 @@ def crear_pdf_comparativa(comandes):
 
     fields = [
         ('Marc principal',   'marc_principal', False),
-        ('Pre-Marc',         'pre_marc',       False),
+        (t['premarc'],         'pre_marc',       False),
         ('Mides foto (cm)',  None,             False),
-        ('Muntatge',         'encolat',        False),
+        (t['muntatge'],         'encolat',        False),
         ('Vidre / Mirall',   'vidre',          False),
-        ('Interior',         'passpartout',    False),
-        ('Impressió',        'impressio',      False),
-        ('Observacions',     'observacions',   False),
+        (t['interior'],         'passpartout',    False),
+        (t['impressio'],        'impressio',      False),
+        (t['observacions'],     'observacions',   False),
         ('Preu net',         'preu_net',       True),
-        ('IVA 21%',          None,             True),
+        (t['iva'],          None,             True),
         ('TOTAL amb IVA',    'preu_final',     True),
         ('Entrega compte',   'entrega',        True),
         ('PENDENT',          'pendent',        True),
@@ -673,7 +673,7 @@ def crear_pdf_comparativa(comandes):
         for c in comandes:
             if key is None and lbl == 'Mides foto (cm)':
                 val = f"{int(c.get('amplada',0))} x {int(c.get('alcada',0))}"
-            elif key is None and lbl == 'IVA 21%':
+            elif key is None and lbl == t['iva']:
                 pn = float(c.get('preu_net',0) or 0)
                 val = f"{pn*0.21:.2f} €"
             elif is_price:
@@ -707,6 +707,50 @@ def crear_pdf_comparativa(comandes):
     doc.build(story)
     buf.seek(0)
     return buf
+
+# ── Translations for PDF ─────────────────────────────────────────────────
+PDF_T = {
+    'ca': {
+        'pressupost': 'PRESSUPOST',
+        'client': 'Client',
+        'telefon': 'Telèfon',
+        'data': 'Data',
+        'marc': 'Marc',
+        'premarc': 'Pre-Marc',
+        'mides': 'Mides',
+        'muntatge': 'Muntatge',
+        'proteccio': 'Protecció',
+        'interior': 'Interior',
+        'impressio': 'Impressió',
+        'observacions': 'Observacions',
+        'preu_net': 'Preu net (sense IVA)',
+        'iva': 'IVA 21%',
+        'total': 'Total amb IVA',
+        'entrega': 'Entrega a compte',
+        'pendent': 'Pendent de cobrar',
+        'num': 'Num. Pressupost',
+    },
+    'es': {
+        'pressupost': 'PRESUPUESTO',
+        'client': 'Cliente',
+        'telefon': 'Teléfono',
+        'data': 'Fecha',
+        'marc': 'Marco',
+        'premarc': 'Pre-Marco',
+        'mides': 'Medidas',
+        'muntatge': 'Montaje',
+        'proteccio': 'Protección',
+        'interior': 'Interior',
+        'impressio': 'Impresión',
+        'observacions': 'Observaciones',
+        'preu_net': 'Precio neto (sin IVA)',
+        'iva': 'IVA 21%',
+        'total': 'Total con IVA',
+        'entrega': 'Pago a cuenta',
+        'pendent': 'Pendiente de cobro',
+        'num': 'Num. Presupuesto',
+    }
+}
 
 def crear_pdf(c):
     import os as _os
@@ -751,7 +795,7 @@ def crear_pdf(c):
     adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
     header = Table([[
-        p('PRESSUPOST', bold=True, size=20, color=WHITE),
+        p(t['pressupost'], bold=True, size=20, color=WHITE),
         p(nom_empresa + '\n' + adreca, size=8,
           color=colors.HexColor("#9E9B94"), align='RIGHT')
     ]], colWidths=[W*0.55, W*0.45])
@@ -796,10 +840,10 @@ def crear_pdf(c):
     opcio_txt = c.get('opcio_nom','') or ''
     num_pres = c.get('num_pressupost','') or ''
     t1_rows = [
-        fila('Num. Pressupost:', num_pres, color_val=colors.HexColor('#1A6B45')) if num_pres else None,
-        fila('Client:', c['client_nom'] or '—'),
-        fila('Telèfon:', c['client_tel'] or '—'),
-        fila('Data:', c['data']),
+        fila(t['num']+':', num_pres, color_val=colors.HexColor('#1A6B45')) if num_pres else None,
+        fila(t['client']+':', c['client_nom'] or '—'),
+        fila(t['telefon']+':', c['client_tel'] or '—'),
+        fila(t['data']+':', c['data']),
     ]
     t1_rows = [r for r in t1_rows if r is not None]
     if opcio_txt and opcio_txt != 'Opció A':
@@ -885,11 +929,11 @@ def crear_pdf(c):
             p(f'- {desc_eur:.2f} €', size=10, color=colors.HexColor("#C8873A"), align='RIGHT'),
         ])
     t3_data += [
-        [p('IVA 21%', bold=True, size=9, color=colors.HexColor("#6B6860")),
+        [p(t['iva'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{(pnet*(1-desc_pct/100))*0.21:.2f} €', size=10, align='RIGHT')],
         [p(f'TOTAL PVP amb IVA', bold=True, size=11, color=GREEN),
          p(f'{pfin:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
-        [p('Entrega a compte', bold=True, size=9, color=colors.HexColor("#6B6860")),
+        [p(t['entrega'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{pent:.2f} €', size=10, align='RIGHT')],
         [p('PENDENT de cobrar', bold=True, size=11, color=RED),
          p(f'{ppend:.2f} €', bold=True, size=14, color=RED, align='RIGHT')],
@@ -1229,6 +1273,7 @@ def init_db():
                 ('comandes','num_pressupost','TEXT'),
                 ('comandes','pagat','INTEGER DEFAULT 0'),
                 ('comandes','entregat','INTEGER DEFAULT 0'),
+                ('comandes','lang','TEXT DEFAULT \'ca\''),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")

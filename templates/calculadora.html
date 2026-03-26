@@ -413,6 +413,58 @@ var CLOSEST = {};
 var marge = 60, marge_impressio = 0, rmode = 'pvp', uid = null;
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
+var _lang = 'ca';  // 'ca' o 'es'
+
+function setLang(lang){
+  _lang = lang;
+  document.getElementById('btn-lang-ca').style.background = lang==='ca' ? 'var(--green)' : 'transparent';
+  document.getElementById('btn-lang-ca').style.color      = lang==='ca' ? '#fff' : 'var(--muted)';
+  document.getElementById('btn-lang-es').style.background = lang==='es' ? 'var(--green)' : 'transparent';
+  document.getElementById('btn-lang-es').style.color      = lang==='es' ? '#fff' : 'var(--muted)';
+}
+
+var T = {
+  ca: {
+    hola: "Hola! Us envio el pressupost d\'emmarcacio",
+    ref: "Ref.",
+    client: "Client",
+    marc: "Marc",
+    premarcLabel: "pre-marc",
+    mides: "Mides",
+    muntatge: "Muntatge",
+    proteccio: "Proteccio",
+    interior: "Interior",
+    impressio: "Impressio fotografica",
+    total: "TOTAL",
+    iva: "IVA inclos",
+    pagament: "Pagament a compte",
+    pendent: "Pendent de cobrar",
+    gracies: "Gracies!",
+    waInternTitol: "PRESSUPOST ACCEPTAT - Preparacio marc",
+    numPres: "Num. pressupost",
+    cost: "Cost materials",
+  },
+  es: {
+    hola: "Hola! Os enviamos el presupuesto de enmarcacion",
+    ref: "Ref.",
+    client: "Cliente",
+    marc: "Marco",
+    premarcLabel: "pre-marco",
+    mides: "Medidas",
+    muntatge: "Montaje",
+    proteccio: "Proteccion",
+    interior: "Interior",
+    impressio: "Impresion fotografica",
+    total: "TOTAL",
+    iva: "IVA incluido",
+    pagament: "Pago a cuenta",
+    pendent: "Pendiente de cobro",
+    gracies: "Gracias!",
+    waInternTitol: "PRESUPUESTO ACEPTADO - Preparacion marco",
+    numPres: "Num. presupuesto",
+    cost: "Coste materiales",
+  }
+};
 var empresa_nom = 'Objectiu Emmarcació', empresa_adreca = '', empresa_tel = '';
 
 var valToId = {
@@ -890,7 +942,9 @@ function guardar(){
     quantitat:parseFloat(document.getElementById('quantitat').value)||1,
     entrega:parseFloat(document.getElementById('entrega').value)||0,
     observacions:document.getElementById('observacions').value,
+    lang:_lang,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
+    lang:_lang,
     preu_net:   window._c ? parseFloat(window._c.preu_net.toFixed(2))   : 0,
     preu_final: window._c ? parseFloat(window._c.preu_final.toFixed(2)) : 0,
     pendent:    window._c ? parseFloat(window._c.pendent.toFixed(2))    : 0,
@@ -944,7 +998,9 @@ function capturaEstat(){
     quantitat:document.getElementById('quantitat').value,
     entrega:document.getElementById('entrega').value,
     observacions:document.getElementById('observacions').value,
+    lang:_lang,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
+    lang:_lang,
     _closest:JSON.parse(JSON.stringify(CLOSEST)),
     _preus:JSON.parse(JSON.stringify(PREUS)),
     _gruix:JSON.parse(JSON.stringify(GRUIX)),
@@ -963,6 +1019,7 @@ function restauraEstat(e){
   document.getElementById('entrega').value=e.entrega||0;
   document.getElementById('observacions').value=e.observacions||'';
   document.getElementById('finestres-extra').value=e.finestres_extra||0;
+  if(e.lang) setLang(e.lang);
   ['muntatge','proteccio','interior'].forEach(function(g){
     var val=e[g]||'';
     var r=document.querySelector('input[name="'+g+'"][value="'+val+'"]');
@@ -1116,26 +1173,27 @@ function buildWAtext(){
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var num = window._numPressupost || '';
-  var lines = ['Hola! Us envio el pressupost d\'emmarcacio:'+(num?' (Ref. '+num+')':''),'','Client: '+client];
+  var t = T[_lang] || T.ca;
+  var lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
   if(marc) lines.push('Marc: '+marc+(pre&&pre!=='-'?' + '+pre+' (pre-marc)':''));
   lines.push('Mides: '+w+' x '+h+' cm');
-  if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
-  if(nomProteccio) lines.push('Proteccio: '+nomProteccio);
-  if(nomInterior)  lines.push('Interior: '+nomInterior);
-  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
+  if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
+  if(nomInterior)  lines.push(t.interior+': '+nomInterior);
+  if(chkImp)       lines.push(t.impressio+': SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
   if(chkImp)       lines.push('Impressio fotografica inclosa');
   if(obs)          lines.push('Notes: '+obs);
   lines.push('');
   if(desc>0) lines.push('Descompte '+desc+'% aplicat');
-  lines.push('*TOTAL: '+pFin+' EUR (IVA inclos)*');
+  lines.push('*'+t.total+': '+pFin+' EUR ('+t.iva+')*');
   var entrega = parseFloat(document.getElementById('entrega').value)||0;
   var pendent = window._c ? Math.max(0,window._c.pendent).toFixed(2) : pFin;
   if(entrega > 0){
-    lines.push('Pagament a compte: '+entrega.toFixed(2)+' EUR');
-    lines.push('*Pendent de cobrar: '+pendent+' EUR*');
+    lines.push(t.pagament+': '+entrega.toFixed(2)+' EUR');
+    lines.push('*'+t.pendent+': '+pendent+' EUR*');
   }
   lines.push('');
-  lines.push('Gracies! ' + empresa_nom);
+  lines.push(t.gracies+' ' + empresa_nom);
   if(empresa_adreca) lines.push(empresa_adreca);
   if(empresa_tel) lines.push('Tel: ' + empresa_tel);
   return encodeURIComponent(lines.join('\n'));
@@ -1167,20 +1225,21 @@ function buildWAtext_intern(){
   // Cost price (not client price)
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
 
+  var t = T[_lang] || T.ca;
   var lines = [
-    '*PRESSUPOST ACCEPTAT — Preparació marc*','',
-    'Num. pressupost: *' + num + '*',
-    'Client: ' + client,'',
+    '*'+t.waInternTitol+'*','',
+    t.numPres+': *' + num + '*',
+    t.client+': ' + client,'',
     'MARC: ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' (pre-marc)':''),
     'Mides: ' + w + ' x ' + h + ' cm',
   ];
-  if(nomMuntatge)  lines.push('Muntatge: '+nomMuntatge);
-  if(nomProteccio) lines.push('Proteccio: '+nomProteccio);
-  if(nomInterior)  lines.push('Interior: '+nomInterior);
-  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
+  if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
+  if(nomInterior)  lines.push(t.interior+': '+nomInterior);
+  if(chkImp)       lines.push(t.impressio+': SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
   if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'format mes proper') + ')');
   lines.push('');
-  lines.push('Cost materials: *' + cTot + ' EUR*');
+  lines.push(t.cost+': *' + cTot + ' EUR*');
   lines.push('');
   return encodeURIComponent(lines.join('\n'));
 }
