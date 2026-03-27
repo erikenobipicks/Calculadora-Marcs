@@ -419,6 +419,91 @@ def acceptar_comanda(cid):
             [f'[{estat.upper()}]', f'[{estat.upper()}]', cid])
     return jsonify({'ok': True})
 
+
+# ── Catàleg de motllures ──────────────────────────────────────────────────
+@app.route('/admin/cataleg')
+@admin_required
+def admin_cataleg():
+    q = request.args.get('q', '').strip()
+    proveidor = request.args.get('proveidor', '').strip()
+    if q:
+        moldures = query("""SELECT * FROM moldures WHERE 
+            LOWER(referencia) LIKE ? OR LOWER(descripcio) LIKE ? OR LOWER(proveidor) LIKE ?
+            ORDER BY referencia""", 
+            [f'%{q.lower()}%', f'%{q.lower()}%', f'%{q.lower()}%'])
+    elif proveidor:
+        moldures = query("SELECT * FROM moldures WHERE proveidor=? ORDER BY referencia", [proveidor])
+    else:
+        moldures = query("SELECT * FROM moldures ORDER BY referencia")
+    proveidors = query("SELECT DISTINCT proveidor FROM moldures WHERE proveidor!='' ORDER BY proveidor")
+    total = query("SELECT COUNT(*) as n FROM moldures", one=True)
+    return render_template('admin_cataleg.html', moldures=moldures, q=q,
+                           proveidor=proveidor, proveidors=proveidors,
+                           total=total['n'] if total else 0)
+
+@app.route('/admin/cataleg/nou', methods=['GET','POST'])
+@admin_required
+def admin_moldura_nova():
+    if request.method == 'POST':
+        d = request.form
+        existing = query('SELECT referencia FROM moldures WHERE referencia=?', [d['referencia']], one=True)
+        if existing:
+            return render_template('admin_moldura_form.html', error='Ja existeix una motllura amb aquesta referència.', moldura=d, nova=True)
+        execute("""INSERT INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                [d['referencia'], float(d.get('preu_taller',0)),
+                 float(d.get('gruix',0)), float(d.get('cost',0)),
+                 d.get('proveidor',''), d.get('ref2',''),
+                 d.get('ubicacio',''), d.get('descripcio',''), d.get('foto','')])
+        return redirect(url_for('admin_cataleg'))
+    return render_template('admin_moldura_form.html', moldura={}, nova=True, error=None)
+
+@app.route('/admin/cataleg/<ref>/editar', methods=['GET','POST'])
+@admin_required
+def admin_moldura_editar(ref):
+    moldura = query('SELECT * FROM moldures WHERE referencia=?', [ref], one=True)
+    if not moldura:
+        return redirect(url_for('admin_cataleg'))
+    if request.method == 'POST':
+        d = request.form
+        execute("""UPDATE moldures SET preu_taller=?,gruix=?,cost=?,proveidor=?,
+                   ref2=?,ubicacio=?,descripcio=?,foto=? WHERE referencia=?""",
+                [float(d.get('preu_taller',0)), float(d.get('gruix',0)),
+                 float(d.get('cost',0)), d.get('proveidor',''),
+                 d.get('ref2',''), d.get('ubicacio',''),
+                 d.get('descripcio',''), d.get('foto',''), ref])
+        return redirect(url_for('admin_cataleg'))
+    return render_template('admin_moldura_form.html', moldura=dict(moldura), nova=False, error=None)
+
+@app.route('/admin/cataleg/<ref>/eliminar', methods=['POST'])
+@admin_required
+def admin_moldura_eliminar(ref):
+    execute('DELETE FROM moldures WHERE referencia=?', [ref])
+    return jsonify({'ok': True})
+
+@app.route('/admin/cataleg/<ref>/toggle-actiu', methods=['POST'])
+@admin_required
+def admin_moldura_toggle(ref):
+    m = query('SELECT actiu FROM moldures WHERE referencia=?', [ref], one=True)
+    nou = 0 if (m and m.get('actiu', 1)) else 1
+    try:
+        execute('UPDATE moldures SET actiu=? WHERE referencia=?', [nou, ref])
+    except:
+        pass
+    return jsonify({'ok': True, 'actiu': nou})
+
+# ── API: buscar moldura per ref exacte (autocomplete) ─────────────────────
+@app.route('/admin/cataleg/api/cerca')
+@admin_required
+def api_cerca_moldura():
+    q = request.args.get('q','').strip()
+    if not q: return jsonify([])
+    rows = query("""SELECT referencia, preu_taller, gruix, descripcio, proveidor 
+                    FROM moldures WHERE LOWER(referencia) LIKE ? OR LOWER(descripcio) LIKE ?
+                    ORDER BY referencia LIMIT 20""",
+                 [f'%{q.lower()}%', f'%{q.lower()}%'])
+    return jsonify([dict(r) for r in rows])
+
 @app.route('/historial')
 @login_required
 def historial():

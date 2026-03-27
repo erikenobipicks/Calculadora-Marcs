@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ 'Nova motllura' if nova else 'Editar motllura' }} — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--red:#C0392B;--r:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px;cursor:pointer}.brand em{color:#C8873A;font-style:normal}
+.nav-r{display:flex;align-items:center;gap:1rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:#fff}
+.wrap{max-width:720px;margin:0 auto;padding:2rem 1.5rem}
+.page-header{margin-bottom:1.75rem}
+.page-header h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400}
+.breadcrumb{font-size:13px;color:var(--hint);margin-bottom:.4rem}
+.breadcrumb a{color:var(--green);text-decoration:none}.breadcrumb a:hover{text-decoration:underline}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.75rem;margin-bottom:1.25rem}
+.card h3{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--hint);margin-bottom:1.25rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.f{margin-bottom:1rem}.f:last-child{margin-bottom:0}
+.f label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.f input,.f textarea,.f select{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none;transition:border-color .15s;background:var(--bg)}
+.f input:focus,.f textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08);background:#fff}
+.f input[readonly]{background:var(--bg);color:var(--muted)}
+.hint{font-size:11px;color:var(--hint);margin-top:3px}
+.btn{padding:10px 22px;border-radius:7px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem}
+.btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#155c3a}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-o:hover{background:var(--border)}
+.actions-bar{display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem}
+.error-msg{background:#FAEAEA;border:1px solid #E8B4B4;border-radius:7px;padding:.75rem 1rem;color:var(--red);font-size:13px;margin-bottom:1rem}
+.foto-preview{width:80px;height:80px;border-radius:8px;object-fit:cover;border:1px solid var(--border)}
+.no-foto-prev{width:80px;height:80px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:28px}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand" onclick="window.location='/'">{{ session.get('empresa_nom','Calculadora') }}</div>
+  <div class="nav-r">
+    <a href="/admin/cataleg">← Catàleg</a>
+    <a href="/admin">Admin</a>
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="breadcrumb">
+    <a href="/admin">Admin</a> › <a href="/admin/cataleg">Catàleg</a> › {{ 'Nova motllura' if nova else moldura.referencia }}
+  </div>
+  <div class="page-header">
+    <h1>{{ 'Nova motllura' if nova else 'Editar: ' + (moldura.referencia or '') }}</h1>
+  </div>
+
+  {% if error %}
+  <div class="error-msg">⚠ {{ error }}</div>
+  {% endif %}
+
+  <form method="post">
+    <!-- Identificació -->
+    <div class="card">
+      <h3>Identificació</h3>
+      <div class="grid-2">
+        <div class="f">
+          <label>Referència *</label>
+          <input type="text" name="referencia" value="{{ moldura.referencia or '' }}"
+                 {% if not nova %}readonly{% endif %}
+                 placeholder="Ex: M0970" required
+                 style="{% if not nova %}font-weight:700;color:var(--text){% endif %}">
+          {% if nova %}<div class="hint">Ha de ser única. Ex: M0970, AL-001, MAD-22...</div>{% endif %}
+        </div>
+        <div class="f">
+          <label>Referència alternativa</label>
+          <input type="text" name="ref2" value="{{ moldura.ref2 or '' }}" placeholder="Ref. del proveïdor">
+        </div>
+      </div>
+      <div class="f">
+        <label>Descripció</label>
+        <input type="text" name="descripcio" value="{{ moldura.descripcio or '' }}" placeholder="Ex: Alumini negre mat, Fusta roure natural...">
+      </div>
+    </div>
+
+    <!-- Preus -->
+    <div class="card">
+      <h3>Preus i dimensions</h3>
+      <div class="grid-2">
+        <div class="f">
+          <label>Preu de taller (€/100cm) *</label>
+          <input type="number" name="preu_taller" value="{{ moldura.preu_taller or '' }}" step="0.01" min="0" placeholder="0.00" required>
+          <div class="hint">Preu per cada 100cm de motllura</div>
+        </div>
+        <div class="f">
+          <label>Cost intern (€/100cm)</label>
+          <input type="number" name="cost" value="{{ moldura.cost or '' }}" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="f">
+          <label>Gruix (cm)</label>
+          <input type="number" name="gruix" value="{{ moldura.gruix or '' }}" step="0.1" min="0" placeholder="0.0">
+          <div class="hint">Amplada de la motllura en cm</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logística -->
+    <div class="card">
+      <h3>Logística</h3>
+      <div class="grid-2">
+        <div class="f">
+          <label>Proveïdor</label>
+          <input type="text" name="proveidor" value="{{ moldura.proveidor or '' }}" placeholder="Ex: Decora, Nielsen, Larson...">
+        </div>
+        <div class="f">
+          <label>Ubicació al magatzem</label>
+          <input type="text" name="ubicacio" value="{{ moldura.ubicacio or '' }}" placeholder="Ex: A-12, Prestatgeria 3...">
+        </div>
+      </div>
+    </div>
+
+    <!-- Foto -->
+    <div class="card">
+      <h3>Imatge</h3>
+      <div style="display:flex;gap:1.5rem;align-items:flex-start">
+        <div id="foto-preview-wrap">
+          {% if moldura.foto %}
+          <img src="{{ moldura.foto }}" class="foto-preview" id="foto-preview" onerror="this.style.display='none';document.getElementById('no-foto-prev').style.display='flex'">
+          <div class="no-foto-prev" id="no-foto-prev" style="display:none">🖼</div>
+          {% else %}
+          <div class="no-foto-prev" id="no-foto-prev">🖼</div>
+          <img src="" class="foto-preview" id="foto-preview" style="display:none">
+          {% endif %}
+        </div>
+        <div style="flex:1">
+          <div class="f">
+            <label>URL de la foto</label>
+            <input type="url" name="foto" id="foto-url" value="{{ moldura.foto or '' }}"
+                   placeholder="https://exemple.com/foto.jpg"
+                   oninput="previewFoto(this.value)">
+            <div class="hint">URL directa a la imatge de la motllura (JPG, PNG)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions-bar">
+      <a href="/admin/cataleg" class="btn btn-o">Cancel·lar</a>
+      <button type="submit" class="btn btn-g">
+        {{ '+ Crear motllura' if nova else '✓ Desar canvis' }}
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+function previewFoto(url){
+  var img=document.getElementById('foto-preview');
+  var noFoto=document.getElementById('no-foto-prev');
+  if(url){
+    img.src=url;
+    img.style.display='block';
+    img.onerror=function(){img.style.display='none';noFoto.style.display='flex';};
+    img.onload=function(){noFoto.style.display='none';img.style.display='block';};
+  } else {
+    img.style.display='none';
+    noFoto.style.display='flex';
+  }
+}
+</script>
+</body>
+</html>
