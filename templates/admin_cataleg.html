@@ -107,8 +107,7 @@ tr:hover td{background:#FAFAF8}
     <table>
       <thead>
         <tr>
-          <th>Foto</th>
-          <th>Referència</th>
+          <th>Motllura</th>
           <th>Descripció</th>
           <th>Preu taller</th>
           <th>Gruix</th>
@@ -121,14 +120,19 @@ tr:hover td{background:#FAFAF8}
         {% for m in moldures %}
         <tr id="fila-{{ m.referencia }}">
           <td>
-            {% if m.foto %}
-            <img src="{{ m.foto }}" class="foto-thumb" alt="{{ m.referencia }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div class="no-foto" style="display:none">🖼</div>
-            {% else %}
-            <div class="no-foto">🖼</div>
-            {% endif %}
+            <div style="display:flex;align-items:center;gap:.75rem">
+              {% if m.foto %}
+              <img src="{{ m.foto }}" class="foto-thumb" alt="{{ m.referencia }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+              <div class="no-foto" style="display:none">🖼</div>
+              {% else %}
+              <div class="no-foto">🖼</div>
+              {% endif %}
+              <div>
+                <div class="ref-badge" style="font-size:14px;letter-spacing:-.2px">{{ m.referencia }}</div>
+                {% if m.ref2 %}<div style="font-size:11px;color:var(--hint)">{{ m.ref2 }}</div>{% endif %}
+              </div>
+            </div>
           </td>
-          <td><span class="ref-badge">{{ m.referencia }}</span></td>
           <td style="max-width:200px;color:var(--muted)">{{ m.descripcio or '—' }}</td>
           <td><span class="preu-val">{{ "%.2f"|format(m.preu_taller or 0) }} €/m</span></td>
           <td>{{ "%.1f"|format(m.gruix or 0) }} cm</td>
