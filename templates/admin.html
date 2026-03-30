@@ -11,15 +11,16 @@ nav{background:#2f3640;padding:0 1.5rem;display:flex;align-items:center;justify-
 nav .brand{color:#fff;font-weight:700;font-size:16px}
 nav .links a{color:#b2bec3;text-decoration:none;font-size:13px;margin-left:1.2rem}
 nav .links a:hover{color:#fff}
-.container{max-width:860px;margin:0 auto;padding:1.5rem 1rem}
+.container{max-width:1180px;margin:0 auto;padding:1.5rem 1rem}
 .page-title{font-size:20px;font-weight:700;color:#2f3640;margin-bottom:1.2rem}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:1rem}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
 .section{background:#fff;border:1px solid #dfe6e9;border-radius:10px;padding:1.2rem;margin-bottom:1rem}
 .section-title{font-size:12px;font-weight:700;color:#0984e3;text-transform:uppercase;letter-spacing:.8px;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #f0f0f0}
 label{display:block;font-size:12px;font-weight:600;color:#636e72;margin-bottom:4px}
-input,select{width:100%;padding:8px 10px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;color:#2d3436;outline:none;margin-bottom:.7rem}
-input:focus,select:focus{border-color:#0984e3}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;color:#2d3436;outline:none;margin-bottom:.7rem;font-family:Arial,sans-serif}
+textarea{min-height:76px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:#0984e3}
 .btn{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
 .btn-primary{background:#0984e3;color:#fff}
 .btn-danger{background:#e17055;color:#fff}
@@ -28,16 +29,26 @@ input:focus,select:focus{border-color:#0984e3}
 .alert-err{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:7px;padding:9px 14px;font-size:13px;margin-bottom:1rem}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:8px;border-bottom:1px solid #dfe6e9;font-weight:600;color:#636e72;font-size:12px}
-td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:middle}
+td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
 .badge-admin{background:#e8f4fd;color:#0984e3;font-size:11px;padding:2px 6px;border-radius:3px;font-weight:600}
+.badge-active,.badge-pending,.badge-blocked{display:inline-block;font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
+.badge-active{background:#d5f5e3;color:#1e8449}
+.badge-pending{background:#fdf3e8;color:#c8873a}
+.badge-blocked{background:#fdecea;color:#b84040}
 .hint{font-size:11px;color:#b2bec3;margin-top:-4px;margin-bottom:.6rem}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.mono{font-family:Consolas,monospace;font-size:12px}
+.mini-form{display:grid;gap:.55rem}
+.row-actions{display:flex;gap:.4rem;align-items:center}
+@media(max-width:860px){.form-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <nav>
   <span class="brand">OBJECTIU — Admin</span>
   <div class="links">
-    <a href="/">Calculadora</a>
+    <a href="/">Portal</a>
+    <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
     <a href="/logout">Sortir</a>
   </div>
@@ -52,27 +63,98 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:middle}
   {% endwith %}
 
   <div class="grid">
-    <!-- Crear usuari -->
-    <div class="section">
-      <div class="section-title">Crear nou usuari</div>
-      <form method="post" action="/admin/usuari">
-        <input type="hidden" name="action" value="crear">
-        <label>Nom complet</label>
-        <input type="text" name="nom" placeholder="Anna García" required>
-        <label>Nom d'usuari (per fer login)</label>
-        <input type="text" name="username" placeholder="anna" required>
-        <label>Contrasenya</label>
-        <input type="password" name="password" required>
-        <label>Rol</label>
-        <select name="is_admin">
-          <option value="0">Usuari normal</option>
-          <option value="1">Administrador</option>
-        </select>
-        <button type="submit" class="btn btn-primary">Crear usuari</button>
-      </form>
+    <div>
+      <div class="section">
+        <div class="section-title">Crear nou usuari professional</div>
+        <form method="post" action="/admin/usuari">
+          <input type="hidden" name="action" value="crear">
+          <div class="form-grid">
+            <div>
+              <label>Nom complet</label>
+              <input type="text" name="nom" placeholder="Anna García" required>
+            </div>
+            <div>
+              <label>Nom d'usuari</label>
+              <input type="text" name="username" placeholder="anna" required>
+            </div>
+            <div>
+              <label>Contrasenya</label>
+              <input type="password" name="password" required>
+            </div>
+            <div>
+              <label>Rol</label>
+              <select name="is_admin">
+                <option value="0">Usuari normal</option>
+                <option value="1">Administrador</option>
+              </select>
+            </div>
+            <div>
+              <label>Estat d'accés</label>
+              <select name="access_status">
+                <option value="active">Actiu</option>
+                <option value="pending">Pendent</option>
+                <option value="blocked">Bloquejat</option>
+              </select>
+            </div>
+            <div>
+              <label>Perfil</label>
+              <select name="profile_type">
+                <option value="professional">Professional</option>
+                <option value="studio">Estudi</option>
+                <option value="gallery">Galeria / art</option>
+                <option value="association">Associació / exposició</option>
+              </select>
+            </div>
+            <div>
+              <label>Web</label>
+              <input type="text" name="web_url" placeholder="https://...">
+            </div>
+            <div>
+              <label>Instagram</label>
+              <input type="text" name="instagram" placeholder="@perfil">
+            </div>
+            <div>
+              <label>CIF / NIF</label>
+              <input type="text" name="fiscal_id" placeholder="B12345678">
+            </div>
+          </div>
+          <label>Notes de validació</label>
+          <textarea name="notes_validacio" placeholder="Dades revisades, tipus de client, observacions internes..."></textarea>
+          <button type="submit" class="btn btn-primary">Crear usuari</button>
+        </form>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Tarifes impressió fotogràfica ({{ impressio|length }} formats)</div>
+        <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+          <input type="hidden" name="action" value="crear">
+          <div><label>Referència</label><input type="text" name="referencia" placeholder="IMP30x40" required></div>
+          <div><label>Descripció</label><input type="text" name="descripcio" placeholder="30x40 cm" required></div>
+          <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="2.80" required></div>
+          <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
+        </form>
+        <table style="font-size:12px">
+          <thead><tr><th>Referència</th><th>Descripció</th><th>Preu cost</th><th></th></tr></thead>
+          <tbody>
+          {% for f in impressio %}
+          <tr>
+            <td style="font-weight:600;color:#0984e3">{{ f.referencia }}</td>
+            <td>{{ f.descripcio }}</td>
+            <td>{{ "%.2f"|format(f.preu) }} €</td>
+            <td>
+              <form method="post" action="/admin/impressio" style="display:inline">
+                <input type="hidden" name="action" value="eliminar">
+                <input type="hidden" name="ref" value="{{ f.referencia }}">
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- Config -->
     <div>
       <div class="section">
         <div class="section-title">Configuració global</div>
@@ -83,56 +165,73 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:middle}
           <button type="submit" class="btn btn-primary">Desar</button>
         </form>
       </div>
-      </div>
-
-  <!-- Gestió impressió -->
-  <div class="section">
-    <div class="section-title">Tarifes impressió fotogràfica ({{ impressio|length }} formats)</div>
-    <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
-      <input type="hidden" name="action" value="crear">
-      <div><label>Referència</label><input type="text" name="referencia" placeholder="IMP30x40" required></div>
-      <div><label>Descripció</label><input type="text" name="descripcio" placeholder="30x40 cm" required></div>
-      <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="2.80" required></div>
-      <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
-    </form>
-    <table style="font-size:12px">
-      <thead><tr><th>Referència</th><th>Descripció</th><th>Preu cost</th><th></th></tr></thead>
-      <tbody>
-      {% for f in impressio %}
-      <tr>
-        <td style="font-weight:600;color:#0984e3">{{ f.referencia }}</td>
-        <td>{{ f.descripcio }}</td>
-        <td>{{ "%.2f"|format(f.preu) }} €</td>
-        <td>
-          <form method="post" action="/admin/impressio" style="display:inline">
-            <input type="hidden" name="action" value="eliminar">
-            <input type="hidden" name="ref" value="{{ f.referencia }}">
-            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    </div>
   </div>
 
-  <!-- Llista usuaris -->
   <div class="section">
     <div class="section-title">Usuaris actuals ({{ usuaris|length }})</div>
     <table>
       <thead>
-        <tr><th>Nom</th><th>Usuari</th><th>Rol</th><th>Marge</th><th>Marge imp.</th><th>Canviar contrasenya</th><th>Eliminar</th></tr>
+        <tr>
+          <th>Compte</th>
+          <th>Perfil</th>
+          <th>Accés</th>
+          <th>Dades</th>
+          <th>Marge</th>
+          <th>Contrasenya</th>
+          <th>Eliminar</th>
+        </tr>
       </thead>
       <tbody>
       {% for u in usuaris %}
+      {% set status = u.access_status or 'active' %}
       <tr>
-        <td><strong>{{ u.nom }}</strong></td>
-        <td style="color:#636e72">{{ u.username }}</td>
-        <td>{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</td>
-        <td style="font-weight:600;color:#0984e3;text-align:center">{{ u.marge or 60 }}%</td>
-        <td style="font-weight:600;color:#00b894;text-align:center">{{ u.marge_impressio or 0 }}%</td>
         <td>
-          <form method="post" action="/admin/usuari" style="display:flex;gap:.4rem">
+          <div><strong>{{ u.nom }}</strong></div>
+          <div class="mono">{{ u.username }}</div>
+          <div style="margin-top:4px">{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</div>
+        </td>
+        <td>
+          <form method="post" action="/admin/usuari" class="mini-form">
+            <input type="hidden" name="action" value="actualitzar_estat">
+            <input type="hidden" name="uid" value="{{ u.id }}">
+            <select name="profile_type">
+              <option value="professional" {% if (u.profile_type or 'professional') == 'professional' %}selected{% endif %}>Professional</option>
+              <option value="studio" {% if u.profile_type == 'studio' %}selected{% endif %}>Estudi</option>
+              <option value="gallery" {% if u.profile_type == 'gallery' %}selected{% endif %}>Galeria / art</option>
+              <option value="association" {% if u.profile_type == 'association' %}selected{% endif %}>Associació / exposició</option>
+            </select>
+        </td>
+        <td>
+            <div style="margin-bottom:.4rem">
+              {% if status == 'active' %}
+                <span class="badge-active">Actiu</span>
+              {% elif status == 'pending' %}
+                <span class="badge-pending">Pendent</span>
+              {% else %}
+                <span class="badge-blocked">Bloquejat</span>
+              {% endif %}
+            </div>
+            <select name="access_status">
+              <option value="active" {% if status == 'active' %}selected{% endif %}>Actiu</option>
+              <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pendent</option>
+              <option value="blocked" {% if status == 'blocked' %}selected{% endif %}>Bloquejat</option>
+            </select>
+        </td>
+        <td>
+            <input type="text" name="web_url" value="{{ u.web_url or '' }}" placeholder="Web">
+            <input type="text" name="instagram" value="{{ u.instagram or '' }}" placeholder="Instagram">
+            <input type="text" name="fiscal_id" value="{{ u.fiscal_id or '' }}" placeholder="CIF / NIF">
+            <textarea name="notes_validacio" placeholder="Notes internes">{{ u.notes_validacio or '' }}</textarea>
+            <button type="submit" class="btn btn-primary btn-sm">Desar perfil</button>
+          </form>
+        </td>
+        <td style="font-weight:600;color:#0984e3">
+          {{ u.marge or 60 }}%<br>
+          <span style="color:#00b894">{{ u.marge_impressio or 0 }}%</span>
+        </td>
+        <td>
+          <form method="post" action="/admin/usuari" class="row-actions">
             <input type="hidden" name="action" value="canviar_pw">
             <input type="hidden" name="uid" value="{{ u.id }}">
             <input type="password" name="password" placeholder="Nova contrasenya" style="margin:0;padding:4px 8px;font-size:12px;width:140px">

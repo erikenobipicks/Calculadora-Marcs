@@ -68,7 +68,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   <div class="brand" onclick="window.location='/'">{{ session.get('empresa_nom','Calculadora') }}</div>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
-    <a href="/">Calculadora</a>
+    <a href="/">Portal</a>
+    <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
     <a href="/ajustos">Ajustos</a>
     {% if session.is_admin %}<a href="/admin">Admin</a><a href="/admin/cataleg">Catàleg</a>{% endif %}

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reus Revela — Portal professional</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--ink:#1C1B18;--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:#1C1B18;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px}
+.brand a{color:inherit;text-decoration:none}
+.nav-r{display:flex;align-items:center;gap:1.2rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}
+.nav-r a:hover{color:#fff}
+.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:4px 11px;border-radius:20px;font-weight:500}
+.wrap{max-width:1120px;margin:0 auto;padding:2rem 1.25rem 3rem}
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:1.25rem;align-items:stretch;margin-bottom:1.25rem}
+.hero-copy,.hero-side,.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r)}
+.hero-copy{padding:2rem;background:linear-gradient(135deg,#181512 0%,#30251c 52%,#9b6f41 100%);color:#fff;border:none}
+.hero-copy .eyebrow{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.58);margin-bottom:1rem}
+.hero-copy h1{font-family:'DM Serif Display',serif;font-size:42px;font-weight:400;line-height:1;max-width:12ch}
+.hero-copy p{margin-top:1rem;max-width:58ch;color:rgba(255,255,255,.74);line-height:1.8}
+.hero-actions{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.4rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 16px;border-radius:9px;text-decoration:none;font-size:13px;font-weight:600;transition:all .15s}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-ghost{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.12)}
+.btn-ghost:hover{background:rgba(255,255,255,.16)}
+.hero-side{padding:1.4rem}
+.meta-title{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--hint);margin-bottom:.8rem}
+.meta-list{display:grid;gap:.9rem}
+.meta-item{padding-bottom:.9rem;border-bottom:1px solid var(--border)}
+.meta-item:last-child{padding-bottom:0;border-bottom:none}
+.meta-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--hint);margin-bottom:.25rem}
+.meta-value{font-size:14px;color:var(--text);font-weight:500;line-height:1.6}
+.pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.pill-active{background:var(--green-l);color:var(--green)}
+.pill-pending{background:var(--amber-l);color:var(--amber)}
+.pill-blocked{background:var(--red-l);color:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:1rem}
+.card{padding:1.35rem}
+.card-tag{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--hint);margin-bottom:.8rem}
+.card h2{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;line-height:1.05;margin-bottom:.7rem}
+.card p{color:var(--muted);line-height:1.75;font-size:14px}
+.card-actions{margin-top:1rem;display:flex;gap:.6rem;flex-wrap:wrap}
+.btn-outline{border:1px solid var(--border);color:var(--text);background:#fff}
+.btn-outline:hover{border-color:var(--green);color:var(--green)}
+.btn-disabled{background:var(--bg);color:var(--hint);border:1px dashed var(--border);cursor:default}
+.info-strip{margin:1rem 0 1.25rem;padding:1rem 1.15rem;border-radius:12px;background:#fff;border:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}
+.info-strip strong{display:block;font-size:13px;color:var(--ink);margin-bottom:.25rem}
+.info-strip span{font-size:13px;color:var(--muted);line-height:1.65}
+@media(max-width:920px){.hero,.grid{grid-template-columns:1fr}.hero-copy h1{font-size:34px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand"><a href="/">Reus Revela</a></div>
+  <div class="nav-r">
+    <span class="nav-u">{{ session.nom }}</span>
+    <a href="/calculadora">Calculadora</a>
+    <a href="/historial">Historial</a>
+    <a href="/ajustos">Ajustos</a>
+    {% if session.is_admin %}<a href="/admin">Admin</a><a href="/admin/cataleg">Catàleg</a>{% endif %}
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Portal professional</div>
+      <h1>La teva àrea privada ja pot créixer des d'aquí.</h1>
+      <p>
+        Aquesta serà la base comuna per a calculadora de marcs, historial, futurs pedidos online d'impressió i recepció de projectes professionals. Hem començat per ordenar l'accés i centralitzar el primer mòdul real.
+      </p>
+      <div class="hero-actions">
+        <a href="/calculadora" class="btn btn-primary">Obrir calculadora de marcs</a>
+        <a href="/historial" class="btn btn-ghost">Veure historial</a>
+      </div>
+    </div>
+
+    <aside class="hero-side">
+      <div class="meta-title">Fitxa professional</div>
+      <div class="meta-list">
+        <div class="meta-item">
+          <span class="meta-label">Accés</span>
+          {% set st = user.access_status if user and user.access_status else 'active' %}
+          <span class="pill {% if st == 'active' %}pill-active{% elif st == 'pending' %}pill-pending{% else %}pill-blocked{% endif %}">
+            {% if st == 'active' %}Actiu{% elif st == 'pending' %}Pendent{% else %}Bloquejat{% endif %}
+          </span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Perfil</span>
+          <div class="meta-value">
+            {% set pt = user.profile_type if user and user.profile_type else 'professional' %}
+            {% if pt == 'association' %}Associació / exposició{% elif pt == 'gallery' %}Galeria / art{% elif pt == 'studio' %}Estudi{% else %}Professional{% endif %}
+          </div>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Empresa</span>
+          <div class="meta-value">{{ user.nom_empresa if user and user.nom_empresa else session.get('empresa_nom', 'Reus Revela') }}</div>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Web o Instagram</span>
+          <div class="meta-value">
+            {% if user and user.web_url %}{{ user.web_url }}{% elif user and user.instagram %}{{ user.instagram }}{% else %}Encara no informat{% endif %}
+          </div>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Identificació fiscal</span>
+          <div class="meta-value">{% if user and user.fiscal_id %}{{ user.fiscal_id }}{% else %}Encara no informada{% endif %}</div>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <div class="info-strip">
+    <div>
+      <strong>Primera fase activada</strong>
+      <span>El portal ja té estructura de acceso profesional compartido. El primer módulo operativo es la calculadora de marcos y el siguiente paso natural será conectar altas aprobadas desde la web principal.</span>
+    </div>
+  </div>
+
+  <section class="grid">
+    <article class="card">
+      <div class="card-tag">Mòdul actiu</div>
+      <h2>Calculadora de marcs</h2>
+      <p>Segueix sent el centre de treball principal, però ara ja viu dins d'un portal professional que després podrà agrupar més producte i més fluxos.</p>
+      <div class="card-actions">
+        <a href="/calculadora" class="btn btn-primary">Entrar</a>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-tag">Operativa</div>
+      <h2>Historial i continuïtat</h2>
+      <p>Recupera pressupostos, revisa sessions guardades i fes seguiment del treball ja calculat sense haver d'entrar directament per la calculadora.</p>
+      <div class="card-actions">
+        <a href="/historial" class="btn btn-outline">Obrir historial</a>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-tag">Configuració</div>
+      <h2>Perfil i marges</h2>
+      <p>Des d'aquí seguiràs ajustant identitat comercial, marges i preferències del teu compte professional amb la mateixa sessió d'usuari.</p>
+      <div class="card-actions">
+        <a href="/ajustos" class="btn btn-outline">Veure ajustos</a>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-tag">Proper mòdul</div>
+      <h2>Impressió fotogràfica</h2>
+      <p>El portal queda preparat perquè el següent mòdul sigui el pedido online de còpia fotogràfica amb fitxer, mida, suport i acabat.</p>
+      <div class="card-actions">
+        <span class="btn btn-disabled">En preparació</span>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-tag">Proper mòdul</div>
+      <h2>Llenços i fine art</h2>
+      <p>També podrem afegir aquí impressió de llenços i Hahnemühle com a fluxos separats, sense tocar la base de login ni els usuaris.</p>
+      <div class="card-actions">
+        <span class="btn btn-disabled">En preparació</span>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-tag">Full de ruta</div>
+      <h2>Àlbums i projectes editats</h2>
+      <p>Quan decidim l'estructura de tapes, extres i arxius finals, aquest mateix portal podrà rebre àlbums editats amb el mateix usuario profesional.</p>
+      <div class="card-actions">
+        <span class="btn btn-disabled">Fase següent</span>
+      </div>
+    </article>
+  </section>
+</div>
+</body>
+</html>

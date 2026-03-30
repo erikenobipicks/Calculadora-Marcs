@@ -159,6 +159,26 @@ def _is_admin_session():
     return bool(session.get('is_admin'))
 
 
+def _user_access_status(user):
+    status = ''
+    if user:
+        try:
+            status = (user.get('access_status') or '').strip().lower()
+        except Exception:
+            status = ''
+    return status or 'active'
+
+
+def _user_is_allowed(user):
+    return bool(user) and (bool(user.get('is_admin')) or _user_access_status(user) == 'active')
+
+
+def _clean_profile_type(value):
+    allowed = {'professional', 'studio', 'gallery', 'association'}
+    value = (value or '').strip().lower()
+    return value if value in allowed else 'professional'
+
+
 def _can_access_comanda(row):
     return bool(row) and (_is_admin_session() or row['user_id'] == session.get('user_id'))
 
@@ -234,10 +254,19 @@ def login():
         user = query('SELECT * FROM usuaris WHERE username=?',
                      [request.form['username']], one=True)
         if user and user['password'] == hash_pw(request.form['password']):
+            if not _user_is_allowed(user):
+                status = _user_access_status(user)
+                if status == 'pending':
+                    flash("El teu accés encara està pendent de validació.", 'error')
+                else:
+                    flash("El teu accés està bloquejat. Contacta amb l'administrador.", 'error')
+                return render_template('login.html')
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['is_admin'] = bool(user['is_admin'])
             session['nom'] = user['nom']
+            session['access_status'] = _user_access_status(user)
+            session['profile_type'] = user.get('profile_type', 'professional') if user else 'professional'
             # Load empresa_nom for nav
             try:
                 nom_emp = user['nom_empresa'] if user['nom_empresa'] else ''
@@ -263,6 +292,65 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+
+@app.route('/api/public/professional-signup', methods=['POST'])
+def public_professional_signup():
+    expected_token = os.environ.get('PUBLIC_SIGNUP_TOKEN', '').strip()
+    provided_token = request.headers.get('X-Signup-Token', '').strip()
+
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    phone = (data.get('phone') or '').strip()
+    business_name = (data.get('business_name') or '').strip()
+    web_url = (data.get('web_url') or '').strip()
+    instagram = (data.get('instagram') or '').strip()
+    fiscal_id = (data.get('fiscal_id') or '').strip()
+    subject = (data.get('subject') or '').strip()
+    message = (data.get('message') or '').strip()
+    profile_type = _clean_profile_type(data.get('profile_type'))
+
+    if not name or not email:
+        return jsonify({'ok': False, 'error': 'missing_fields'}), 400
+
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        return jsonify({'ok': False, 'error': 'invalid_email'}), 400
+
+    notes = "\n".join([
+        f"Alta des de la web principal el {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        f"Nom: {name}",
+        f"Email: {email}",
+        f"Telèfon: {phone or '-'}",
+        f"Assumpte: {subject or '-'}",
+        f"Perfil: {profile_type}",
+        f"Empresa: {business_name or '-'}",
+        f"Web: {web_url or '-'}",
+        f"Instagram: {instagram or '-'}",
+        f"CIF/NIF: {fiscal_id or '-'}",
+        "Missatge:",
+        message or '-',
+    ])
+
+    existing = query('SELECT id, is_admin, access_status FROM usuaris WHERE username=?', [email], one=True)
+    if existing:
+        current_status = _user_access_status(existing)
+        next_status = current_status if current_status in ('active', 'blocked') else 'pending'
+        execute(
+            'UPDATE usuaris SET nom=?, nom_empresa=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=?, access_status=? WHERE id=?',
+            [name, business_name, profile_type, web_url, instagram, fiscal_id, notes, next_status, existing['id']]
+        )
+        return jsonify({'ok': True, 'action': 'updated', 'status': next_status})
+
+    temp_password = secrets.token_urlsafe(12)
+    execute(
+        'INSERT INTO usuaris (username, password, nom, is_admin, nom_empresa, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        [email, hash_pw(temp_password), name, 0, business_name, 'pending', profile_type, web_url, instagram, fiscal_id, notes]
+    )
+    return jsonify({'ok': True, 'action': 'created', 'status': 'pending'})
+
 # ── Routes: App principal ─────────────────────────────────────────────────
 
 @app.route('/ajuda')
@@ -287,6 +375,19 @@ def setup_done():
 @app.route('/')
 @login_required
 def index():
+    try:
+        u = query('SELECT setup_done FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        if u and not u.get('setup_done'):
+            return redirect(url_for('setup'))
+    except:
+        pass
+    user = query('SELECT nom, username, nom_empresa, profile_type, access_status, web_url, instagram, fiscal_id, notes_validacio FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    return render_template('portal.html', user=user)
+
+
+@app.route('/calculadora')
+@login_required
+def calculadora():
     try:
         u = query('SELECT setup_done FROM usuaris WHERE id=?', [session['user_id']], one=True)
         if u and not u.get('setup_done'):
@@ -672,9 +773,15 @@ def admin():
 def admin_usuari():
     action = request.form.get('action')
     if action == 'crear':
-        execute('INSERT INTO usuaris (username, password, nom, is_admin) VALUES (?,?,?,?)',
+        execute('INSERT INTO usuaris (username, password, nom, is_admin, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio) VALUES (?,?,?,?,?,?,?,?,?,?)',
                 [request.form['username'], hash_pw(request.form['password']),
-                 request.form['nom'], int(request.form.get('is_admin', 0))])
+                 request.form['nom'], int(request.form.get('is_admin', 0)),
+                 request.form.get('access_status', 'active'),
+                 request.form.get('profile_type', 'professional'),
+                 request.form.get('web_url', '').strip(),
+                 request.form.get('instagram', '').strip(),
+                 request.form.get('fiscal_id', '').strip(),
+                 request.form.get('notes_validacio', '').strip()])
         flash(f"Usuari '{request.form['nom']}' creat.", 'ok')
     elif action == 'eliminar':
         execute('DELETE FROM usuaris WHERE id=?', [request.form['uid']])
@@ -683,6 +790,16 @@ def admin_usuari():
         execute('UPDATE usuaris SET password=? WHERE id=?',
                 [hash_pw(request.form['password']), request.form['uid']])
         flash('Contrasenya actualitzada.', 'ok')
+    elif action == 'actualitzar_estat':
+        execute('UPDATE usuaris SET access_status=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=? WHERE id=?',
+                [request.form.get('access_status', 'active'),
+                 request.form.get('profile_type', 'professional'),
+                 request.form.get('web_url', '').strip(),
+                 request.form.get('instagram', '').strip(),
+                 request.form.get('fiscal_id', '').strip(),
+                 request.form.get('notes_validacio', '').strip(),
+                 request.form['uid']])
+        flash('Perfil professional actualitzat.', 'ok')
     return redirect(url_for('admin'))
 
 @app.route('/admin/config', methods=['POST'])
@@ -1529,7 +1646,13 @@ def init_db():
                     id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL,
                     password TEXT NOT NULL, nom TEXT NOT NULL,
                     is_admin INTEGER DEFAULT 0, marge REAL DEFAULT 60,
-                    marge_impressio REAL DEFAULT 100, nom_empresa TEXT DEFAULT ''
+                    marge_impressio REAL DEFAULT 100, nom_empresa TEXT DEFAULT '',
+                    access_status TEXT DEFAULT 'active',
+                    profile_type TEXT DEFAULT 'professional',
+                    web_url TEXT DEFAULT '',
+                    instagram TEXT DEFAULT '',
+                    fiscal_id TEXT DEFAULT '',
+                    notes_validacio TEXT DEFAULT ''
                 )""",
                 """CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL)""",
@@ -1569,6 +1692,12 @@ def init_db():
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
                 ('usuaris','logo_b64','TEXT'),
                 ('usuaris','marge_impressio_setup','INTEGER DEFAULT 0'),
+                ('usuaris','access_status',"TEXT DEFAULT 'active'"),
+                ('usuaris','profile_type',"TEXT DEFAULT 'professional'"),
+                ('usuaris','web_url',"TEXT DEFAULT ''"),
+                ('usuaris','instagram',"TEXT DEFAULT ''"),
+                ('usuaris','fiscal_id',"TEXT DEFAULT ''"),
+                ('usuaris','notes_validacio',"TEXT DEFAULT ''"),
                 ('comandes','num_pressupost','TEXT'),
                 ('comandes','pagat','INTEGER DEFAULT 0'),
                 ('comandes','entregat','INTEGER DEFAULT 0'),
@@ -1603,7 +1732,13 @@ def init_db():
                     is_admin INTEGER DEFAULT 0,
                     marge REAL DEFAULT 60,
                     marge_impressio REAL DEFAULT 100,
-                    nom_empresa TEXT DEFAULT ''
+                    nom_empresa TEXT DEFAULT '',
+                    access_status TEXT DEFAULT 'active',
+                    profile_type TEXT DEFAULT 'professional',
+                    web_url TEXT DEFAULT '',
+                    instagram TEXT DEFAULT '',
+                    fiscal_id TEXT DEFAULT '',
+                    notes_validacio TEXT DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL
@@ -1639,6 +1774,26 @@ def init_db():
                     clau TEXT PRIMARY KEY, valor TEXT
                 );
             ''')
+            db.commit()
+            for sql in [
+                "ALTER TABLE usuaris ADD COLUMN setup_done INTEGER DEFAULT 0",
+                "ALTER TABLE usuaris ADD COLUMN logo_b64 TEXT",
+                "ALTER TABLE usuaris ADD COLUMN marge_impressio_setup INTEGER DEFAULT 0",
+                "ALTER TABLE usuaris ADD COLUMN access_status TEXT DEFAULT 'active'",
+                "ALTER TABLE usuaris ADD COLUMN profile_type TEXT DEFAULT 'professional'",
+                "ALTER TABLE usuaris ADD COLUMN web_url TEXT DEFAULT ''",
+                "ALTER TABLE usuaris ADD COLUMN instagram TEXT DEFAULT ''",
+                "ALTER TABLE usuaris ADD COLUMN fiscal_id TEXT DEFAULT ''",
+                "ALTER TABLE usuaris ADD COLUMN notes_validacio TEXT DEFAULT ''",
+                "ALTER TABLE comandes ADD COLUMN num_pressupost TEXT",
+                "ALTER TABLE comandes ADD COLUMN pagat INTEGER DEFAULT 0",
+                "ALTER TABLE comandes ADD COLUMN entregat INTEGER DEFAULT 0",
+                "ALTER TABLE comandes ADD COLUMN lang TEXT DEFAULT 'ca'",
+            ]:
+                try:
+                    db.execute(sql)
+                except Exception:
+                    pass
             db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_nom','Reus Revela')")
