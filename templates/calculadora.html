@@ -6,7 +6,7 @@
 <title>Objectiu — Calculadora</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--border2:#D4D0C8;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
 nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
@@ -121,6 +121,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .alert{border-radius:7px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:1.25rem;display:none}
 .alert-ok{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}
 .alert-err{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}
+.constraints-box{display:none;margin-top:-.5rem;margin-bottom:1rem;border:1px solid #E8C89A;background:var(--amber-l);border-radius:8px;padding:.7rem .85rem}
+.constraints-box.show{display:block}
+.constraints-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#7A4E1A;margin-bottom:.35rem}
+.constraints-box ul{padding-left:1rem}
+.constraints-box li{font-size:12px;color:#7A4E1A;line-height:1.5}
 
 /* MODAL */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center}
@@ -150,6 +155,10 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     <p>Emplena les dades, calcula el preu i genera el PDF per al client</p>
   </div>
   <div id="alert" class="alert"></div>
+  <div id="constraints-box" class="constraints-box">
+    <div class="constraints-title">Limitacions de mida</div>
+    <ul id="constraints-list"></ul>
+  </div>
 
   <!-- TABS -->
   <div id="tabs-bar" style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -187,8 +196,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         <div class="f">
           <label style="font-weight:700;color:var(--text)">Marc principal <span style="font-size:11px;font-weight:400;color:var(--hint)">(marc exterior/principal)</span></label>
           <div class="ss" id="ss-marc">
-            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off" oninput="onMarcInput()"
-                   onfocus="openSS('marc')" oninput="filterSS('marc')" onblur="closeSS('marc')">
+            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off"
+                   oninput="onMarcInput();filterSS('marc')" onfocus="openSS('marc')" onblur="closeSS('marc')">
             <div class="ss-list" id="list-marc"></div>
           </div>
           <div class="chip-row" id="chips-marc"></div>
@@ -366,6 +375,14 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       <div class="card">
         <div class="card-t">Notes</div>
         <div class="f"><label>Observacions</label><input type="text" id="observacions" placeholder="Data d'entrega, instruccions..."></div>
+        <div class="f" style="margin-top:.75rem">
+          <label>Idioma del pressupost</label>
+          <div style="display:flex;gap:.4rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px;width:max-content">
+            <button type="button" id="btn-lang-ca" onclick="setLang('ca')" style="padding:5px 11px;border:none;border-radius:5px;background:var(--green);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Català</button>
+            <button type="button" id="btn-lang-es" onclick="setLang('es')" style="padding:5px 11px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer">Castellano</button>
+            <button type="button" id="btn-lang-en" onclick="setLang('en')" style="padding:5px 11px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer">English</button>
+          </div>
+        </div>
       </div>
 
       <div class="res-card">
@@ -413,14 +430,17 @@ var CLOSEST = {};
 var marge = 60, marge_impressio = 0, rmode = 'pvp', uid = null;
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
-var _lang = 'ca';  // 'ca' o 'es'
+var _lang = 'ca';  // ca / es / en
+var _filterTimer = {pre:null, marc:null};
 
 function setLang(lang){
   _lang = lang;
-  document.getElementById('btn-lang-ca').style.background = lang==='ca' ? 'var(--green)' : 'transparent';
-  document.getElementById('btn-lang-ca').style.color      = lang==='ca' ? '#fff' : 'var(--muted)';
-  document.getElementById('btn-lang-es').style.background = lang==='es' ? 'var(--green)' : 'transparent';
-  document.getElementById('btn-lang-es').style.color      = lang==='es' ? '#fff' : 'var(--muted)';
+  ['ca','es','en'].forEach(function(k){
+    var b = document.getElementById('btn-lang-'+k); if(!b) return;
+    b.style.background = lang===k ? 'var(--green)' : 'transparent';
+    b.style.color      = lang===k ? '#fff' : 'var(--muted)';
+  });
+  updateConstraintNotice();
 }
 
 var T = {
@@ -443,6 +463,10 @@ var T = {
     waInternTitol: "PRESSUPOST ACCEPTAT - Preparacio marc",
     numPres: "Num. pressupost",
     cost: "Cost materials",
+    notes: "Notes",
+    discountApplied: "Descompte aplicat",
+    yes: "Sí",
+    printIncluded: "Impressió fotogràfica inclosa"
   },
   es: {
     hola: "Hola! Os enviamos el presupuesto de enmarcacion",
@@ -463,6 +487,51 @@ var T = {
     waInternTitol: "PRESUPUESTO ACEPTADO - Preparacion marco",
     numPres: "Num. presupuesto",
     cost: "Coste materiales",
+    notes: "Notas",
+    discountApplied: "Descuento aplicado",
+    yes: "Sí",
+    printIncluded: "Impresión fotográfica incluida"
+  },
+  en: {
+    hola: "Hello! Here is your framing quote",
+    ref: "Ref.",
+    client: "Client",
+    marc: "Frame",
+    premarcLabel: "inner frame",
+    mides: "Dimensions",
+    muntatge: "Mounting",
+    proteccio: "Protection",
+    interior: "Interior",
+    impressio: "Photo print",
+    total: "TOTAL",
+    iva: "VAT included",
+    pagament: "Deposit",
+    pendent: "Outstanding",
+    gracies: "Thank you!",
+    waInternTitol: "QUOTE ACCEPTED - Frame preparation",
+    numPres: "Quote no.",
+    cost: "Material cost",
+    notes: "Notes",
+    discountApplied: "Discount applied",
+    yes: "Yes",
+    printIncluded: "Photo print included"
+  }
+};
+var LIM_MSG = {
+  ca: {
+    title: 'Limitacions de mida',
+    print: 'No es pot fer impressió: l\'ample màxim imprimible és 111 cm.',
+    foam: 'No es pot fer ProEco/Foam: mida màxima de planxa 122 × 244 cm.'
+  },
+  es: {
+    title: 'Limitaciones de medida',
+    print: 'No se puede imprimir: el ancho máximo imprimible es 111 cm.',
+    foam: 'No se puede usar Foam/ProEco: medida máxima de plancha 122 × 244 cm.'
+  },
+  en: {
+    title: 'Size limits',
+    print: 'Printing is not possible: maximum printable width is 111 cm.',
+    foam: 'Foam/ProEco is not possible: maximum board size is 122 × 244 cm.'
   }
 };
 var empresa_nom = 'Objectiu Emmarcació', empresa_adreca = '', empresa_tel = '';
@@ -507,11 +576,39 @@ function canFoamSize(w, h){
   var sideMin = Math.min(w, h), sideMax = Math.max(w, h);
   return sideMin <= 122 && sideMax <= 244;
 }
+function getConstraintIssues(){
+  var fw = parseFloat(document.getElementById('amplada').value)||0;
+  var fh = parseFloat(document.getElementById('alcada').value)||0;
+  var mW = parseFloat(document.getElementById('marc-w').value)||0;
+  var mH = parseFloat(document.getElementById('marc-h').value)||0;
+  return {
+    printInvalid: (fw>0 && fh>0 && !canPrintSize(fw, fh)),
+    foamInvalid:  (mW>0 && mH>0 && !canFoamSize(mW, mH))
+  };
+}
+
+function updateConstraintNotice(){
+  var box = document.getElementById('constraints-box');
+  var list = document.getElementById('constraints-list');
+  var title = box ? box.querySelector('.constraints-title') : null;
+  if(!box || !list || !title) return;
+  var i = getConstraintIssues();
+  var m = LIM_MSG[_lang] || LIM_MSG.ca;
+  title.textContent = m.title;
+  var rows = [];
+  if(i.printInvalid) rows.push('<li>'+m.print+'</li>');
+  if(i.foamInvalid)  rows.push('<li>'+m.foam+'</li>');
+  list.innerHTML = rows.join('');
+  box.classList.toggle('show', rows.length>0);
+}
 function enforceMaterialLimits(showMsg){
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
   var mW = parseFloat(document.getElementById('marc-w').value)||0;
   var mH = parseFloat(document.getElementById('marc-h').value)||0;
+  var lm = LIM_MSG[_lang] || LIM_MSG.ca;
+  ...
+}
 
   var chkImp = document.getElementById('chk-impressio');
   if(chkImp && chkImp.checked && !canPrintSize(fw, fh)){
@@ -519,20 +616,30 @@ function enforceMaterialLimits(showMsg){
     document.getElementById('opt-impressio').classList.remove('selected');
     updateImpressioPreu();
     if(showMsg){
-      showAlert('No es pot fer impressió: l\'ample màxim és 111 cm.', 'err');
+showAlert('No es pot fer impressió: l\'ample màxim és 111 cm.', 'err');
     }
   }
 
   var interiorSel = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
   if(interiorSel==='proeco' && !canFoamSize(mW, mH)){
     var empty = document.querySelector('input[name="interior"][value=""]');
-    if(empty) empty.checked = true;
-    onGrupChange('interior');
-    if(showMsg){
-      showAlert('ProEco/Foam no disponible: mida màxima 122 x 244 cm.', 'err');
-    }
+if(interiorSel==='proeco' && !canFoamSize(mW, mH)){
+  var empty = document.querySelector('input[name="interior"][value=""]');
+  if(empty){
+    empty.checked = true;
+    allKeys.interior.forEach(function(k){
+      var el = document.getElementById('opt-'+k); if(el) el.classList.remove('selected');
+    });
+    var capEl = document.getElementById('opt-interior-cap');
+    if(capEl) capEl.classList.add('selected');
+    updateGrupPreu('interior','');
   }
+  if(showMsg){
+    showAlert(lm.foam, 'err');
+  }
+  calcular();
 }
+updateConstraintNotice();
 
 // ── Init ──────────────────────────────────────────────────────────────────
 document.getElementById('data_comanda').value = new Date().toLocaleDateString('ca-ES');
@@ -832,10 +939,11 @@ function toggleImpressio(){
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
   if(chk.checked && !canPrintSize(fw, fh)){
-    chk.checked = false;
-    document.getElementById('opt-impressio').classList.remove('selected');
-    updateImpressioPreu();
-    showAlert('No es pot fer impressió: l\'ample màxim és 111 cm.', 'err');
+var lm = LIM_MSG[_lang] || LIM_MSG.ca;
+chk.checked = false;
+document.getElementById('opt-impressio').classList.remove('selected');
+updateImpressioPreu();
+showAlert(lm.print, 'err');
     calcular();
     return;
   }
@@ -991,7 +1099,6 @@ function guardar(){
     quantitat:parseFloat(document.getElementById('quantitat').value)||1,
     entrega:parseFloat(document.getElementById('entrega').value)||0,
     observacions:document.getElementById('observacions').value,
-    lang:_lang,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
     lang:_lang,
     preu_net:   window._c ? parseFloat(window._c.preu_net.toFixed(2))   : 0,
@@ -1047,7 +1154,6 @@ function capturaEstat(){
     quantitat:document.getElementById('quantitat').value,
     entrega:document.getElementById('entrega').value,
     observacions:document.getElementById('observacions').value,
-    lang:_lang,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
     lang:_lang,
     _closest:JSON.parse(JSON.stringify(CLOSEST)),
@@ -1224,16 +1330,16 @@ function buildWAtext(){
   var num = window._numPressupost || '';
   var t = T[_lang] || T.ca;
   var lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
-  if(marc) lines.push('Marc: '+marc+(pre&&pre!=='-'?' + '+pre+' (pre-marc)':''));
-  lines.push('Mides: '+w+' x '+h+' cm');
+  if(marc) lines.push(t.marc+': '+marc+(pre&&pre!=='-'?' + '+pre+' ('+t.premarcLabel+')':''));
+  lines.push(t.mides+': '+w+' x '+h+' cm');
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
   if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
-  if(chkImp)       lines.push(t.impressio+': SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
-  if(chkImp)       lines.push('Impressio fotografica inclosa');
-  if(obs)          lines.push('Notes: '+obs);
+  if(chkImp)       lines.push(t.impressio+': '+t.yes+' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(chkImp)       lines.push(t.printIncluded);
+  if(obs)          lines.push(t.notes+': '+obs);
   lines.push('');
-  if(desc>0) lines.push('Descompte '+desc+'% aplicat');
+  if(desc>0) lines.push(t.discountApplied+': '+desc+'%');
   lines.push('*'+t.total+': '+pFin+' EUR ('+t.iva+')*');
   var entrega = parseFloat(document.getElementById('entrega').value)||0;
   var pendent = window._c ? Math.max(0,window._c.pendent).toFixed(2) : pFin;
@@ -1279,14 +1385,14 @@ function buildWAtext_intern(){
     '*'+t.waInternTitol+'*','',
     t.numPres+': *' + num + '*',
     t.client+': ' + client,'',
-    'MARC: ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' (pre-marc)':''),
-    'Mides: ' + w + ' x ' + h + ' cm',
+    t.marc.toUpperCase()+': ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' ('+t.premarcLabel+')':''),
+    t.mides+': ' + w + ' x ' + h + ' cm',
   ];
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
   if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
-  if(chkImp)       lines.push(t.impressio+': SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
-  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'format mes proper') + ')');
+  if(chkImp)       lines.push(t.impressio+': '+t.yes+' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(chkImp)       lines.push(t.printIncluded + ' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
   lines.push('');
   lines.push(t.cost+': *' + cTot + ' EUR*');
   lines.push('');
@@ -1301,6 +1407,7 @@ function whatsappObjectiu(){
 document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
   var c=document.getElementById('opt-'+r.name+'-cap'); if(c) c.classList.add('selected');
 });
+setLang('ca');
 renderTabs();
 applyIncompatibilities();
 recalcMides();
