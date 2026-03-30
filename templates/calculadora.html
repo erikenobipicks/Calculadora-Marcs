@@ -619,11 +619,19 @@ function enforceMaterialLimits(showMsg){
   var interiorSel = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
   if(interiorSel==='proeco' && !canFoamSize(mW, mH)){
     var empty = document.querySelector('input[name="interior"][value=""]');
-    if(empty) empty.checked = true;
-    onGrupChange('interior');
+    if(empty){
+      empty.checked = true;
+      allKeys.interior.forEach(function(k){
+        var el = document.getElementById('opt-'+k); if(el) el.classList.remove('selected');
+      });
+      var capEl = document.getElementById('opt-interior-cap');
+      if(capEl) capEl.classList.add('selected');
+      updateGrupPreu('interior','');
+    }
     if(showMsg){
       showAlert(lm.foam, 'err');
     }
+    calcular();
   }
   updateConstraintNotice();
 }
