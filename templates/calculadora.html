@@ -496,6 +496,43 @@ function showAlert(msg,t){
   a.style.display='block';
   setTimeout(function(){a.style.display='none';},5000);
 }
+function canPrintSize(fw, fh){
+  if(fw<=0 || fh<=0) return true;
+  // Impressió en bobina: ample màxim 111 cm (llarg sense límit).
+  return Math.min(fw, fh) <= 111;
+}
+function canFoamSize(w, h){
+  if(w<=0 || h<=0) return true;
+  // Foam limitat a planxa 122 x 244 cm (rotable).
+  var sideMin = Math.min(w, h), sideMax = Math.max(w, h);
+  return sideMin <= 122 && sideMax <= 244;
+}
+function enforceMaterialLimits(showMsg){
+  var fw = parseFloat(document.getElementById('amplada').value)||0;
+  var fh = parseFloat(document.getElementById('alcada').value)||0;
+  var mW = parseFloat(document.getElementById('marc-w').value)||0;
+  var mH = parseFloat(document.getElementById('marc-h').value)||0;
+
+  var chkImp = document.getElementById('chk-impressio');
+  if(chkImp && chkImp.checked && !canPrintSize(fw, fh)){
+    chkImp.checked = false;
+    document.getElementById('opt-impressio').classList.remove('selected');
+    updateImpressioPreu();
+    if(showMsg){
+      showAlert('No es pot fer impressió: l\'ample màxim és 111 cm.', 'err');
+    }
+  }
+
+  var interiorSel = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+  if(interiorSel==='proeco' && !canFoamSize(mW, mH)){
+    var empty = document.querySelector('input[name="interior"][value=""]');
+    if(empty) empty.checked = true;
+    onGrupChange('interior');
+    if(showMsg){
+      showAlert('ProEco/Foam no disponible: mida màxima 122 x 244 cm.', 'err');
+    }
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────
 document.getElementById('data_comanda').value = new Date().toLocaleDateString('ca-ES');
@@ -639,6 +676,7 @@ function recalcMides(){
     document.getElementById('mida-total').value='';
     document.getElementById('mida-total-simple').textContent=(w>0&&h>0)?'Mida: '+w+' x '+h+' cm':'';
   }
+  enforceMaterialLimits(true);
   _lastFetchKey='';
   fetchClosest();
 }
@@ -783,6 +821,7 @@ function onGrupChange(grup){
 
   applyIncompatibilities();
   if(grup==='interior') recalcMides();
+  enforceMaterialLimits(true);
   updateGrupPreu(grup,val);
   calcular();
 }
@@ -790,6 +829,16 @@ function onGrupChange(grup){
 function toggleImpressio(){
   var chk = document.getElementById('chk-impressio');
   chk.checked = !chk.checked;  // toggle manually
+  var fw = parseFloat(document.getElementById('amplada').value)||0;
+  var fh = parseFloat(document.getElementById('alcada').value)||0;
+  if(chk.checked && !canPrintSize(fw, fh)){
+    chk.checked = false;
+    document.getElementById('opt-impressio').classList.remove('selected');
+    updateImpressioPreu();
+    showAlert('No es pot fer impressió: l\'ample màxim és 111 cm.', 'err');
+    calcular();
+    return;
+  }
   document.getElementById('opt-impressio').classList.toggle('selected', chk.checked);
   if(chk.checked && !CLOSEST.impressio){
     _lastFetchKey=''; fetchClosest();
