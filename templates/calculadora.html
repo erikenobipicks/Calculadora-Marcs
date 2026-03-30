@@ -607,9 +607,43 @@ function enforceMaterialLimits(showMsg){
   var mW = parseFloat(document.getElementById('marc-w').value)||0;
   var mH = parseFloat(document.getElementById('marc-h').value)||0;
   var lm = LIM_MSG[_lang] || LIM_MSG.ca;
-  ...
-}
+  var changed = false;
 
+  var chkImp = document.getElementById('chk-impressio');
+  if(chkImp && chkImp.checked && !canPrintSize(fw, fh)){
+    chkImp.checked = false;
+    document.getElementById('opt-impressio').classList.remove('selected');
+    updateImpressioPreu();
+    changed = true;
+    if(showMsg){
+      showAlert(lm.print, 'err');
+    }
+  }
+
+  var interiorSel = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+  if(interiorSel==='proeco' && !canFoamSize(mW, mH)){
+    var empty = document.querySelector('input[name="interior"][value=""]');
+    if(empty){
+      empty.checked = true;
+      allKeys.interior.forEach(function(k){
+        var el = document.getElementById('opt-'+k); if(el) el.classList.remove('selected');
+      });
+      var capEl = document.getElementById('opt-interior-cap');
+      if(capEl) capEl.classList.add('selected');
+      updateGrupPreu('interior','');
+      changed = true;
+    }
+    if(showMsg){
+      showAlert(lm.foam, 'err');
+    }
+  }
+
+  updateConstraintNotice();
+  if(changed){
+    calcular();
+  }
+}
+/*
   var chkImp = document.getElementById('chk-impressio');
   if(chkImp && chkImp.checked && !canPrintSize(fw, fh)){
     chkImp.checked = false;
@@ -640,6 +674,7 @@ if(interiorSel==='proeco' && !canFoamSize(mW, mH)){
   calcular();
 }
 updateConstraintNotice();
+*/
 
 // ── Init ──────────────────────────────────────────────────────────────────
 document.getElementById('data_comanda').value = new Date().toLocaleDateString('ca-ES');
