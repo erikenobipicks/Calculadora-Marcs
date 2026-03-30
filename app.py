@@ -690,10 +690,13 @@ def crear_pdf_comparativa(comandes):
 
     story = []
 
+    lang = (comandes[0].get('lang') or 'ca').lower()
+    t = PDF_T.get(lang, PDF_T['ca'])
+
     # Header
     c0 = comandes[0]
     header = Table([[
-        p(f"COMPARATIVA DE PRESSUPOSTOS", bold=True, size=14, color=colors.white),
+        p(f"{t['comparativa']}", bold=True, size=14, color=colors.white),
         p(f"Objectiu · Reus", size=9, color=colors.HexColor("#B2BEC3"), align='RIGHT')
     ]], colWidths=[W*0.65, W*0.35])
     header.setStyle(TableStyle([
@@ -705,8 +708,8 @@ def crear_pdf_comparativa(comandes):
     story.append(header)
 
     client_info = Table([[
-        p(f"Client: {c0['client_nom'] or '—'}", bold=True, size=11),
-        p(f"Data: {c0['data']}", size=10, align='RIGHT')
+        p(f"{t['client']}: {c0['client_nom'] or '—'}", bold=True, size=11),
+        p(f"{t['data']}: {c0['data']}", size=10, align='RIGHT')
     ]], colWidths=[W*0.6, W*0.4])
     client_info.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), LIG),
@@ -736,19 +739,19 @@ def crear_pdf_comparativa(comandes):
         return '—' if v in ['','-','None'] else str(v)
 
     fields = [
-        ('Marc principal',   'marc_principal', False),
+        (t['marc_principal'],   'marc_principal', False),
         (t['premarc'],         'pre_marc',       False),
-        ('Mides foto (cm)',  None,             False),
+        (t['mides_foto'],     None,             False),
         (t['muntatge'],         'encolat',        False),
-        ('Vidre / Mirall',   'vidre',          False),
+        (t['vidre_mirall'],   'vidre',          False),
         (t['interior'],         'passpartout',    False),
         (t['impressio'],        'impressio',      False),
         (t['observacions'],     'observacions',   False),
-        ('Preu net',         'preu_net',       True),
+        (t['preu_net_label'], 'preu_net',       True),
         (t['iva'],          None,             True),
-        ('TOTAL amb IVA',    'preu_final',     True),
-        ('Entrega compte',   'entrega',        True),
-        ('PENDENT',          'pendent',        True),
+        (t['total_iva'],     'preu_final',     True),
+        (t['entrega'],       'entrega',        True),
+        (t['pendent_short'], 'pendent',        True),
     ]
 
     rows = []
@@ -756,7 +759,7 @@ def crear_pdf_comparativa(comandes):
         lbl_color = DARK if not is_price else colors.HexColor("#1A6B45") if key=='preu_final' else                     RED if key=='pendent' else colors.HexColor("#6B6860")
         row = [p(lbl, bold=is_price, size=9, color=lbl_color)]
         for c in comandes:
-            if key is None and lbl == 'Mides foto (cm)':
+            if key is None and lbl == t['mides_foto']:
                 val = f"{int(c.get('amplada',0))} x {int(c.get('alcada',0))}"
             elif key is None and lbl == t['iva']:
                 pn = float(c.get('preu_net',0) or 0)
@@ -814,6 +817,19 @@ PDF_T = {
         'entrega': 'Entrega a compte',
         'pendent': 'Pendent de cobrar',
         'num': 'Num. Pressupost',
+        'comparativa': 'COMPARATIVA DE PRESSUPOSTOS',
+        'marc_principal': 'Marc principal',
+        'mides_foto': 'Mides foto (cm)',
+        'vidre_mirall': 'Vidre / Mirall',
+        'preu_net_label': 'Preu net',
+        'total_iva': 'TOTAL amb IVA',
+        'pendent_short': 'PENDENT',
+        'sense_marc': '(sense marc)',
+        'conservar_vidre': 'Conservar vidre existent',
+        'preu_net_pvp': 'Preu net PVP (sense IVA)',
+        'descompte_sobre_pvp': 'Descompte {pct}% sobre PVP',
+        'total_pvp_iva': 'TOTAL PVP amb IVA',
+        'pendent_cobrar': 'PENDENT de cobrar',
     },
     'es': {
         'pressupost': 'PRESUPUESTO',
@@ -834,6 +850,52 @@ PDF_T = {
         'entrega': 'Pago a cuenta',
         'pendent': 'Pendiente de cobro',
         'num': 'Num. Presupuesto',
+        'comparativa': 'COMPARATIVA DE PRESUPUESTOS',
+        'marc_principal': 'Marco principal',
+        'mides_foto': 'Medidas foto (cm)',
+        'vidre_mirall': 'Vidrio / Espejo',
+        'preu_net_label': 'Precio neto',
+        'total_iva': 'TOTAL con IVA',
+        'pendent_short': 'PENDIENTE',
+        'sense_marc': '(sin marco)',
+        'conservar_vidre': 'Conservar vidrio existente',
+        'preu_net_pvp': 'Precio neto PVP (sin IVA)',
+        'descompte_sobre_pvp': 'Descuento {pct}% sobre PVP',
+        'total_pvp_iva': 'TOTAL PVP con IVA',
+        'pendent_cobrar': 'PENDIENTE de cobro',
+    },
+    'en': {
+        'pressupost': 'QUOTE',
+        'client': 'Client',
+        'telefon': 'Phone',
+        'data': 'Date',
+        'marc': 'Frame',
+        'premarc': 'Inner frame',
+        'mides': 'Dimensions',
+        'muntatge': 'Mounting',
+        'proteccio': 'Protection',
+        'interior': 'Interior',
+        'impressio': 'Print',
+        'observacions': 'Notes',
+        'preu_net': 'Net price (excl. VAT)',
+        'iva': 'VAT 21%',
+        'total': 'Total incl. VAT',
+        'entrega': 'Deposit',
+        'pendent': 'Outstanding',
+        'num': 'Quote No.',
+        'comparativa': 'QUOTE COMPARISON',
+        'marc_principal': 'Main frame',
+        'mides_foto': 'Photo size (cm)',
+        'vidre_mirall': 'Glass / Mirror',
+        'preu_net_label': 'Net price',
+        'total_iva': 'TOTAL incl. VAT',
+        'pendent_short': 'OUTSTANDING',
+        'sense_marc': '(no frame)',
+        'conservar_vidre': 'Keep existing glass',
+        'preu_net_pvp': 'Net retail price (excl. VAT)',
+        'descompte_sobre_pvp': 'Discount {pct}% on retail price',
+        'total_pvp_iva': 'TOTAL retail incl. VAT',
+        'pendent_cobrar': 'OUTSTANDING amount',
     }
 }
 
@@ -878,6 +940,9 @@ def crear_pdf(c):
         nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
     r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
     adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
+
+    lang = (c.get('lang') or 'ca').lower()
+    t = PDF_T.get(lang, PDF_T['ca'])
 
     header = Table([[
         p(t['pressupost'], bold=True, size=20, color=WHITE),
@@ -967,22 +1032,22 @@ def crear_pdf(c):
     # ── Detall de la comanda ──────────────────────────────────────────────
     det_rows = []
     if c.get('pre_marc') and c['pre_marc'] not in ['-','']:
-        det_rows.append(fila('Pre-Marc:', c['pre_marc']))
-    det_rows.append(fila('Marc principal:',
-                         c['marc_principal'] if c.get('marc_principal') else '(sense marc)'))
-    det_rows.append(fila('Mides foto (cm):', f"{int(c['amplada'])} × {int(c['alcada'])}"))
+        det_rows.append(fila(t['premarc']+':', c['pre_marc']))
+    det_rows.append(fila(t['marc_principal']+':',
+                         c['marc_principal'] if c.get('marc_principal') else t['sense_marc']))
+    det_rows.append(fila(t['mides_foto']+':', f"{int(c['amplada'])} × {int(c['alcada'])}"))
     if c.get('encolat') and c['encolat'] not in ['-','']:
-        det_rows.append(fila('Muntatge:', c['encolat']))
+        det_rows.append(fila(t['muntatge']+':', c['encolat']))
     if c.get('vidre') and c['vidre'] not in ['-','CONSERVAR','']:
-        det_rows.append(fila('Vidre / Mirall:', c['vidre']))
+        det_rows.append(fila(t['vidre_mirall']+':', c['vidre']))
     elif c.get('vidre') == 'CONSERVAR':
-        det_rows.append(fila('Vidre:', 'Conservar vidre existent'))
+        det_rows.append(fila(t['proteccio']+':', t['conservar_vidre']))
     if c.get('passpartout') and c['passpartout'] not in ['-','']:
-        det_rows.append(fila('Passpartout / ProEco:', c['passpartout']))
+        det_rows.append(fila(t['interior']+':', c['passpartout']))
     if c.get('impressio') and c['impressio'] not in ['-','']:
-        det_rows.append(fila('Impressió fotogràfica:', c['impressio']))
+        det_rows.append(fila(t['impressio']+':', c['impressio']))
     if c.get('observacions'):
-        det_rows.append(fila('Observacions:', c['observacions']))
+        det_rows.append(fila(t['observacions']+':', c['observacions']))
 
     if det_rows:
         t2 = Table(det_rows, colWidths=[W*0.38, W*0.62])
@@ -1004,23 +1069,23 @@ def crear_pdf(c):
     ppend = float(c.get('pendent')    or 0)
 
     t3_data = [
-        [p('Preu net PVP (sense IVA)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+        [p(t['preu_net_pvp'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{pnet:.2f} €', size=10, align='RIGHT')],
     ]
     if desc_pct > 0:
         desc_eur = pnet * (desc_pct/100)
         t3_data.append([
-            p(f'Descompte {int(desc_pct)}% sobre PVP', bold=True, size=9, color=colors.HexColor("#C8873A")),
+            p(t['descompte_sobre_pvp'].format(pct=int(desc_pct)), bold=True, size=9, color=colors.HexColor("#C8873A")),
             p(f'- {desc_eur:.2f} €', size=10, color=colors.HexColor("#C8873A"), align='RIGHT'),
         ])
     t3_data += [
         [p(t['iva'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{(pnet*(1-desc_pct/100))*0.21:.2f} €', size=10, align='RIGHT')],
-        [p(f'TOTAL PVP amb IVA', bold=True, size=11, color=GREEN),
+        [p(t['total_pvp_iva'], bold=True, size=11, color=GREEN),
          p(f'{pfin:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
         [p(t['entrega'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{pent:.2f} €', size=10, align='RIGHT')],
-        [p('PENDENT de cobrar', bold=True, size=11, color=RED),
+        [p(t['pendent_cobrar'], bold=True, size=11, color=RED),
          p(f'{ppend:.2f} €', bold=True, size=14, color=RED, align='RIGHT')],
     ]
     t3 = Table(t3_data, colWidths=[W*0.6, W*0.4])
@@ -1207,42 +1272,97 @@ def mailto_data():
     c = query('SELECT * FROM comandes WHERE id=?', [cid], one=True)
     if not c:
         return jsonify({'ok': False})
+    lang = (c.get('lang') or 'ca').lower()
+    MAILTO_T = {
+        'ca': {
+            'greet': 'Bon dia,',
+            'intro': "Us faig arribar el pressupost d'emmarcació per al client {client}.",
+            'detail': 'DETALL DE LA COMANDA:',
+            'marc': 'Marc',
+            'premarc': 'Pre-Marc',
+            'mides': 'Mides',
+            'vidre': 'Vidre',
+            'passpartout': 'Passpartout/ProEco',
+            'encolat': 'Encolat',
+            'preu': 'PREU FINAL: {price:.2f} EUR (IVA inclòs)',
+            'pendent': 'Pendent de cobrar: {pend:.2f} EUR',
+            'obs': 'Observacions: {obs}',
+            'attach': 'Trobareu el pressupost en PDF adjunt.',
+            'bye': 'Atentament,',
+            'subject': 'Pressupost emmarcació - {client}'
+        },
+        'es': {
+            'greet': 'Buenos días,',
+            'intro': 'Os envío el presupuesto de enmarcación para el cliente {client}.',
+            'detail': 'DETALLE DEL PEDIDO:',
+            'marc': 'Marco',
+            'premarc': 'Pre-marco',
+            'mides': 'Medidas',
+            'vidre': 'Vidrio',
+            'passpartout': 'Passpartout/ProEco',
+            'encolat': 'Montaje',
+            'preu': 'PRECIO FINAL: {price:.2f} EUR (IVA incluido)',
+            'pendent': 'Pendiente de cobro: {pend:.2f} EUR',
+            'obs': 'Observaciones: {obs}',
+            'attach': 'Encontraréis el presupuesto en PDF adjunto.',
+            'bye': 'Atentamente,',
+            'subject': 'Presupuesto enmarcación - {client}'
+        },
+        'en': {
+            'greet': 'Good morning,',
+            'intro': 'Please find the framing quote for client {client}.',
+            'detail': 'QUOTE DETAILS:',
+            'marc': 'Frame',
+            'premarc': 'Inner frame',
+            'mides': 'Dimensions',
+            'vidre': 'Glass',
+            'passpartout': 'Passpartout/ProEco',
+            'encolat': 'Mounting',
+            'preu': 'FINAL PRICE: {price:.2f} EUR (VAT included)',
+            'pendent': 'Outstanding: {pend:.2f} EUR',
+            'obs': 'Notes: {obs}',
+            'attach': 'The quote PDF is attached.',
+            'bye': 'Kind regards,',
+            'subject': 'Framing quote - {client}'
+        }
+    }
+    tt = MAILTO_T.get(lang, MAILTO_T['ca'])
     lines = [
-        f"Bon dia,",
-        f"",
-        f"Us faig arribar el pressupost d'emmarcació per al client {c['client_nom']}.",
-        f"",
-        f"DETALL DE LA COMANDA:",
-        f"  Marc: {c['marc_principal']}",
+        tt['greet'],
+        "",
+        tt['intro'].format(client=c['client_nom']),
+        "",
+        tt['detail'],
+        f"  {tt['marc']}: {c['marc_principal']}",
     ]
     if c['pre_marc'] and c['pre_marc'] != '-':
-        lines.append(f"  Pre-Marc: {c['pre_marc']}")
+        lines.append(f"  {tt['premarc']}: {c['pre_marc']}")
     lines += [
-        f"  Mides: {int(c['amplada'])} x {int(c['alcada'])} cm",
+        f"  {tt['mides']}: {int(c['amplada'])} x {int(c['alcada'])} cm",
     ]
     if c['vidre'] and c['vidre'] != '-':
-        lines.append(f"  Vidre: {c['vidre']}")
+        lines.append(f"  {tt['vidre']}: {c['vidre']}")
     if c['passpartout'] and c['passpartout'] != '-':
-        lines.append(f"  Passpartout/ProEco: {c['passpartout']}")
+        lines.append(f"  {tt['passpartout']}: {c['passpartout']}")
     if c['encolat'] and c['encolat'] != '-':
-        lines.append(f"  Encolat: {c['encolat']}")
+        lines.append(f"  {tt['encolat']}: {c['encolat']}")
     lines += [
-        f"",
-        f"PREU FINAL: {c['preu_final']:.2f} EUR (IVA inclòs)",
+        "",
+        tt['preu'].format(price=c['preu_final']),
     ]
     if c['pendent'] and float(c['pendent']) > 0.01:
-        lines.append(f"Pendent de cobrar: {c['pendent']:.2f} EUR")
+        lines.append(tt['pendent'].format(pend=c['pendent']))
     if c['observacions']:
-        lines.append(f"Observacions: {c['observacions']}")
+        lines.append(tt['obs'].format(obs=c['observacions']))
     lines += [
-        f"",
-        f"Trobareu el pressupost en PDF adjunt.",
-        f"",
-        f"Atentament,",
+        "",
+        tt['attach'],
+        "",
+        tt['bye'],
         f"{nom_comerc}",
     ]
     body = "%0D%0A".join(lines)
-    subject = f"Pressupost emmarcació - {c['client_nom']}"
+    subject = tt['subject'].format(client=c['client_nom'])
     mailto = f"mailto:reusrevela@gmail.com?subject={subject}&body={body}"
     return jsonify({'ok': True, 'mailto': mailto})
 
