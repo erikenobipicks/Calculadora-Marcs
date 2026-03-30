@@ -99,6 +99,7 @@ function desarTot(){
   var ne=document.getElementById('nom-empresa').value||'';
   var ea=document.getElementById('empresa-adreca').value||'';
   var et=document.getElementById('empresa-tel').value||'';
+  {% if session.get('is_admin') %}
   Promise.all([
     fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:ne})}).then(function(r){return r.json();}),
     fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();})
@@ -106,6 +107,14 @@ function desarTot(){
     if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
     else showAlert('Error en desar.','err');
   });
+  {% else %}
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:ne})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.ok) showAlert('Canvis desats correctament.','ok');
+      else showAlert('Error en desar.','err');
+    });
+  {% endif %}
 }
 
 // Load existing logo

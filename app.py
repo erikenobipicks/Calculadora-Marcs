@@ -154,6 +154,58 @@ def execute(sql, args=()):
 
 def hash_pw(pw): return hashlib.sha256(pw.encode()).hexdigest()
 
+
+def _is_admin_session():
+    return bool(session.get('is_admin'))
+
+
+def _can_access_comanda(row):
+    return bool(row) and (_is_admin_session() or row['user_id'] == session.get('user_id'))
+
+
+def _get_comanda_for_session(cid, *, fields='*'):
+    row = query(f'SELECT {fields} FROM comandes WHERE id=?', [cid], one=True)
+    if not _can_access_comanda(row):
+        return None
+    return row
+
+
+def _get_comanda_by_sessio_for_session(sessio_id, *, fields='id, user_id'):
+    row = query(f'SELECT {fields} FROM comandes WHERE sessio_id=? LIMIT 1', [sessio_id], one=True)
+    if not _can_access_comanda(row):
+        return None
+    return row
+
+
+def _seed_admin_if_configured(db):
+    admin_user = os.environ.get('ADMIN_USERNAME', '').strip()
+    admin_pass = os.environ.get('ADMIN_PASSWORD', '').strip()
+    admin_name = os.environ.get('ADMIN_NAME', 'Administrador').strip() or 'Administrador'
+
+    if not admin_user or not admin_pass:
+        print('Admin bootstrap skipped: set ADMIN_USERNAME and ADMIN_PASSWORD to create the first admin.')
+        return
+
+    if USE_PG:
+        cur = db.cursor()
+        cur.execute('SELECT id FROM usuaris WHERE username=%s', [admin_user])
+        if not cur.fetchone():
+            cur.execute(
+                'INSERT INTO usuaris (username,password,nom,is_admin) VALUES (%s,%s,%s,%s)',
+                [admin_user, hash_pw(admin_pass), admin_name, 1]
+            )
+            db.commit()
+            print(f"Admin creat des de variables d'entorn: usuari={admin_user}")
+    else:
+        cur = db.execute('SELECT id FROM usuaris WHERE username=?', [admin_user])
+        if not cur.fetchone():
+            db.execute(
+                'INSERT INTO usuaris (username,password,nom,is_admin) VALUES (?,?,?,1)',
+                [admin_user, hash_pw(admin_pass), admin_name]
+            )
+            db.commit()
+            print(f"Admin creat des de variables d'entorn: usuari={admin_user}")
+
 # ── Auth decorators ───────────────────────────────────────────────────────
 def login_required(f):
     @wraps(f)
@@ -346,9 +398,9 @@ def logo_preview():
     return '', 404
 
 @app.route('/api/empresa', methods=['POST'])
-@login_required
+@admin_required
 def api_empresa():
-    d = request.json
+    d = request.json or {}
     nom    = d.get('nom','')
     adreca = d.get('adreca','')
     tel    = d.get('tel','')
@@ -402,20 +454,29 @@ def guardar():
 @app.route('/sessio/<sessio_id>/pagat', methods=['POST'])
 @login_required
 def marcar_pagat(sessio_id):
-    pagat = request.json.get('pagat', 1)
+    c = _get_comanda_by_sessio_for_session(sessio_id)
+    if not c:
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
+    pagat = (request.json or {}).get('pagat', 1)
     execute('UPDATE comandes SET pagat=? WHERE sessio_id=?', [pagat, sessio_id])
     return jsonify({'ok': True})
 
 @app.route('/sessio/<sessio_id>/entregat', methods=['POST'])
 @login_required
 def marcar_entregat(sessio_id):
-    entregat = request.json.get('entregat', 1)
+    c = _get_comanda_by_sessio_for_session(sessio_id)
+    if not c:
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
+    entregat = (request.json or {}).get('entregat', 1)
     execute('UPDATE comandes SET entregat=? WHERE sessio_id=?', [entregat, sessio_id])
     return jsonify({'ok': True})
 
 @app.route('/comanda/<int:cid>/liquidar', methods=['POST'])
 @login_required
 def liquidar_comanda(cid):
+    c = _get_comanda_for_session(cid, fields='id, user_id')
+    if not c:
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
     execute('UPDATE comandes SET entrega=preu_final, pendent=0, pagat=1 WHERE id=?', [cid])
     return jsonify({'ok': True})
 
@@ -435,10 +496,8 @@ def eliminar_tot():
 @app.route('/comanda/<int:cid>/eliminar', methods=['POST'])
 @login_required
 def eliminar_comanda(cid):
-    c = query('SELECT user_id FROM comandes WHERE id=?', [cid], one=True)
+    c = _get_comanda_for_session(cid, fields='id, user_id')
     if not c:
-        return jsonify({'ok': False, 'error': 'No trobada'})
-    if not session.get('is_admin') and c['user_id'] != session['user_id']:
         return jsonify({'ok': False, 'error': 'No autoritzat'})
     execute('DELETE FROM comandes WHERE id=?', [cid])
     return jsonify({'ok': True})
@@ -446,12 +505,10 @@ def eliminar_comanda(cid):
 @app.route('/comanda/<int:cid>/acceptar', methods=['POST'])
 @login_required
 def acceptar_comanda(cid):
-    c = query('SELECT user_id FROM comandes WHERE id=?', [cid], one=True)
+    c = _get_comanda_for_session(cid, fields='id, user_id')
     if not c:
-        return jsonify({'ok': False})
-    if not session.get('is_admin') and c['user_id'] != session['user_id']:
-        return jsonify({'ok': False})
-    estat = request.json.get('estat', 'acceptat')
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
+    estat = (request.json or {}).get('estat', 'acceptat')
     execute('UPDATE comandes SET observacions = CASE WHEN observacions IS NULL OR observacions=\'\' THEN ? ELSE observacions || \' | \' || ? END WHERE id=?',
             [f'[{estat.upper()}]', f'[{estat.upper()}]', cid])
     return jsonify({'ok': True})
@@ -1303,12 +1360,12 @@ def api_closest():
 @app.route('/mailto-data', methods=['POST'])
 @login_required
 def mailto_data():
-    d = request.json
+    d = request.json or {}
     cid = d.get('comanda_id')
     nom_comerc = d.get('nom_comerc', session.get('nom',''))
-    c = query('SELECT * FROM comandes WHERE id=?', [cid], one=True)
+    c = _get_comanda_for_session(cid)
     if not c:
-        return jsonify({'ok': False})
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
     lang = (c.get('lang') or 'ca').lower()
     MAILTO_T = {
         'ca': {
@@ -1409,13 +1466,13 @@ def enviar_email():
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
-    d = request.json
+    d = request.json or {}
     cid = d.get('comanda_id')
     nom_comerc = d.get('nom_comerc', session.get('nom',''))
     nota = d.get('nota','')
-    c = query('SELECT * FROM comandes WHERE id=?', [cid], one=True)
+    c = _get_comanda_for_session(cid)
     if not c:
-        return jsonify({'ok': False, 'error': 'Comanda no trobada'})
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
     cfg = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
     gmail_user = cfg.get('gmail_user','')
     gmail_pass = cfg.get('gmail_pass','')
@@ -1526,20 +1583,16 @@ def init_db():
             print("DDL done, checking admin...")
             # Now use normal connection for DML
             cur = db.cursor()
-            cur.execute("SELECT id FROM usuaris WHERE username=%s", ['admin'])
-            if not cur.fetchone():
-                cur.execute("INSERT INTO usuaris (username,password,nom,is_admin) VALUES (%s,%s,%s,%s)",
-                           ['admin', hash_pw('admin123'), 'Administrador', 1])
-                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                           ['marge_defecte','60'])
-                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                           ['empresa_nom','Reus Revela'])
-                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                           ['empresa_adreca',''])
-                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                           ['empresa_tel',''])
-                db.commit()
-                print("Admin creat: usuari=admin / contrasenya=admin123")
+            cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                       ['marge_defecte','60'])
+            cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                       ['empresa_nom','Reus Revela'])
+            cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                       ['empresa_adreca',''])
+            cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                       ['empresa_tel',''])
+            db.commit()
+            _seed_admin_if_configured(db)
         else:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS usuaris (
@@ -1587,13 +1640,12 @@ def init_db():
                 );
             ''')
             db.commit()
-            admin = db.execute("SELECT id FROM usuaris WHERE username='admin'").fetchone()
-            if not admin:
-                db.execute('INSERT INTO usuaris (username,password,nom,is_admin) VALUES (?,?,?,1)',
-                           ['admin', hash_pw('admin123'), 'Administrador'])
-                db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
-                db.commit()
-                print("Admin creat: usuari=admin / contrasenya=admin123")
+            db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
+            db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_nom','Reus Revela')")
+            db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_adreca','')")
+            db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_tel','')")
+            db.commit()
+            _seed_admin_if_configured(db)
 
 # Init DB via before_first_request equivalent
 _db_initialized = False
@@ -1602,7 +1654,6 @@ _db_initialized = False
 def ensure_db():
     global _db_initialized
     if not _db_initialized:
-        _db_initialized = True
         try:
             init_db()
             # Ensure config rows exist
@@ -1611,6 +1662,7 @@ def ensure_db():
                     execute('INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)', [clau, valor])
                 except Exception as _ce:
                     pass  # Row may already exist
+            _db_initialized = True
             print("init_db OK")
         except Exception as e:
             import traceback

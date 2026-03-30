@@ -137,9 +137,13 @@ function anarPas(n){
 function pas1(){
   var nom=document.getElementById('s-nom').value.trim();
   if(!nom){alert('Introdueix el nom del teu comerç.');return;}
+  {% if session.get('is_admin') %}
   fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({nom:nom,adreca:document.getElementById('s-adreca').value,tel:document.getElementById('s-tel').value})
   }).then(r=>r.json()).then(function(d){if(d.ok) anarPas(2);});
+  {% else %}
+  anarPas(2);
+  {% endif %}
 }
 
 function previewLogo(){
