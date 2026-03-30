@@ -16,17 +16,20 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 def _assert_no_conflict_markers():
-    """Fail fast if merge conflict markers are present in critical files."""
+    """Fail fast if unresolved merge conflict markers are present in critical files."""
     base = os.path.dirname(__file__)
     files = ['app.py', os.path.join('templates', 'calculadora.html')]
-    marks = ('<<<<<<<', '=======', '>>>>>>>')
+
     for rel in files:
         path = os.path.join(base, rel)
         try:
             with open(path, 'r', encoding='utf-8') as f:
-                txt = f.read()
-            if any(m in txt for m in marks):
-                raise RuntimeError(f"Merge conflict markers detected in {rel}.")
+                for line in f:
+                    # Real git conflict markers start at column 0 with 7 chars.
+                    if line.startswith('<<<<<<< ') or line.startswith('>>>>>>> '):
+                        raise RuntimeError(f"Merge conflict markers detected in {rel}.")
+                    if line.startswith('=======') and line.strip() == '=======':
+                        raise RuntimeError(f"Merge conflict markers detected in {rel}.")
         except FileNotFoundError:
             continue
 
