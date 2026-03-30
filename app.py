@@ -19,19 +19,25 @@ def _assert_no_conflict_markers():
     """Fail fast if unresolved merge conflict markers are present in critical files."""
     base = os.path.dirname(__file__)
     files = ['app.py', os.path.join('templates', 'calculadora.html')]
+    found = []
 
     for rel in files:
         path = os.path.join(base, rel)
         try:
             with open(path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    # Real git conflict markers start at column 0 with 7 chars.
+                for n, line in enumerate(f, start=1):
+                    stripped = line.strip()
+                    # Real git conflict markers start at column 0.
                     if line.startswith('<<<<<<< ') or line.startswith('>>>>>>> '):
-                        raise RuntimeError(f"Merge conflict markers detected in {rel}.")
-                    if line.startswith('=======') and line.strip() == '=======':
-                        raise RuntimeError(f"Merge conflict markers detected in {rel}.")
+                        found.append(f"{rel}:{n}: {stripped}")
+                    elif line.startswith('=======') and stripped == '=======':
+                        found.append(f"{rel}:{n}: =======")
         except FileNotFoundError:
             continue
+
+    if found:
+        details = "\n".join(found)
+        raise RuntimeError(f"Merge conflict markers detected:\n{details}")
 
 _assert_no_conflict_markers()
 
