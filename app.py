@@ -15,29 +15,40 @@ import io
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
+def _iter_conflict_check_files(base):
+    """Yield text/source files where merge markers should never appear."""
+    exts = {'.py', '.html', '.css', '.js', '.md', '.txt', '.toml', '.yml', '.yaml'}
+    skip_dirs = {'.git', '__pycache__', '.pytest_cache', '.mypy_cache', '.venv', 'venv'}
+
+    for root, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        for name in files:
+            if os.path.splitext(name)[1].lower() in exts:
+                yield os.path.join(root, name)
+
+
 def _assert_no_conflict_markers():
-    """Fail fast if unresolved merge conflict markers are present in critical files."""
+    """Fail fast if unresolved merge conflict markers are present in source files."""
     base = os.path.dirname(__file__)
-    files = ['app.py', os.path.join('templates', 'calculadora.html')]
     found = []
 
-    for rel in files:
-        path = os.path.join(base, rel)
+    for path in _iter_conflict_check_files(base):
+        rel = os.path.relpath(path, base)
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 for n, line in enumerate(f, start=1):
                     stripped = line.strip()
-                    # Real git conflict markers start at column 0.
                     if line.startswith('<<<<<<< ') or line.startswith('>>>>>>> '):
                         found.append(f"{rel}:{n}: {stripped}")
                     elif line.startswith('=======') and stripped == '=======':
                         found.append(f"{rel}:{n}: =======")
-        except FileNotFoundError:
+        except (FileNotFoundError, UnicodeDecodeError):
             continue
 
     if found:
-        details = "\n".join(found)
-        raise RuntimeError(f"Merge conflict markers detected:\n{details}")
+        details = "\n".join(found[:20])
+        more = f"\n... and {len(found)-20} more" if len(found) > 20 else ""
+        raise RuntimeError(f"Merge conflict markers detected:\n{details}{more}")
 
 _assert_no_conflict_markers()
 
