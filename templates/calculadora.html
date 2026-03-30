@@ -431,6 +431,7 @@ var marge = 60, marge_impressio = 0, rmode = 'pvp', uid = null;
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
+var _filterTimer = {pre:null, marc:null};
 
 function setLang(lang){
   _lang = lang;
