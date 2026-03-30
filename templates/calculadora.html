@@ -1372,14 +1372,14 @@ function buildWAtext_intern(){
     '*'+t.waInternTitol+'*','',
     t.numPres+': *' + num + '*',
     t.client+': ' + client,'',
-    'MARC: ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' (pre-marc)':''),
-    'Mides: ' + w + ' x ' + h + ' cm',
+    t.marc.toUpperCase()+': ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' ('+t.premarcLabel+')':''),
+    t.mides+': ' + w + ' x ' + h + ' cm',
   ];
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
   if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
-  if(chkImp)       lines.push(t.impressio+': SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
-  if(chkImp)       lines.push('Impressio fotografica: SÍ (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'format mes proper') + ')');
+  if(chkImp)       lines.push(t.impressio+': '+t.yes+' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(chkImp)       lines.push(t.printIncluded + ' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
   lines.push('');
   lines.push(t.cost+': *' + cTot + ' EUR*');
   lines.push('');
