@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
@@ -144,10 +144,10 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     <a href="/">Portal</a>
     <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
-    <a href="/cataleg">CatÃ leg</a>
+    <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
     <a href="/ajuda">Ajuda</a>
-    {% if session.is_admin %}<a href="/admin">Admin</a><a href="/admin/cataleg">Cataleg admin</a>{% endif %}
+    {% if session.is_admin %}<a href="/admin">Admin</a><a href="/admin/cataleg">Cat&agrave;leg admin</a>{% endif %}
     <a href="/logout">Sortir</a>
   </div>
 </nav>
@@ -224,8 +224,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       <div class="card">
         <div class="card-t">Mides</div>
         <div class="f2">
-          <div class="f"><label>Amplada foto (cm)</label><input type="number" id="amplada" value="0" min="0" oninput="recalcMides()"></div>
-          <div class="f"><label>Alçada foto (cm)</label><input type="number" id="alcada" value="0" min="0" oninput="recalcMides()"></div>
+          <div class="f"><label>Amplada foto (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
+          <div class="f"><label>Alçada foto (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
         </div>
 
 
@@ -1204,8 +1204,8 @@ function capturaEstat(){
 function restauraEstat(e){
   document.getElementById('client_nom').value=e.client_nom||'';
   document.getElementById('client_tel').value=e.client_tel||'';
-  document.getElementById('amplada').value=e.amplada||30;
-  document.getElementById('alcada').value=e.alcada||40;
+  document.getElementById('amplada').value=(e.amplada !== undefined && e.amplada !== null && e.amplada !== 0) ? e.amplada : '';
+  document.getElementById('alcada').value=(e.alcada !== undefined && e.alcada !== null && e.alcada !== 0) ? e.alcada : '';
   document.getElementById('cm-passpartu').value=e.cm_passpartu||4;
   document.getElementById('descompte').value=e.descompte||0;
   document.getElementById('quantitat').value=e.quantitat||1;
@@ -1305,8 +1305,8 @@ function pdfComparativa(){
 // ── Netejar ───────────────────────────────────────────────────────────────
 function netejar(){
   ['client_nom','client_tel','pre_marc','marc_principal','observacions'].forEach(function(id){document.getElementById(id).value='';});
-  document.getElementById('amplada').value=0;
-  document.getElementById('alcada').value=0;
+  document.getElementById('amplada').value='';
+  document.getElementById('alcada').value='';
   ['descompte','entrega'].forEach(function(id){document.getElementById(id).value=0;});
   document.getElementById('quantitat').value=1;
   PREUS={pre:0,marc:0,muntatge:0,proteccio:0,interior:0,impressio:0};

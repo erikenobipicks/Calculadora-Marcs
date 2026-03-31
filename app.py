@@ -1,4 +1,4 @@
-import hashlib, secrets, os, json
+import hashlib, secrets, os, json, unicodedata
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g)
 from datetime import datetime
@@ -16,6 +16,37 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
+MOLDURA_COLOR_FILTERS = [
+    ('daurat', 'Daurades'),
+    ('plata', 'Plata'),
+    ('negre', 'Negres'),
+    ('blanc', 'Blanques'),
+    ('marro', 'Marrons'),
+    ('fusta', 'Fusta / natural'),
+    ('gris', 'Grises'),
+    ('blau', 'Blaves'),
+    ('verd', 'Verdes'),
+    ('vermell', 'Vermelles'),
+]
+MOLDURA_COLOR_KEYWORDS = {
+    'daurat': ('daurat', 'daurada', 'dorat', 'dorada', 'or ', ' oro', 'oro ', ' orro', 'or vell'),
+    'plata': ('plata', 'argent', 'silver'),
+    'negre': ('negre', 'negra', 'negro', 'mate'),
+    'blanc': ('blanc', 'blanca', 'blanco', 'blanca'),
+    'marro': ('marron', 'marró', 'caoba', 'wengé', 'wenge', 'noguera'),
+    'fusta': ('fusta', 'natural', 'pi', 'pino', 'roure', 'roble', 'bambu', 'canya', 'fresno'),
+    'gris': ('gris', 'antracita'),
+    'blau': ('blau', 'azul', 'marino'),
+    'verd': ('verd', 'verde', 'oliva'),
+    'vermell': ('vermell', 'rojo', 'granate', 'burdeos'),
+}
+MOLDURA_COLOR_KEYWORDS['marro'] = ('marro', 'marron', 'caoba', 'wenge', 'noguera')
+MOLDURA_GRUIX_FILTERS = [
+    ('fina', 'Fines fins a 2 cm'),
+    ('mitjana', 'Mitjanes de 2 a 4 cm'),
+    ('gruixuda', 'Gruixudes de 4 a 6 cm'),
+    ('extra', 'Extra de mes de 6 cm'),
+]
 
 
 def _safe_moldura_ref(ref):
@@ -71,6 +102,37 @@ def _serialize_moldura(row):
 
 def _serialize_moldures(rows):
     return [_serialize_moldura(row) for row in (rows or [])]
+
+
+def _normalize_text(value):
+    text = str(value or '').strip().lower()
+    return ''.join(
+        ch for ch in unicodedata.normalize('NFKD', text)
+        if not unicodedata.combining(ch)
+    )
+
+
+def _matches_moldura_color(desc, color):
+    if not color:
+        return True
+    keywords = MOLDURA_COLOR_KEYWORDS.get(color, ())
+    text = ' ' + _normalize_text(desc) + ' '
+    return any(keyword in text for keyword in keywords)
+
+
+def _matches_moldura_gruix(gruix, bucket):
+    value = float(gruix or 0)
+    if not bucket:
+        return True
+    if bucket == 'fina':
+        return value <= 2
+    if bucket == 'mitjana':
+        return 2 < value <= 4
+    if bucket == 'gruixuda':
+        return 4 < value <= 6
+    if bucket == 'extra':
+        return value > 6
+    return True
 
 
 def _save_moldura_photo(upload, referencia):
@@ -705,6 +767,8 @@ def acceptar_comanda(cid):
 @login_required
 def cataleg():
     q = request.args.get('q', '').strip()
+    color = request.args.get('color', '').strip().lower()
+    gruix = request.args.get('gruix', '').strip().lower()
     sql = """SELECT referencia, gruix, descripcio, foto
              FROM moldures"""
     args = []
@@ -714,9 +778,17 @@ def cataleg():
         args = [f'%{q.lower()}%', f'%{q.lower()}%']
     sql += " ORDER BY referencia"
     moldures = _serialize_moldures(query(sql, args))
+    moldures = [
+        m for m in moldures
+        if _matches_moldura_color(m.get('descripcio', ''), color)
+        and _matches_moldura_gruix(m.get('gruix', 0), gruix)
+    ]
     total = query("SELECT COUNT(*) as n FROM moldures", one=True)
     return render_template('cataleg.html', moldures=moldures, q=q,
-                           total=total['n'] if total else 0)
+                           total=total['n'] if total else 0,
+                           color=color, gruix=gruix,
+                           color_filters=MOLDURA_COLOR_FILTERS,
+                           gruix_filters=MOLDURA_GRUIX_FILTERS)
 
 @app.route('/admin/cataleg')
 @admin_required
