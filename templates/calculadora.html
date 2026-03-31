@@ -186,6 +186,30 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
       <div class="card">
         <div class="card-t">Motllures</div>
+        <div class="f2">
+          <div class="f">
+            <label>Filtre per color</label>
+            <select id="filter-color" onchange="applyMolduraFilters()">
+              <option value="">Tots els colors</option>
+              {% for value, label in color_filters %}
+              <option value="{{ value }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="f">
+            <label>Filtre per grosor</label>
+            <select id="filter-gruix" onchange="applyMolduraFilters()">
+              <option value="">Tots els grossors</option>
+              {% for value, label in gruix_filters %}
+              <option value="{{ value }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;margin:-.15rem 0 .85rem;flex-wrap:wrap">
+          <div class="desc" id="moldura-filter-meta" style="margin-top:0">Mostrant tot el cataleg de motllures.</div>
+          <button type="button" class="btn btn-o" style="padding:7px 12px;font-size:12px" onclick="resetMolduraFilters()">Netejar filtres</button>
+        </div>
         <div class="f">
           <label>Pre-Marc <span style="color:var(--hint);font-weight:400">(marc interior opcional, segon marc)</span></label>
           <div class="ss" id="ss-pre">
@@ -427,6 +451,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
 // ── Variables globals ─────────────────────────────────────────────────────
 var REFS    = {pre:[], marc:[]};
+var MOLDURA_OPTIONS = [];
+var MOLDURA_FILTERS = {color:'', gruix:''};
 var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
 var GRUIX   = {pre:0, marc:0};
 var CLOSEST = {};
@@ -691,11 +717,88 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
   calcular();
 });
 
-// Load moldura refs once, shared for both pre and marc
-fetch('/api/refs?tipus=moldura').then(function(r){return r.json();}).then(function(refs){
-  REFS.pre = refs;
-  REFS.marc = refs;
+// Load moldura options once, then derive the filtered refs for both selectors
+fetch('/api/moldura-options').then(function(r){return r.json();}).then(function(items){
+  MOLDURA_OPTIONS = items || [];
+  REFS.pre = MOLDURA_OPTIONS.map(function(item){ return item.referencia; });
+  REFS.marc = REFS.pre.slice();
+  updateMolduraFilterMeta();
 });
+
+function normalizeMolduraText(value){
+  return (value || '')
+    .toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function matchesMolduraColor(desc, color){
+  if(!color) return true;
+  var keywords = {
+    daurat:['daurat','daurada','dorat','dorada','or ',' oro','oro ','or vell'],
+    plata:['plata','argent','silver'],
+    negre:['negre','negra','negro','mate'],
+    blanc:['blanc','blanca','blanco'],
+    marro:['marro','marron','caoba','wenge','noguera'],
+    fusta:['fusta','natural','pi','pino','roure','roble','bambu','canya','fresno'],
+    gris:['gris','antracita'],
+    blau:['blau','azul','marino'],
+    verd:['verd','verde','oliva'],
+    vermell:['vermell','rojo','granate','burdeos']
+  };
+  var text = ' ' + normalizeMolduraText(desc) + ' ';
+  return (keywords[color] || []).some(function(keyword){ return text.includes(keyword); });
+}
+
+function matchesMolduraGruix(gruix, bucket){
+  var value = parseFloat(gruix || 0);
+  if(!bucket) return true;
+  if(bucket === 'fina') return value <= 2;
+  if(bucket === 'mitjana') return value > 2 && value <= 4;
+  if(bucket === 'gruixuda') return value > 4 && value <= 6;
+  if(bucket === 'extra') return value > 6;
+  return true;
+}
+
+function getFilteredMolduraRefs(queryText){
+  var q = normalizeMolduraText(queryText);
+  return MOLDURA_OPTIONS.filter(function(item){
+    var ref = item.referencia || '';
+    var desc = item.descripcio || '';
+    return matchesMolduraColor(desc, MOLDURA_FILTERS.color)
+      && matchesMolduraGruix(item.gruix, MOLDURA_FILTERS.gruix)
+      && (!q || normalizeMolduraText(ref).includes(q) || normalizeMolduraText(desc).includes(q));
+  }).map(function(item){
+    return item.referencia;
+  });
+}
+
+function updateMolduraFilterMeta(){
+  var refs = getFilteredMolduraRefs('');
+  var colorSel = document.getElementById('filter-color');
+  var gruixSel = document.getElementById('filter-gruix');
+  var parts = [refs.length + ' motllures visibles'];
+  if(MOLDURA_FILTERS.color) parts.push('color: ' + colorSel.options[colorSel.selectedIndex].text);
+  if(MOLDURA_FILTERS.gruix) parts.push('grosor: ' + gruixSel.options[gruixSel.selectedIndex].text);
+  document.getElementById('moldura-filter-meta').textContent = parts.join(' · ');
+}
+
+function applyMolduraFilters(){
+  MOLDURA_FILTERS.color = document.getElementById('filter-color').value || '';
+  MOLDURA_FILTERS.gruix = document.getElementById('filter-gruix').value || '';
+  updateMolduraFilterMeta();
+  ['pre','marc'].forEach(function(type){
+    var list = document.getElementById('list-' + type);
+    if(list && list.classList.contains('open')) filterSS(type);
+  });
+}
+
+function resetMolduraFilters(){
+  document.getElementById('filter-color').value = '';
+  document.getElementById('filter-gruix').value = '';
+  applyMolduraFilters();
+}
 
 // ── Preus als botons ──────────────────────────────────────────────────────
 function updateBtnPreus(){
@@ -719,10 +822,9 @@ function filterSS(t){
   clearTimeout(_filterTimer[t]);
   _filterTimer[t] = setTimeout(function(){
     var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
-    var q  = document.getElementById(id).value.toLowerCase().trim();
+    var q  = document.getElementById(id).value.trim();
     var list = document.getElementById('list-'+t);
-    var refs = REFS[t]||[];
-    var filtered = q==='' ? refs.slice(0,40) : refs.filter(function(r){return r.toLowerCase().includes(q);}).slice(0,40);
+    var filtered = getFilteredMolduraRefs(q).slice(0,40);
     list.innerHTML = filtered.length===0
       ? '<div class="ss-item empty">Cap resultat</div>'
       : filtered.map(function(r){return '<div class="ss-item" onmousedown="selectRef(\''+t+'\',\''+r+'\')">'+r+'</div>';}).join('');
@@ -738,7 +840,10 @@ function closeSS(t){
       var val = document.getElementById(id).value.trim();
       if(val && val.length>=3 && val!==document.getElementById(id).dataset.lastLooked){
         var upper = val.toUpperCase();
-        var match = REFS[t].find(function(r){return r.toUpperCase()===upper;});
+        var currentRefs = getFilteredMolduraRefs('');
+        var allRefs = REFS[t] || [];
+        var match = currentRefs.find(function(r){return r.toUpperCase()===upper;})
+          || allRefs.find(function(r){return r.toUpperCase()===upper;});
         var ref = match || val;
         document.getElementById(id).dataset.lastLooked = ref;
         if(match) document.getElementById(id).value = match;
@@ -1009,7 +1114,8 @@ function onMarcInput(){
   clearTimeout(_marcLookupTimer);
   _marcLookupTimer = setTimeout(function(){
     var upper = val.toUpperCase();
-    var match = REFS.marc.find(function(r){ return r.toUpperCase() === upper; });
+    var match = getFilteredMolduraRefs('').find(function(r){ return r.toUpperCase() === upper; })
+      || REFS.marc.find(function(r){ return r.toUpperCase() === upper; });
     if(match){
       // Exact match found in catalogue
       if(match !== document.getElementById('marc_principal').dataset.lastLooked){
