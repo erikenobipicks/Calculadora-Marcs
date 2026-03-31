@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu - Cataleg de motllures</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--r:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px}
+.brand a{color:inherit;text-decoration:none}
+.nav-r{display:flex;align-items:center;gap:1.25rem}
+.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}
+.nav-r a:hover{color:#fff}
+.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:3px 11px;border-radius:20px;font-weight:500}
+.wrap{max-width:1180px;margin:0 auto;padding:1.75rem 1.25rem 3rem}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem}
+.page-head h1{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;letter-spacing:-.4px}
+.page-head p{font-size:13px;color:var(--muted);margin-top:.35rem}
+.search-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.1rem;margin-bottom:1.25rem}
+.search-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+.search-row input{flex:1;min-width:240px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none}
+.search-row input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;border:none;cursor:pointer}
+.btn-g{background:var(--green);color:#fff}
+.btn-g:hover{background:#155c3a}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-o:hover{background:#F1EFEA}
+.meta{font-size:12px;color:var(--hint);margin-top:.75rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.foto{height:180px;background:#F1EFEA;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center}
+.foto img{max-width:100%;max-height:100%;object-fit:contain}
+.no-foto{font-size:12px;color:var(--hint);text-align:center;line-height:1.6;padding:1rem}
+.body{padding:1rem 1rem 1.1rem}
+.ref{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px}
+.chip{display:inline-block;margin-top:.55rem;padding:4px 10px;border-radius:999px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+.desc{margin-top:.75rem;font-size:13px;color:var(--muted);line-height:1.65;min-height:3.2em}
+.empty{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:2.5rem 1.5rem;text-align:center;color:var(--hint)}
+@media(max-width:700px){.wrap{padding:1.25rem 1rem 2rem}.page-head h1{font-size:26px}.foto{height:160px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand"><a href="/">{{ session.get("empresa_nom", "Calculadora") }}</a></div>
+  <div class="nav-r">
+    <span class="nav-u">{{ session.nom }}</span>
+    <a href="/">Portal</a>
+    <a href="/calculadora">Calculadora</a>
+    <a href="/historial">Historial</a>
+    <a href="/cataleg">Cataleg</a>
+    {% if session.is_admin %}<a href="/admin">Admin</a><a href="/admin/cataleg">Cataleg admin</a>{% endif %}
+    <a href="/logout">Sortir</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>Cataleg de motllures</h1>
+      <p>Consulta les motllures disponibles amb una vista simplificada per a usuaris professionals.</p>
+    </div>
+  </div>
+
+  <form method="get" class="search-card">
+    <div class="search-row">
+      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per referencia o descripcio...">
+      <button type="submit" class="btn btn-g">Cercar</button>
+      {% if q %}<a href="/cataleg" class="btn btn-o">Netejar</a>{% endif %}
+    </div>
+    <div class="meta">{{ moldures|length }} resultats visibles de {{ total }} motllures</div>
+  </form>
+
+  {% if moldures %}
+  <div class="grid">
+    {% for m in moldures %}
+    <article class="card">
+      <div class="foto">
+        {% if m.foto %}
+        <img src="{{ m.foto }}" alt="{{ m.referencia }}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+        <div class="no-foto" style="display:none">Sense imatge disponible</div>
+        {% else %}
+        <div class="no-foto">Sense imatge disponible</div>
+        {% endif %}
+      </div>
+      <div class="body">
+        <div class="ref">{{ m.referencia }}</div>
+        <div class="chip">Grosor {{ '%.1f'|format(m.gruix or 0) }} cm</div>
+        <div class="desc">{{ m.descripcio or 'Sense descripcio' }}</div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    {% if q %}
+    No s'han trobat motllures per a "{{ q }}".
+    {% else %}
+    No hi ha motllures disponibles al cataleg.
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

@@ -701,6 +701,23 @@ def acceptar_comanda(cid):
 
 
 # ── Catàleg de motllures ──────────────────────────────────────────────────
+@app.route('/cataleg')
+@login_required
+def cataleg():
+    q = request.args.get('q', '').strip()
+    sql = """SELECT referencia, gruix, descripcio, foto
+             FROM moldures"""
+    args = []
+    if q:
+        sql += """ WHERE LOWER(referencia) LIKE ?
+                   OR LOWER(COALESCE(descripcio, '')) LIKE ?"""
+        args = [f'%{q.lower()}%', f'%{q.lower()}%']
+    sql += " ORDER BY referencia"
+    moldures = _serialize_moldures(query(sql, args))
+    total = query("SELECT COUNT(*) as n FROM moldures", one=True)
+    return render_template('cataleg.html', moldures=moldures, q=q,
+                           total=total['n'] if total else 0)
+
 @app.route('/admin/cataleg')
 @admin_required
 def admin_cataleg():
