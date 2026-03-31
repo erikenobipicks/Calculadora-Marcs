@@ -35,7 +35,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .foto{height:180px;background:#F1EFEA;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;cursor:zoom-in}
 .foto img{max-width:100%;max-height:100%;object-fit:contain}
 .no-foto{font-size:12px;color:var(--hint);text-align:center;line-height:1.6;padding:1rem}
-.zoom-panel{position:fixed;width:220px;height:220px;border-radius:16px;border:1px solid var(--border);background-color:#fff;background-repeat:no-repeat;box-shadow:0 18px 40px rgba(28,27,24,.18);display:none;pointer-events:none;z-index:1200}
+.zoom-panel{position:fixed;width:190px;height:190px;border-radius:16px;border:1px solid var(--border);background-color:#fff;background-repeat:no-repeat;box-shadow:0 18px 40px rgba(28,27,24,.18);display:none;pointer-events:none;z-index:1200}
 .zoom-panel.open{display:block}
 .zoom-panel::before{content:'Zoom';position:absolute;left:10px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(28,27,24,.78);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 .body{padding:1rem 1rem 1.1rem}
@@ -71,7 +71,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
   <form method="get" class="search-card">
     <div class="search-row">
-      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per referencia o descripcio...">
+      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per refer&egrave;ncia o descripci&oacute;...">
       <select name="color">
         <option value="">Tots els colors</option>
         {% for value, label in color_filters %}
@@ -79,7 +79,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         {% endfor %}
       </select>
       <select name="gruix">
-        <option value="">Tots els grossors</option>
+        <option value="">Tots els gruixos</option>
         {% for value, label in gruix_filters %}
         <option value="{{ value }}" {% if gruix == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
@@ -105,12 +105,12 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       <div class="body">
         <div class="ref">{{ m.referencia }}</div>
         <div>
-          <span class="chip">Grosor {{ '%.1f'|format(m.gruix or 0) }} cm</span>
+          <span class="chip">Gruix {{ '%.1f'|format(m.gruix or 0) }} cm</span>
           {% if color %}
           <span class="chip chip-soft">{{ color }}</span>
           {% endif %}
         </div>
-        <div class="desc">{{ m.descripcio or 'Sense descripcio' }}</div>
+        <div class="desc">{{ m.descripcio or 'Sense descripci&oacute;' }}</div>
       </div>
     </article>
     {% endfor %}
@@ -120,7 +120,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     {% if q %}
     No s'han trobat motllures per a "{{ q }}".
     {% else %}
-    No hi ha motllures disponibles al cataleg.
+    No hi ha motllures disponibles al cat&agrave;leg.
     {% endif %}
   </div>
   {% endif %}
@@ -139,10 +139,10 @@ function moveZoomPanel(ev, source){
   var x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(rect.width, 1)));
   var y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / Math.max(rect.height, 1)));
   zoomPanel.style.backgroundImage = 'url("' + img.src + '")';
-  zoomPanel.style.backgroundSize = '240% 240%';
+  zoomPanel.style.backgroundSize = '180% 180%';
   zoomPanel.style.backgroundPosition = (x * 100) + '% ' + (y * 100) + '%';
-  zoomPanel.style.left = Math.min(window.innerWidth - 236, ev.clientX + 22) + 'px';
-  zoomPanel.style.top = Math.min(window.innerHeight - 236, ev.clientY + 22) + 'px';
+  zoomPanel.style.left = Math.min(window.innerWidth - 206, ev.clientX + 18) + 'px';
+  zoomPanel.style.top = Math.min(window.innerHeight - 206, ev.clientY + 18) + 'px';
 }
 document.querySelectorAll('.js-moldura-zoom').forEach(function(box){
   box.addEventListener('mouseenter', function(ev){
