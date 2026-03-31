@@ -14,6 +14,14 @@ python importar_excel.py Marcs_Objectiu_2026.xlsx
 python importar_impressio.py
 ```
 
+## Imatges de motllures
+- Pots indicar una URL d'imatge des de l'admin del cataleg.
+- També pots pujar un fitxer directament des de la fitxa de la motllura.
+- Si copies una imatge dins `static/fotos/` amb el nom de la referencia, la calculadora la detecta automaticament.
+  Exemple: `static/fotos/m0970.jpg`
+
+L'importacio des de l'Excel conserva la foto ja associada a cada motllura.
+
 ## Variables d'entorn
 - `SECRET_KEY` - clau secreta Flask obligatoria en produccio
 - `PORT` - port de desplegament
