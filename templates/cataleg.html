@@ -32,9 +32,12 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .meta{font-size:12px;color:var(--hint);margin-top:.75rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-.foto{height:180px;background:#F1EFEA;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center}
+.foto{height:180px;background:#F1EFEA;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;cursor:zoom-in}
 .foto img{max-width:100%;max-height:100%;object-fit:contain}
 .no-foto{font-size:12px;color:var(--hint);text-align:center;line-height:1.6;padding:1rem}
+.zoom-panel{position:fixed;width:220px;height:220px;border-radius:16px;border:1px solid var(--border);background-color:#fff;background-repeat:no-repeat;box-shadow:0 18px 40px rgba(28,27,24,.18);display:none;pointer-events:none;z-index:1200}
+.zoom-panel.open{display:block}
+.zoom-panel::before{content:'Zoom';position:absolute;left:10px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(28,27,24,.78);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 .body{padding:1rem 1rem 1.1rem}
 .ref{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px}
 .chip{display:inline-block;margin-top:.55rem;padding:4px 10px;border-radius:999px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
@@ -91,7 +94,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   <div class="grid">
     {% for m in moldures %}
     <article class="card">
-      <div class="foto">
+      <div class="foto js-moldura-zoom">
         {% if m.foto %}
         <img src="{{ m.foto }}" alt="{{ m.referencia }}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
         <div class="no-foto" style="display:none">Sense imatge disponible</div>
@@ -122,5 +125,35 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   </div>
   {% endif %}
 </div>
+<div class="zoom-panel" id="zoom-panel"></div>
+<script>
+var zoomPanel = document.getElementById('zoom-panel');
+function moveZoomPanel(ev, source){
+  if(!zoomPanel || !source) return;
+  var img = source.querySelector('img');
+  if(!img || !img.getAttribute('src') || img.style.display === 'none'){
+    zoomPanel.classList.remove('open');
+    return;
+  }
+  var rect = source.getBoundingClientRect();
+  var x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(rect.width, 1)));
+  var y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / Math.max(rect.height, 1)));
+  zoomPanel.style.backgroundImage = 'url("' + img.src + '")';
+  zoomPanel.style.backgroundSize = '240% 240%';
+  zoomPanel.style.backgroundPosition = (x * 100) + '% ' + (y * 100) + '%';
+  zoomPanel.style.left = Math.min(window.innerWidth - 236, ev.clientX + 22) + 'px';
+  zoomPanel.style.top = Math.min(window.innerHeight - 236, ev.clientY + 22) + 'px';
+}
+document.querySelectorAll('.js-moldura-zoom').forEach(function(box){
+  box.addEventListener('mouseenter', function(ev){
+    var img = box.querySelector('img');
+    if(window.innerWidth < 900 || !img || img.style.display === 'none') return;
+    zoomPanel.classList.add('open');
+    moveZoomPanel(ev, box);
+  });
+  box.addEventListener('mousemove', function(ev){ moveZoomPanel(ev, box); });
+  box.addEventListener('mouseleave', function(){ zoomPanel.classList.remove('open'); });
+});
+</script>
 </body>
 </html>

@@ -45,9 +45,12 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .chip-n{background:var(--bg);color:var(--hint)}
 .chip-r{background:var(--red-l);color:var(--red)}
 .desc{font-size:11px;color:var(--hint);margin-top:3px;font-style:italic}
-.foto-box{margin-top:.85rem;border:1px dashed #D4D0C8;border-radius:7px;background:var(--bg);height:130px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.foto-box{margin-top:.85rem;border:1px dashed #D4D0C8;border-radius:7px;background:var(--bg);height:130px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in}
 .foto-box img{max-width:100%;max-height:100%;object-fit:contain}
 .foto-box .no-foto{font-size:12px;color:var(--hint);text-align:center;line-height:1.6}
+.zoom-panel{position:fixed;width:220px;height:220px;border-radius:16px;border:1px solid var(--border);background-color:#fff;background-repeat:no-repeat;box-shadow:0 18px 40px rgba(28,27,24,.18);display:none;pointer-events:none;z-index:1200}
+.zoom-panel.open{display:block}
+.zoom-panel::before{content:'Zoom';position:absolute;left:10px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(28,27,24,.78);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 .nota{font-size:11px;color:var(--muted);background:var(--amber-l);border-left:3px solid var(--amber);padding:7px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.6}
 #bloc-passpartu{animation:fadeIn .2s ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
@@ -233,11 +236,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.85rem" id="fotos-grid">
           <div>
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Pre-Marc</div>
-            <div class="foto-box" id="foto-box-pre"><div class="no-foto">—</div></div>
+            <div class="foto-box js-moldura-zoom" id="foto-box-pre"><div class="no-foto">—</div></div>
           </div>
           <div>
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Marc principal</div>
-            <div class="foto-box" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure la foto</div></div>
+            <div class="foto-box js-moldura-zoom" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure la foto</div></div>
           </div>
         </div>
       </div>
@@ -447,6 +450,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
 
 
+<div class="zoom-panel" id="zoom-panel"></div>
 <script>
 
 // ── Variables globals ─────────────────────────────────────────────────────
@@ -461,6 +465,35 @@ var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
 var _filterTimer = {pre:null, marc:null};
+var zoomPanel = document.getElementById('zoom-panel');
+
+function moveZoomPanel(ev, source){
+  if(!zoomPanel || !source) return;
+  var img = source.querySelector('img');
+  if(!img || !img.getAttribute('src') || img.style.display === 'none'){
+    zoomPanel.classList.remove('open');
+    return;
+  }
+  var rect = source.getBoundingClientRect();
+  var x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(rect.width, 1)));
+  var y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / Math.max(rect.height, 1)));
+  zoomPanel.style.backgroundImage = 'url("' + img.src + '")';
+  zoomPanel.style.backgroundSize = '240% 240%';
+  zoomPanel.style.backgroundPosition = (x * 100) + '% ' + (y * 100) + '%';
+  zoomPanel.style.left = Math.min(window.innerWidth - 236, ev.clientX + 22) + 'px';
+  zoomPanel.style.top = Math.min(window.innerHeight - 236, ev.clientY + 22) + 'px';
+}
+
+document.querySelectorAll('.js-moldura-zoom').forEach(function(box){
+  box.addEventListener('mouseenter', function(ev){
+    var img = box.querySelector('img');
+    if(window.innerWidth < 900 || !img || img.style.display === 'none') return;
+    zoomPanel.classList.add('open');
+    moveZoomPanel(ev, box);
+  });
+  box.addEventListener('mousemove', function(ev){ moveZoomPanel(ev, box); });
+  box.addEventListener('mouseleave', function(){ zoomPanel.classList.remove('open'); });
+});
 
 function setLang(lang){
   _lang = lang;
