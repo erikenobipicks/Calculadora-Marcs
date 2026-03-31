@@ -60,7 +60,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   <div class="error-msg">⚠ {{ error }}</div>
   {% endif %}
 
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <!-- Identificació -->
     <div class="card">
       <h3>Identificació</h3>
@@ -139,7 +139,13 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
             <input type="url" name="foto" id="foto-url" value="{{ moldura.foto or '' }}"
                    placeholder="https://exemple.com/foto.jpg"
                    oninput="previewFoto(this.value)">
-            <div class="hint">URL directa a la imatge de la motllura (JPG, PNG)</div>
+            <div class="hint">URL directa a la imatge de la motllura (JPG, PNG, WEBP o GIF)</div>
+          </div>
+          <div class="f">
+            <label>Pujar fitxer</label>
+            <input type="file" name="foto_fitxer" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif">
+            <div class="hint">Si puges un fitxer, tindra prioritat sobre la URL i es desara com <code>/static/fotos/{{ (moldura.referencia or 'referencia')|lower }}</code>.</div>
+            <div class="hint">Tambe pots copiar fotos manualment a <code>static/fotos/</code> amb el nom de la referencia perque apareguin automaticament.</div>
           </div>
         </div>
       </div>

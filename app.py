@@ -15,6 +15,91 @@ import io
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
+MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
+
+
+def _safe_moldura_ref(ref):
+    ref = (ref or '').strip().lower()
+    safe = ''.join(ch if ch.isalnum() else '-' for ch in ref)
+    return safe.strip('-')
+
+
+def _to_public_photo_url(value):
+    value = str(value or '').strip().replace('\\', '/')
+    if not value:
+        return ''
+    if value.startswith(('http://', 'https://', 'data:', '/')):
+        return value
+    if value.startswith('static/'):
+        return '/' + value
+    full = os.path.join(app.root_path, value.lstrip('/').replace('/', os.sep))
+    if os.path.isfile(full):
+        return '/' + value.lstrip('/')
+    return ''
+
+
+def _find_local_moldura_photo(ref):
+    fotos_dir = os.path.join(app.root_path, 'static', 'fotos')
+    if not ref or not os.path.isdir(fotos_dir):
+        return ''
+
+    candidates = []
+    for stem in [ref.strip(), ref.strip().lower(), ref.strip().upper(), _safe_moldura_ref(ref)]:
+        if stem and stem not in candidates:
+            candidates.append(stem)
+
+    for stem in candidates:
+        for ext in MOLDURA_IMAGE_EXTS:
+            path = os.path.join(fotos_dir, f'{stem}.{ext}')
+            if os.path.isfile(path):
+                return f'/static/fotos/{stem}.{ext}'
+    return ''
+
+
+def _resolve_moldura_photo(ref, foto):
+    public_url = _to_public_photo_url(foto)
+    return public_url or _find_local_moldura_photo(ref)
+
+
+def _serialize_moldura(row):
+    if not row:
+        return None
+    data = dict(row)
+    data['foto'] = _resolve_moldura_photo(data.get('referencia', ''), data.get('foto', ''))
+    return data
+
+
+def _serialize_moldures(rows):
+    return [_serialize_moldura(row) for row in (rows or [])]
+
+
+def _save_moldura_photo(upload, referencia):
+    if not upload or not getattr(upload, 'filename', ''):
+        return ''
+
+    filename = upload.filename.rsplit('/', 1)[-1].rsplit('\\', 1)[-1]
+    if '.' not in filename:
+        raise ValueError('La imatge ha de tenir extensio (jpg, png, webp o gif).')
+
+    ext = filename.rsplit('.', 1)[-1].lower()
+    if ext not in MOLDURA_IMAGE_EXTS:
+        raise ValueError('Format d\'imatge no valid. Usa JPG, PNG, WEBP o GIF.')
+
+    stem = _safe_moldura_ref(referencia) or 'moldura'
+    fotos_dir = os.path.join(app.root_path, 'static', 'fotos')
+    os.makedirs(fotos_dir, exist_ok=True)
+
+    for old_ext in MOLDURA_IMAGE_EXTS:
+        old_path = os.path.join(fotos_dir, f'{stem}.{old_ext}')
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+
+    upload.save(os.path.join(fotos_dir, f'{stem}.{ext}'))
+    return f'/static/fotos/{stem}.{ext}'
+
 def _iter_conflict_check_files(base):
     """Yield text/source files where merge markers should never appear."""
     exts = {'.py', '.html', '.css', '.js', '.md', '.txt', '.toml', '.yml', '.yaml'}
@@ -407,7 +492,7 @@ def lookup():
             print(f"lookup moldura ref={ref} result={r}")
             if r:
                 return jsonify({'ok': True, 'preu': r['preu_taller'], 'gruix': r['gruix'],
-                                'descripcio': r['descripcio'], 'foto': r['foto'] or ''})
+                                'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'])})
         except Exception as e:
             print(f"lookup ERROR: {e}")
             return jsonify({'ok': False, 'error': str(e)})
@@ -630,6 +715,7 @@ def admin_cataleg():
         moldures = query("SELECT * FROM moldures WHERE proveidor=? ORDER BY referencia", [proveidor])
     else:
         moldures = query("SELECT * FROM moldures ORDER BY referencia")
+    moldures = _serialize_moldures(moldures)
     proveidors = query("SELECT DISTINCT proveidor FROM moldures WHERE proveidor!='' ORDER BY proveidor")
     total = query("SELECT COUNT(*) as n FROM moldures", one=True)
     return render_template('admin_cataleg.html', moldures=moldures, q=q,
@@ -644,12 +730,19 @@ def admin_moldura_nova():
         existing = query('SELECT referencia FROM moldures WHERE referencia=?', [d['referencia']], one=True)
         if existing:
             return render_template('admin_moldura_form.html', error='Ja existeix una motllura amb aquesta referència.', moldura=d, nova=True)
+        foto = d.get('foto', '').strip()
+        try:
+            uploaded_photo = _save_moldura_photo(request.files.get('foto_fitxer'), d['referencia'])
+        except ValueError as e:
+            return render_template('admin_moldura_form.html', error=str(e), moldura=d, nova=True)
+        if uploaded_photo:
+            foto = uploaded_photo
         execute("""INSERT INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto)
                    VALUES (?,?,?,?,?,?,?,?,?)""",
                 [d['referencia'], float(d.get('preu_taller',0)),
                  float(d.get('gruix',0)), float(d.get('cost',0)),
                  d.get('proveidor',''), d.get('ref2',''),
-                 d.get('ubicacio',''), d.get('descripcio',''), d.get('foto','')])
+                 d.get('ubicacio',''), d.get('descripcio',''), foto])
         return redirect(url_for('admin_cataleg'))
     return render_template('admin_moldura_form.html', moldura={}, nova=True, error=None)
 
@@ -661,14 +754,24 @@ def admin_moldura_editar(ref):
         return redirect(url_for('admin_cataleg'))
     if request.method == 'POST':
         d = request.form
+        foto = d.get('foto', '').strip()
+        try:
+            uploaded_photo = _save_moldura_photo(request.files.get('foto_fitxer'), ref)
+        except ValueError as e:
+            moldura_data = dict(moldura)
+            moldura_data.update(d)
+            moldura_data['foto'] = foto or _resolve_moldura_photo(ref, moldura.get('foto', ''))
+            return render_template('admin_moldura_form.html', error=str(e), moldura=moldura_data, nova=False)
+        if uploaded_photo:
+            foto = uploaded_photo
         execute("""UPDATE moldures SET preu_taller=?,gruix=?,cost=?,proveidor=?,
                    ref2=?,ubicacio=?,descripcio=?,foto=? WHERE referencia=?""",
                 [float(d.get('preu_taller',0)), float(d.get('gruix',0)),
                  float(d.get('cost',0)), d.get('proveidor',''),
                  d.get('ref2',''), d.get('ubicacio',''),
-                 d.get('descripcio',''), d.get('foto',''), ref])
+                 d.get('descripcio',''), foto, ref])
         return redirect(url_for('admin_cataleg'))
-    return render_template('admin_moldura_form.html', moldura=dict(moldura), nova=False, error=None)
+    return render_template('admin_moldura_form.html', moldura=_serialize_moldura(moldura), nova=False, error=None)
 
 @app.route('/admin/cataleg/<ref>/eliminar', methods=['POST'])
 @admin_required
@@ -838,12 +941,12 @@ def admin_foto():
     ref = request.form.get('referencia', '').strip().lower()
     f = request.files.get('foto')
     if f and ref:
-        ext = f.filename.rsplit('.', 1)[-1].lower()
-        nom = f'{ref}.{ext}'
-        path = os.path.join(app.root_path, 'static', 'fotos', nom)
-        f.save(path)
-        execute('UPDATE moldures SET foto=? WHERE LOWER(referencia)=?', [f'/static/fotos/{nom}', ref])
-        flash(f'Foto de {ref} pujada.', 'ok')
+        try:
+            foto = _save_moldura_photo(f, ref)
+            execute('UPDATE moldures SET foto=? WHERE LOWER(referencia)=?', [foto, ref])
+            flash(f'Foto de {ref} pujada.', 'ok')
+        except ValueError as e:
+            flash(str(e), 'error')
     return redirect(url_for('admin'))
 
 # ── PDF generator ─────────────────────────────────────────────────────────
@@ -1225,8 +1328,9 @@ def crear_pdf(c):
     if c.get('marc_principal'):
         r = query('SELECT foto FROM moldures WHERE LOWER(referencia)=LOWER(?)',
                   [c['marc_principal']], one=True)
-        if r and r['foto']:
-            rel = r['foto'].lstrip('/')
+        foto_url = _resolve_moldura_photo(c['marc_principal'], r['foto'] if r else '')
+        if foto_url.startswith('/static/'):
+            rel = foto_url.lstrip('/')
             full = _os.path.join(app.root_path, 'static', rel.replace('static/',''))
             if _os.path.exists(full):
                 foto_path = full

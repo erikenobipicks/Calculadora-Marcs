@@ -22,6 +22,13 @@ if USE_PG:
         col_str = ','.join(cols)
         c.execute(f"INSERT INTO {table} ({col_str}) VALUES ({placeholders}) ON CONFLICT ({cols[0]}) DO UPDATE SET " +
                   ','.join([f"{col}=EXCLUDED.{col}" for col in cols[1:]]), vals)
+    def existing_moldura_photo(ref):
+        try:
+            c.execute("SELECT foto FROM moldures WHERE referencia=%s", [ref])
+            row = c.fetchone()
+            return row['foto'] if row and row.get('foto') else None
+        except Exception:
+            return None
 else:
     import sqlite3
     DB = os.path.join(os.path.dirname(__file__), 'objectiu.db')
@@ -30,6 +37,12 @@ else:
     def upsert(table, cols, vals):
         placeholders = ','.join(['?']*len(vals))
         c.execute(f"INSERT OR REPLACE INTO {table} VALUES ({placeholders})", vals)
+    def existing_moldura_photo(ref):
+        try:
+            row = c.execute("SELECT foto FROM moldures WHERE referencia=?", [ref]).fetchone()
+            return row[0] if row and row[0] else None
+        except Exception:
+            return None
 
 excel_path = sys.argv[1] if len(sys.argv) > 1 else 'Marcs_Objectiu_2026.xlsx'
 if not os.path.exists(excel_path):
@@ -54,8 +67,9 @@ for row in ws.iter_rows(min_row=2, values_only=True):
     ref2  = str(row[5]).strip() if row[5] else ''
     ubi   = str(row[6]).strip() if row[6] else ''
     desc  = str(row[7]).strip() if row[7] else ''
+    foto  = existing_moldura_photo(ref)
     upsert('moldures', ['referencia','preu_taller','gruix','cost','proveidor','ref2','ubicacio','descripcio','foto'],
-           [ref, preu, gruix, cost, prov, ref2, ubi, desc, None])
+           [ref, preu, gruix, cost, prov, ref2, ubi, desc, foto])
     count += 1
 print(f"Moldures: {count}")
 
