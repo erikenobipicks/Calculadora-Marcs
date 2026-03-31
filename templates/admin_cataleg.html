@@ -1,59 +1,57 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Catàleg de motllures — Admin</title>
+<title>Cat&agrave;leg de motllures - Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--red:#C0392B;--red-l:#FAEAEA;--r:10px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#C0392B;--red-l:#FAEAEA;--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
 nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
 .brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px;cursor:pointer}
-.brand em{color:#C8873A;font-style:normal}
 .nav-r{display:flex;align-items:center;gap:1rem}
 .nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:#fff}
-.wrap{max-width:1200px;margin:0 auto;padding:2rem 1.5rem}
-.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem}
-.page-header h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400}
-.btn{padding:9px 20px;border-radius:7px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem}
+.wrap{max-width:1240px;margin:0 auto;padding:2rem 1.5rem}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+.page-header h1{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400}
+.page-header p{font-size:13px;color:var(--muted);margin-top:.2rem}
+.header-actions{display:flex;gap:.65rem;flex-wrap:wrap}
+.btn{padding:9px 18px;border-radius:7px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem}
 .btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#155c3a}
-.btn-r{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}.btn-r:hover{background:#F5D0D0}
-.btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-o:hover{background:var(--border)}
-.btn-amber{background:#FDF3E8;color:var(--amber);border:1px solid #E8C89A}.btn-amber:hover{background:#F5E6CE}
-/* Filters */
-.filters{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem;align-items:center}
-.search-wrap{position:relative;flex:1;min-width:240px}
-.search-wrap input{width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:var(--card)}
-.search-wrap input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
-.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--hint)}
-.filter-sel{padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--card);outline:none;color:var(--text)}
-.stat-pills{display:flex;gap:.75rem;margin-bottom:1.5rem}
-.pill{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;color:var(--muted)}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-o:hover{background:#F1EFEA}
+.btn-a{background:var(--amber-l);color:var(--amber);border:1px solid #E8C89A}.btn-a:hover{background:#F5E6CE}
+.filters{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
+.search-wrap{position:relative;flex:1;min-width:260px}
+.search-wrap input{width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:var(--card)}
+.search-wrap input:focus,.filter-sel:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--hint);font-size:13px}
+.filter-sel{padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--card);outline:none;color:var(--text)}
+.stat-pills{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem}
+.pill{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:13px;color:var(--muted)}
 .pill strong{color:var(--text)}
-/* Table */
 .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 table{width:100%;border-collapse:collapse}
 thead{background:#F5F4F1}
 th{padding:11px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--hint);white-space:nowrap}
 td{padding:11px 14px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle}
 tr:hover td{background:#FAFAF8}
-.ref-badge{font-weight:700;color:var(--text);font-size:13px}
+.ref-badge{font-weight:700;color:var(--text);font-size:14px;letter-spacing:-.2px}
 .preu-val{font-weight:600;color:var(--green)}
 .chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
 .chip-prov{background:var(--green-l);color:var(--green)}
 .chip-ubi{background:#EEF2FF;color:#4F46E5}
-.no-foto{width:36px;height:36px;border-radius:6px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:16px}
-.foto-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover}
+.no-foto{width:38px;height:38px;border-radius:6px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--hint)}
+.foto-thumb{width:38px;height:38px;border-radius:6px;object-fit:cover;background:#fff}
 .actions{display:flex;gap:.4rem}
-.btn-icon{width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;transition:all .15s;text-decoration:none}
-.btn-icon:hover{background:var(--border)}
+.btn-icon{width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;transition:all .15s;text-decoration:none;color:var(--text)}
+.btn-icon:hover{background:#F1EFEA}
 .btn-icon-r:hover{background:var(--red-l);border-color:#E8B4B4}
 .empty{text-align:center;padding:3rem;color:var(--hint)}
-/* Alert */
-.alert{border-radius:7px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:1rem;display:none}
-.alert-ok{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9;display:block}
+.footer-bar{margin-top:1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.footer-bar p{font-size:12px;color:var(--hint)}
+@media(max-width:860px){.wrap{padding:1.25rem 1rem 2rem}.header-actions,.filters,.stat-pills,.footer-bar{width:100%}.table-wrap{overflow:auto}}
 </style>
 </head>
 <body>
@@ -64,7 +62,6 @@ tr:hover td{background:#FAFAF8}
     <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
     <a href="/admin">Admin</a>
-    <a href="/ajuda">Ajuda</a>
     <a href="/logout">Sortir</a>
   </div>
 </nav>
@@ -72,13 +69,15 @@ tr:hover td{background:#FAFAF8}
 <div class="wrap">
   <div class="page-header">
     <div>
-      <h1>Catàleg de motllures</h1>
-      <p style="font-size:13px;color:var(--muted);margin-top:2px">Gestiona les motllures del catàleg</p>
+      <h1>Cat&agrave;leg de motllures</h1>
+      <p>Gestiona les motllures del cat&agrave;leg i exporta el llistat complet en PDF quan ho necessitis.</p>
     </div>
-    <a href="/admin/cataleg/nou" class="btn btn-g">+ Nova motllura</a>
+    <div class="header-actions">
+      <a href="{{ pdf_url }}" class="btn btn-a" target="_blank">PDF cat&agrave;leg</a>
+      <a href="/admin/cataleg/nou" class="btn btn-g">+ Nova motllura</a>
+    </div>
   </div>
 
-  <!-- Stats -->
   <div class="stat-pills">
     <div class="pill">Total: <strong>{{ total }}</strong> motllures</div>
     {% for p in proveidors if p.proveidor %}
@@ -86,34 +85,32 @@ tr:hover td{background:#FAFAF8}
     {% endfor %}
   </div>
 
-  <!-- Filters -->
   <form method="get" class="filters">
     <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per referència, descripció o proveïdor..." autofocus>
+      <span class="search-icon">C</span>
+      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per referencia, descripcio o proveidor..." autofocus>
     </div>
     <select name="proveidor" class="filter-sel" onchange="this.form.submit()">
-      <option value="">Tots els proveïdors</option>
+      <option value="">Tots els proveidors</option>
       {% for p in proveidors if p.proveidor %}
       <option value="{{ p.proveidor }}" {% if proveidor==p.proveidor %}selected{% endif %}>{{ p.proveidor }}</option>
       {% endfor %}
     </select>
     <button type="submit" class="btn btn-o">Filtrar</button>
-    {% if q or proveidor %}<a href="/admin/cataleg" class="btn btn-o">✕ Netejar</a>{% endif %}
+    {% if q or proveidor %}<a href="/admin/cataleg" class="btn btn-o">Netejar</a>{% endif %}
   </form>
 
-  <!-- Table -->
   <div class="table-wrap">
     {% if moldures %}
     <table>
       <thead>
         <tr>
           <th>Motllura</th>
-          <th>Descripció</th>
+          <th>Descripcio</th>
           <th>Preu taller</th>
           <th>Gruix</th>
-          <th>Proveïdor</th>
-          <th>Ubicació</th>
+          <th>Proveidor</th>
+          <th>Ubicacio</th>
           <th>Accions</th>
         </tr>
       </thead>
@@ -124,25 +121,25 @@ tr:hover td{background:#FAFAF8}
             <div style="display:flex;align-items:center;gap:.75rem">
               {% if m.foto %}
               <img src="{{ m.foto }}" class="foto-thumb" alt="{{ m.referencia }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-              <div class="no-foto" style="display:none">🖼</div>
+              <div class="no-foto" style="display:none">Foto</div>
               {% else %}
-              <div class="no-foto">🖼</div>
+              <div class="no-foto">Foto</div>
               {% endif %}
               <div>
-                <div class="ref-badge" style="font-size:14px;letter-spacing:-.2px">{{ m.referencia }}</div>
+                <div class="ref-badge">{{ m.referencia }}</div>
                 {% if m.ref2 %}<div style="font-size:11px;color:var(--hint)">{{ m.ref2 }}</div>{% endif %}
               </div>
             </div>
           </td>
-          <td style="max-width:200px;color:var(--muted)">{{ m.descripcio or '—' }}</td>
-          <td><span class="preu-val">{{ "%.2f"|format(m.preu_taller or 0) }} €/m</span></td>
+          <td style="max-width:220px;color:var(--muted)">{{ m.descripcio or '-' }}</td>
+          <td><span class="preu-val">{{ "%.2f"|format(m.preu_taller or 0) }} EUR/m</span></td>
           <td>{{ "%.1f"|format(m.gruix or 0) }} cm</td>
-          <td>{% if m.proveidor %}<span class="chip chip-prov">{{ m.proveidor }}</span>{% else %}—{% endif %}</td>
-          <td>{% if m.ubicacio %}<span class="chip chip-ubi">{{ m.ubicacio }}</span>{% else %}—{% endif %}</td>
+          <td>{% if m.proveidor %}<span class="chip chip-prov">{{ m.proveidor }}</span>{% else %}-{% endif %}</td>
+          <td>{% if m.ubicacio %}<span class="chip chip-ubi">{{ m.ubicacio }}</span>{% else %}-{% endif %}</td>
           <td>
             <div class="actions">
-              <a href="/admin/cataleg/{{ m.referencia }}/editar" class="btn-icon" title="Editar">✏️</a>
-              <button onclick="eliminarMoldura('{{ m.referencia }}')" class="btn-icon btn-icon-r" title="Eliminar">🗑</button>
+              <a href="/admin/cataleg/{{ m.referencia }}/editar" class="btn-icon" title="Editar">E</a>
+              <button type="button" onclick="eliminarMoldura('{{ m.referencia }}')" class="btn-icon btn-icon-r" title="Eliminar">X</button>
             </div>
           </td>
         </tr>
@@ -151,25 +148,34 @@ tr:hover td{background:#FAFAF8}
     </table>
     {% else %}
     <div class="empty">
-      {% if q %}Cap motllura trobada per "<strong>{{ q }}</strong>". <a href="/admin/cataleg" style="color:var(--green)">Veure totes</a>{% else %}Cap motllura al catàleg. <a href="/admin/cataleg/nou" style="color:var(--green)">Afegir-ne una</a>{% endif %}
+      {% if q %}
+      Cap motllura trobada per "<strong>{{ q }}</strong>". <a href="/admin/cataleg" style="color:var(--green)">Veure totes</a>
+      {% else %}
+      Cap motllura al cat&agrave;leg. <a href="/admin/cataleg/nou" style="color:var(--green)">Afegir-ne una</a>
+      {% endif %}
     </div>
     {% endif %}
   </div>
 
-  <div style="margin-top:1rem;display:flex;justify-content:space-between;align-items:center">
-    <p style="font-size:12px;color:var(--hint)">{{ moldures|length }} motllures mostrades</p>
-    <a href="/admin" class="btn btn-o" style="font-size:12px">← Tornar a admin</a>
+  <div class="footer-bar">
+    <p>{{ moldures|length }} motllures mostrades</p>
+    <a href="/admin" class="btn btn-o" style="font-size:12px">Tornar a admin</a>
   </div>
 </div>
 
 <script>
 function eliminarMoldura(ref){
-  if(!confirm('Eliminar la motllura "'+ref+'"? Aquesta acció no es pot desfer.')) return;
+  if(!confirm('Eliminar la motllura "'+ref+'"? Aquesta accio no es pot desfer.')) return;
   fetch('/admin/cataleg/'+ref+'/eliminar',{method:'POST'})
-    .then(r=>r.json()).then(function(d){
+    .then(function(r){return r.json();})
+    .then(function(d){
       if(d.ok){
-        var fila=document.getElementById('fila-'+ref);
-        if(fila){fila.style.opacity='0';fila.style.transition='opacity .3s';setTimeout(function(){fila.remove();},300);}
+        var fila = document.getElementById('fila-'+ref);
+        if(fila){
+          fila.style.opacity = '0';
+          fila.style.transition = 'opacity .3s';
+          setTimeout(function(){ fila.remove(); }, 300);
+        }
       }
     });
 }

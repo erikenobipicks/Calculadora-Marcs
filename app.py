@@ -3,6 +3,7 @@ from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g)
 from datetime import datetime
 from functools import wraps
+from urllib.parse import urlencode
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
@@ -133,6 +134,40 @@ def _matches_moldura_gruix(gruix, bucket):
     if bucket == 'extra':
         return value > 6
     return True
+
+
+def _query_moldures(q='', proveidor='', cols='*'):
+    sql = f"SELECT {cols} FROM moldures"
+    args = []
+    where = []
+
+    if q:
+        like = f'%{q.lower()}%'
+        where.append("""(
+            LOWER(referencia) LIKE ?
+            OR LOWER(COALESCE(descripcio, '')) LIKE ?
+            OR LOWER(COALESCE(proveidor, '')) LIKE ?
+        )""")
+        args.extend([like, like, like])
+
+    if proveidor:
+        where.append("proveidor=?")
+        args.append(proveidor)
+
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    sql += " ORDER BY referencia"
+    return query(sql, args)
+
+
+def _moldura_photo_path(ref, foto):
+    public_url = _resolve_moldura_photo(ref, foto)
+    if not public_url.startswith('/static/'):
+        return ''
+    rel = public_url[len('/static/'):]
+    full = os.path.join(app.root_path, 'static', rel.replace('/', os.sep))
+    return full if os.path.isfile(full) else ''
 
 
 def _save_moldura_photo(upload, referencia):
@@ -541,7 +576,9 @@ def calculadora():
             return redirect(url_for('setup'))
     except:
         pass
-    return render_template('calculadora.html')
+    return render_template('calculadora.html',
+                           color_filters=MOLDURA_COLOR_FILTERS,
+                           gruix_filters=MOLDURA_GRUIX_FILTERS)
 
 @app.route('/api/lookup')
 @login_required
@@ -586,6 +623,15 @@ def refs():
     rows = query(f'SELECT {col} FROM {t} ORDER BY {col}')
     col = list(rows[0].keys())[0] if rows else 'referencia'
     return jsonify([r[col] for r in rows])
+
+
+@app.route('/api/moldura-options')
+@login_required
+def moldura_options():
+    rows = query("""SELECT referencia, gruix, descripcio
+                    FROM moldures
+                    ORDER BY referencia""")
+    return jsonify([dict(r) for r in rows])
 
 @app.route('/api/marge')
 @login_required
@@ -795,21 +841,32 @@ def cataleg():
 def admin_cataleg():
     q = request.args.get('q', '').strip()
     proveidor = request.args.get('proveidor', '').strip()
-    if q:
-        moldures = query("""SELECT * FROM moldures WHERE 
-            LOWER(referencia) LIKE ? OR LOWER(descripcio) LIKE ? OR LOWER(proveidor) LIKE ?
-            ORDER BY referencia""", 
-            [f'%{q.lower()}%', f'%{q.lower()}%', f'%{q.lower()}%'])
-    elif proveidor:
-        moldures = query("SELECT * FROM moldures WHERE proveidor=? ORDER BY referencia", [proveidor])
-    else:
-        moldures = query("SELECT * FROM moldures ORDER BY referencia")
-    moldures = _serialize_moldures(moldures)
+    moldures = _serialize_moldures(_query_moldures(q=q, proveidor=proveidor))
     proveidors = query("SELECT DISTINCT proveidor FROM moldures WHERE proveidor!='' ORDER BY proveidor")
     total = query("SELECT COUNT(*) as n FROM moldures", one=True)
+    pdf_params = {}
+    if q:
+        pdf_params['q'] = q
+    if proveidor:
+        pdf_params['proveidor'] = proveidor
+    pdf_url = url_for('admin_cataleg_pdf')
+    if pdf_params:
+        pdf_url += '?' + urlencode(pdf_params)
     return render_template('admin_cataleg.html', moldures=moldures, q=q,
                            proveidor=proveidor, proveidors=proveidors,
-                           total=total['n'] if total else 0)
+                           total=total['n'] if total else 0,
+                           pdf_url=pdf_url)
+
+
+@app.route('/admin/cataleg/pdf')
+@admin_required
+def admin_cataleg_pdf():
+    q = request.args.get('q', '').strip()
+    proveidor = request.args.get('proveidor', '').strip()
+    moldures = _serialize_moldures(_query_moldures(q=q, proveidor=proveidor))
+    pdf = crear_pdf_cataleg_admin(moldures, q=q, proveidor=proveidor)
+    return send_file(pdf, mimetype='application/pdf', as_attachment=False,
+                     download_name='cataleg-motllures-admin.pdf')
 
 @app.route('/admin/cataleg/nou', methods=['GET','POST'])
 @admin_required
@@ -1194,6 +1251,114 @@ def crear_pdf_comparativa(comandes):
         ('BACKGROUND',(0,price_start+4),(-1,price_start+4),colors.HexColor("#FAEAEA")),
     ]))
     story.append(detail_table)
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+def crear_pdf_cataleg_admin(moldures, q='', proveidor=''):
+    from reportlab.lib.pagesizes import landscape
+    from reportlab.platypus import Image as RLImage
+
+    buf = io.BytesIO()
+    page = landscape(A4)
+    margin = 10 * mm
+    width = page[0] - (margin * 2)
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=page,
+        rightMargin=margin,
+        leftMargin=margin,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+
+    dark = colors.HexColor("#1C1B18")
+    green = colors.HexColor("#1A6B45")
+    border = colors.HexColor("#E5E2DB")
+    light = colors.HexColor("#F5F4F1")
+    muted = colors.HexColor("#6B6860")
+
+    def p(txt, *, bold=False, size=8.5, color=dark, align=0):
+        return Paragraph(
+            str(txt),
+            ParagraphStyle(
+                name=f"cat-{size}-{int(bold)}-{align}",
+                fontName='Helvetica-Bold' if bold else 'Helvetica',
+                fontSize=size,
+                leading=size + 2,
+                textColor=color,
+                alignment=align,
+            )
+        )
+
+    story = [
+        p("Cataleg de motllures - Admin", bold=True, size=16),
+        Spacer(1, 3 * mm),
+        p(
+            f"Total de motllures: {len(moldures)}"
+            + (f" | Cerca: {q}" if q else "")
+            + (f" | Proveidor: {proveidor}" if proveidor else ""),
+            size=9,
+            color=muted,
+        ),
+        Spacer(1, 5 * mm),
+    ]
+
+    headers = [[
+        p("Imatge", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Referencia", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Descripcio", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Preu taller", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Gruix", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Cost", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Proveidor", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Ubicacio", bold=True, size=8, color=colors.white, align=TA_CENTER),
+        p("Ref2", bold=True, size=8, color=colors.white, align=TA_CENTER),
+    ]]
+
+    rows = []
+    for moldura in moldures:
+        photo_path = _moldura_photo_path(moldura.get('referencia', ''), moldura.get('foto', ''))
+        if photo_path:
+            photo_cell = RLImage(photo_path, width=16 * mm, height=16 * mm)
+        else:
+            photo_cell = p("Sense foto", size=7, color=muted, align=TA_CENTER)
+
+        rows.append([
+            photo_cell,
+            p(moldura.get('referencia', '-') or '-', bold=True, size=8),
+            p(moldura.get('descripcio', '-') or '-', size=8),
+            p(f"{float(moldura.get('preu_taller', 0) or 0):.2f} EUR/m", size=8, align=TA_RIGHT),
+            p(f"{float(moldura.get('gruix', 0) or 0):.1f} cm", size=8, align=TA_RIGHT),
+            p(f"{float(moldura.get('cost', 0) or 0):.2f} EUR", size=8, align=TA_RIGHT),
+            p(moldura.get('proveidor', '-') or '-', size=8),
+            p(moldura.get('ubicacio', '-') or '-', size=8),
+            p(moldura.get('ref2', '-') or '-', size=8),
+        ])
+
+    if not rows:
+        rows.append([p("Sense resultats", size=9, color=muted)] + [''] * 8)
+
+    table = Table(
+        headers + rows,
+        repeatRows=1,
+        colWidths=[18 * mm, 24 * mm, 66 * mm, 22 * mm, 16 * mm, 18 * mm, 30 * mm, 25 * mm, 24 * mm],
+    )
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), dark),
+        ('BOX', (0, 0), (-1, -1), 0.5, border),
+        ('INNERGRID', (0, 0), (-1, -1), 0.35, border),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, light]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(table)
 
     doc.build(story)
     buf.seek(0)
