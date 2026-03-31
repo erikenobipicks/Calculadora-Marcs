@@ -3,44 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Objectiu — Admin</title>
+<title>Objectiu - Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:14px}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;background:#f5f6fa;color:#2d3436}
-nav{background:#2f3640;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:52px}
-nav .brand{color:#fff;font-weight:700;font-size:16px}
-nav .links a{color:#b2bec3;text-decoration:none;font-size:13px;margin-left:1.2rem}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:#1C1B18;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+nav .brand{color:#fff;font-family:'DM Serif Display',serif;font-size:20px}
+nav .links{display:flex;align-items:center;gap:1rem}
+nav .links a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}
 nav .links a:hover{color:#fff}
-.container{max-width:1180px;margin:0 auto;padding:1.5rem 1rem}
-.page-title{font-size:20px;font-weight:700;color:#2f3640;margin-bottom:1.2rem}
-.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:1rem}
-@media(max-width:860px){.grid{grid-template-columns:1fr}}
-.section{background:#fff;border:1px solid #dfe6e9;border-radius:10px;padding:1.2rem;margin-bottom:1rem}
-.section-title{font-size:12px;font-weight:700;color:#0984e3;text-transform:uppercase;letter-spacing:.8px;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #f0f0f0}
-label{display:block;font-size:12px;font-weight:600;color:#636e72;margin-bottom:4px}
-input,select,textarea{width:100%;padding:8px 10px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;color:#2d3436;outline:none;margin-bottom:.7rem;font-family:Arial,sans-serif}
-textarea{min-height:76px;resize:vertical}
-input:focus,select:focus,textarea:focus{border-color:#0984e3}
-.btn{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
-.btn-primary{background:#0984e3;color:#fff}
-.btn-danger{background:#e17055;color:#fff}
-.btn-sm{padding:4px 10px;font-size:12px}
-.alert-ok{background:#d5f5e3;border:1px solid #a9dfbf;color:#1e8449;border-radius:7px;padding:9px 14px;font-size:13px;margin-bottom:1rem}
-.alert-err{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:7px;padding:9px 14px;font-size:13px;margin-bottom:1rem}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;padding:8px;border-bottom:1px solid #dfe6e9;font-weight:600;color:#636e72;font-size:12px}
-td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
-.badge-admin{background:#e8f4fd;color:#0984e3;font-size:11px;padding:2px 6px;border-radius:3px;font-weight:600}
-.badge-active,.badge-pending,.badge-blocked{display:inline-block;font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
-.badge-active{background:#d5f5e3;color:#1e8449}
-.badge-pending{background:#fdf3e8;color:#c8873a}
-.badge-blocked{background:#fdecea;color:#b84040}
-.hint{font-size:11px;color:#b2bec3;margin-top:-4px;margin-bottom:.6rem}
-.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.container{max-width:1320px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.1rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:34px;font-weight:400;letter-spacing:-.5px}
+.page-subtitle{font-size:14px;color:var(--muted);max-width:70ch;line-height:1.7;margin-top:.35rem}
+.hero-actions{display:flex;gap:.65rem;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1.18fr .82fr;gap:1rem;align-items:start}
+.stack{display:grid;gap:1rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem}
+.section-title{font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;margin-bottom:1rem}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.1rem}
+.stat span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--hint);margin-bottom:.45rem}
+.stat strong{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;color:var(--text)}
+.stat small{display:block;font-size:12px;color:var(--muted);margin-top:.35rem}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;margin-bottom:.75rem;font-family:'DM Sans',sans-serif;background:#fff}
+textarea{min-height:88px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:all .15s}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-danger{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}
+.btn-danger:hover{background:#F5D0D0}
+.btn-secondary{background:#fff;color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:#F1EFEA}
+.btn-sm{padding:6px 11px;font-size:12px}
+.alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.alert-err{background:var(--red-l);border:1px solid #F1B9B9;color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
+td{padding:12px;border-bottom:1px solid #F3F1EB;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.badge-admin{background:var(--green-l);color:var(--green);font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
+.badge-active,.badge-pending,.badge-blocked{display:inline-block;font-size:11px;padding:4px 9px;border-radius:999px;font-weight:700}
+.badge-active{background:var(--green-l);color:var(--green)}
+.badge-pending{background:var(--amber-l);color:var(--amber)}
+.badge-blocked{background:var(--red-l);color:var(--red)}
+.hint{font-size:11px;color:var(--hint);margin-top:-4px;margin-bottom:.65rem}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
 .mono{font-family:Consolas,monospace;font-size:12px}
-.mini-form{display:grid;gap:.55rem}
-.row-actions{display:flex;gap:.4rem;align-items:center}
-@media(max-width:860px){.form-grid{grid-template-columns:1fr}}
+.inline-form{display:flex;gap:.5rem;align-items:center}
+.field-stack{display:grid;gap:.55rem}
+.muted{font-size:12px;color:var(--muted);line-height:1.6}
+.actions-col{display:grid;gap:.45rem}
+@media(max-width:980px){.grid,.stats{grid-template-columns:1fr}.hero{align-items:flex-start}.form-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -50,11 +69,28 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
     <a href="/">Portal</a>
     <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
+    <a href="/admin/cataleg">Cat&agrave;leg admin</a>
     <a href="/logout">Sortir</a>
   </div>
 </nav>
 <div class="container">
-  <div class="page-title">Panell d'administració</div>
+  {% set ns = namespace(admins=0, pendents=0, bloquejats=0) %}
+  {% for u in usuaris %}
+    {% if u.is_admin %}{% set ns.admins = ns.admins + 1 %}{% endif %}
+    {% if (u.access_status or 'active') == 'pending' %}{% set ns.pendents = ns.pendents + 1 %}{% endif %}
+    {% if (u.access_status or 'active') == 'blocked' %}{% set ns.bloquejats = ns.bloquejats + 1 %}{% endif %}
+  {% endfor %}
+
+  <div class="hero">
+    <div>
+      <div class="page-title">Panell d'administració</div>
+      <div class="page-subtitle">Centralitza des d'aquí usuaris, configuració general i tarifes d'impressió. He ordenat la pantalla perquè el treball diari quedi més clar i visual.</div>
+    </div>
+    <div class="hero-actions">
+      <a href="/admin/cataleg" class="btn btn-secondary">Obrir catàleg admin</a>
+      <a href="/cataleg" class="btn btn-secondary">Veure catàleg públic</a>
+    </div>
+  </div>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}
@@ -62,10 +98,18 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
     {% endfor %}
   {% endwith %}
 
+  <div class="stats">
+    <div class="stat"><span>Usuaris</span><strong>{{ usuaris|length }}</strong><small>{{ ns.admins }} admins i {{ usuaris|length - ns.admins }} professionals</small></div>
+    <div class="stat"><span>Validació pendent</span><strong>{{ ns.pendents }}</strong><small>Comptes pendents de revisió</small></div>
+    <div class="stat"><span>Bloquejats</span><strong>{{ ns.bloquejats }}</strong><small>Usuaris sense accés actiu</small></div>
+    <div class="stat"><span>Tarifes impressió</span><strong>{{ impressio|length }}</strong><small>Formats de cost carregats</small></div>
+  </div>
+
   <div class="grid">
     <div>
       <div class="section">
-        <div class="section-title">Crear nou usuari professional</div>
+        <div class="section-title">Alta de nou usuari professional</div>
+        <p class="muted" style="margin-bottom:1rem">Crea un compte nou amb estat, perfil i dades comercials inicials. Les dades internes de validació queden guardades al mateix pas.</p>
         <form method="post" action="/admin/usuari">
           <input type="hidden" name="action" value="crear">
           <div class="form-grid">
@@ -125,7 +169,8 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
       </div>
 
       <div class="section">
-        <div class="section-title">Tarifes impressió fotogràfica ({{ impressio|length }} formats)</div>
+        <div class="section-title">Tarifes d'impressió fotogràfica</div>
+        <p class="muted" style="margin-bottom:1rem">Afegeix, revisa o elimina formats de cost d'impressió. Aquest bloc queda separat perquè sigui més fàcil mantenir-lo sense barrejar-lo amb usuaris.</p>
         <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
           <input type="hidden" name="action" value="crear">
           <div><label>Referència</label><input type="text" name="referencia" placeholder="IMP30x40" required></div>
@@ -133,6 +178,7 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
           <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="2.80" required></div>
           <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
         </form>
+        <div class="table-wrap">
         <table style="font-size:12px">
           <thead><tr><th>Referència</th><th>Descripció</th><th>Preu cost</th><th></th></tr></thead>
           <tbody>
@@ -152,12 +198,14 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
           {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
 
-    <div>
+    <div class="stack">
       <div class="section">
         <div class="section-title">Configuració global</div>
+        <p class="muted" style="margin-bottom:1rem">Aquest marge és la base comuna per als comptes nous i per a l'operativa general del taller.</p>
         <form method="post" action="/admin/config">
           <label>Marge de benefici per defecte (%)</label>
           <p class="hint">Tots els usuaris usaran aquest marge. Recomanació: 60</p>
@@ -165,11 +213,23 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
           <button type="submit" class="btn btn-primary">Desar</button>
         </form>
       </div>
+
+      <div class="section">
+        <div class="section-title">Ordre de treball</div>
+        <div class="field-stack muted">
+          <div>1. Dona d'alta o revisa l'usuari professional.</div>
+          <div>2. Ajusta l'estat d'accés i el perfil segons la validació.</div>
+          <div>3. Mantén les tarifes d'impressió actualitzades.</div>
+          <div>4. Revisa el catàleg complet des del panell de catàleg admin.</div>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="section">
     <div class="section-title">Usuaris actuals ({{ usuaris|length }})</div>
+    <p class="muted" style="margin-bottom:1rem">Cada fila et deixa actualitzar perfil, estat, dades comercials, contrasenya i eliminació. He mantingut totes les accions però amb una lectura més neta.</p>
+    <div class="table-wrap">
     <table>
       <thead>
         <tr>
@@ -251,6 +311,7 @@ td{padding:8px;border-bottom:1px solid #f5f6fa;vertical-align:top}
       {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 </body>
