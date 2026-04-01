@@ -180,9 +180,9 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     <div>
       <div class="card">
         <div class="card-t">Client</div>
-        <div class="f"><label>Nom del client</label><input type="text" id="client_nom" placeholder="Joan Martí"></div>
+        <div class="f"><label>Nom del client</label><input type="text" id="client_nom"></div>
         <div class="f2">
-          <div class="f"><label>Telèfon</label><input type="text" id="client_tel" placeholder="620 123 456"></div>
+          <div class="f"><label>Telèfon</label><input type="text" id="client_tel"></div>
           <div class="f"><label>Data</label><input type="text" id="data_comanda" readonly></div>
         </div>
       </div>
@@ -511,6 +511,7 @@ var T = {
     ref: "Ref.",
     client: "Client",
     marc: "Marc",
+    midaFinal: "Mida final",
     premarcLabel: "pre-marc",
     mides: "Mides",
     muntatge: "Muntatge",
@@ -535,6 +536,7 @@ var T = {
     ref: "Ref.",
     client: "Cliente",
     marc: "Marco",
+    midaFinal: "Medida final",
     premarcLabel: "pre-marco",
     mides: "Medidas",
     muntatge: "Montaje",
@@ -559,6 +561,7 @@ var T = {
     ref: "Ref.",
     client: "Client",
     marc: "Frame",
+    midaFinal: "Final size",
     premarcLabel: "inner frame",
     mides: "Dimensions",
     muntatge: "Mounting",
@@ -617,6 +620,25 @@ var _tipusGrupMap = {
 // ── Helpers ───────────────────────────────────────────────────────────────
 function fmt(n){ return n.toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
 function fmtCost(n){ return n.toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €*'; }
+function fmtMesura(v){
+  var n = parseFloat(v);
+  if(!Number.isFinite(n)) return '';
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/,'');
+}
+function getPhotoSizeText(){
+  var w = parseFloat(document.getElementById('amplada').value);
+  var h = parseFloat(document.getElementById('alcada').value);
+  if(!Number.isFinite(w) || !Number.isFinite(h) || w<=0 || h<=0) return '';
+  return fmtMesura(w)+' x '+fmtMesura(h)+' cm';
+}
+function getFinalSizeText(){
+  var w = parseFloat(document.getElementById('marc-w').value);
+  var h = parseFloat(document.getElementById('marc-h').value);
+  if(!Number.isFinite(w) || !Number.isFinite(h) || w<=0 || h<=0){
+    return getPhotoSizeText();
+  }
+  return fmtMesura(w)+' x '+fmtMesura(h)+' cm';
+}
 function preuDisplay(cost, isImp){
   if(rmode==='cost') return fmtCost(cost);
   return fmt(cost*(1+(isImp?(marge_impressio||marge):marge)/100));
@@ -1497,10 +1519,6 @@ function novaComanda(){
 // ── WhatsApp ──────────────────────────────────────────────────────────────
 function buildWAtext(){
   var client    = document.getElementById('client_nom').value||'—';
-  var marc      = document.getElementById('marc_principal').value||'';
-  var pre       = document.getElementById('pre_marc').value||'';
-  var w         = document.getElementById('amplada').value||'0';
-  var h         = document.getElementById('alcada').value||'0';
   var desc      = parseFloat(document.getElementById('descompte').value)||0;
   var obs       = document.getElementById('observacions').value||'';
   var pFin = (window._c && window._c.preu_final) ? window._c.preu_final.toFixed(2) : '0.00';
@@ -1513,13 +1531,15 @@ function buildWAtext(){
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var num = window._numPressupost || '';
   var t = T[_lang] || T.ca;
+  var midaFinal = getFinalSizeText();
+  var midaFoto = getPhotoSizeText();
   var lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
-  if(marc) lines.push(t.marc+': '+marc+(pre&&pre!=='-'?' + '+pre+' ('+t.premarcLabel+')':''));
-  lines.push(t.mides+': '+w+' x '+h+' cm');
+  if(midaFinal) lines.push(t.midaFinal+': '+midaFinal);
+  if(midaFoto) lines.push(t.mides+': '+midaFoto);
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
   if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
-  if(chkImp)       lines.push(t.impressio+': '+t.yes+' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(chkImp)       lines.push(t.impressio+': '+t.yes);
   if(chkImp)       lines.push(t.printIncluded);
   if(obs)          lines.push(t.notes+': '+obs);
   lines.push('');
@@ -1548,10 +1568,6 @@ function whatsappClient(){
 function buildWAtext_intern(){
   // Internal message to Reus Revela: cost price, prep tone
   var client  = document.getElementById('client_nom').value||'—';
-  var marc    = document.getElementById('marc_principal').value||'';
-  var pre     = document.getElementById('pre_marc').value||'';
-  var w       = document.getElementById('amplada').value||'0';
-  var h       = document.getElementById('alcada').value||'0';
   var num     = window._numPressupost || '—';
   var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
@@ -1565,18 +1581,20 @@ function buildWAtext_intern(){
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
 
   var t = T[_lang] || T.ca;
+  var midaFinal = getFinalSizeText();
+  var midaFoto = getPhotoSizeText();
   var lines = [
     '*'+t.waInternTitol+'*','',
     t.numPres+': *' + num + '*',
     t.client+': ' + client,'',
-    t.marc.toUpperCase()+': ' + (marc || '—') + (pre&&pre!=='-'?' + '+pre+' ('+t.premarcLabel+')':''),
-    t.mides+': ' + w + ' x ' + h + ' cm',
   ];
+  if(midaFinal) lines.push(t.midaFinal+': ' + midaFinal);
+  if(midaFoto) lines.push(t.mides+': ' + midaFoto);
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
   if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
-  if(chkImp)       lines.push(t.impressio+': '+t.yes+' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
-  if(chkImp)       lines.push(t.printIncluded + ' (' + (CLOSEST.impressio?CLOSEST.impressio.ref:'') + ')');
+  if(chkImp)       lines.push(t.impressio+': '+t.yes);
+  if(chkImp)       lines.push(t.printIncluded);
   lines.push('');
   lines.push(t.cost+': *' + cTot + ' EUR*');
   lines.push('');

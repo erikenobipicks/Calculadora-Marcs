@@ -1199,19 +1199,18 @@ def crear_pdf_comparativa(comandes):
         return '—' if v in ['','-','None'] else str(v)
 
     fields = [
-        (t['marc_principal'],   'marc_principal', False),
-        (t['premarc'],         'pre_marc',       False),
-        (t['mides_foto'],     None,             False),
-        (t['muntatge'],         'encolat',        False),
-        (t['vidre_mirall'],   'vidre',          False),
-        (t['interior'],         'passpartout',    False),
-        (t['impressio'],        'impressio',      False),
-        (t['observacions'],     'observacions',   False),
-        (t['preu_net_label'], 'preu_net',       True),
-        (t['iva'],          None,             True),
-        (t['total_iva'],     'preu_final',     True),
-        (t['entrega'],       'entrega',        True),
-        (t['pendent_short'], 'pendent',        True),
+        (t['mida_final'],     'final_size',      False),
+        (t['mides_foto'],     'photo_size',      False),
+        (t['muntatge'],       'muntatge_label',  False),
+        (t['vidre_mirall'],   'proteccio_label', False),
+        (t['interior'],       'interior_label',  False),
+        (t['impressio'],      'impressio_label', False),
+        (t['observacions'],   'observacions',    False),
+        (t['preu_net_label'], 'preu_net',        True),
+        (t['iva'],            'iva',             True),
+        (t['total_iva'],      'preu_final',      True),
+        (t['entrega'],        'entrega',         True),
+        (t['pendent_short'],  'pendent',         True),
     ]
 
     rows = []
@@ -1219,9 +1218,19 @@ def crear_pdf_comparativa(comandes):
         lbl_color = DARK if not is_price else colors.HexColor("#1A6B45") if key=='preu_final' else                     RED if key=='pendent' else colors.HexColor("#6B6860")
         row = [p(lbl, bold=is_price, size=9, color=lbl_color)]
         for c in comandes:
-            if key is None and lbl == t['mides_foto']:
-                val = f"{int(c.get('amplada',0))} x {int(c.get('alcada',0))}"
-            elif key is None and lbl == t['iva']:
+            if key == 'final_size':
+                val = _final_size_text(c, sep=' x ', with_unit=True)
+            elif key == 'photo_size':
+                val = _photo_size_text(c, sep=' x ', with_unit=True)
+            elif key == 'muntatge_label':
+                val = _display_muntatge(c, t)
+            elif key == 'proteccio_label':
+                val = _display_proteccio(c, t)
+            elif key == 'interior_label':
+                val = _display_interior(c, t)
+            elif key == 'impressio_label':
+                val = _display_impressio(c, t)
+            elif key == 'iva':
                 pn = float(c.get('preu_net',0) or 0)
                 val = f"{pn*0.21:.2f} €"
             elif is_price:
@@ -1374,6 +1383,7 @@ PDF_T = {
         'marc': 'Marc',
         'premarc': 'Pre-Marc',
         'mides': 'Mides',
+        'mida_final': 'Mida final',
         'muntatge': 'Muntatge',
         'proteccio': 'Protecció',
         'interior': 'Interior',
@@ -1393,6 +1403,15 @@ PDF_T = {
         'total_iva': 'TOTAL amb IVA',
         'pendent_short': 'PENDENT',
         'sense_marc': '(sense marc)',
+        'encolat_label': 'Encolat',
+        'protter': 'Protter',
+        'vidre_label': 'Vidre',
+        'doble_vidre': 'Doble vidre',
+        'mirall': 'Mirall',
+        'passpartu_label': 'Passpartú',
+        'doble_passpartu': 'Doble passpartú',
+        'proeco_label': 'ProEco',
+        'inclosa': 'Inclosa',
         'conservar_vidre': 'Conservar vidre existent',
         'preu_net_pvp': 'Preu net PVP (sense IVA)',
         'descompte_sobre_pvp': 'Descompte {pct}% sobre PVP',
@@ -1407,6 +1426,7 @@ PDF_T = {
         'marc': 'Marco',
         'premarc': 'Pre-Marco',
         'mides': 'Medidas',
+        'mida_final': 'Medida final',
         'muntatge': 'Montaje',
         'proteccio': 'Protección',
         'interior': 'Interior',
@@ -1426,6 +1446,15 @@ PDF_T = {
         'total_iva': 'TOTAL con IVA',
         'pendent_short': 'PENDIENTE',
         'sense_marc': '(sin marco)',
+        'encolat_label': 'Encolado',
+        'protter': 'Protter',
+        'vidre_label': 'Vidrio',
+        'doble_vidre': 'Doble vidrio',
+        'mirall': 'Espejo',
+        'passpartu_label': 'Passpartú',
+        'doble_passpartu': 'Doble passpartú',
+        'proeco_label': 'ProEco',
+        'inclosa': 'Incluida',
         'conservar_vidre': 'Conservar vidrio existente',
         'preu_net_pvp': 'Precio neto PVP (sin IVA)',
         'descompte_sobre_pvp': 'Descuento {pct}% sobre PVP',
@@ -1440,6 +1469,7 @@ PDF_T = {
         'marc': 'Frame',
         'premarc': 'Inner frame',
         'mides': 'Dimensions',
+        'mida_final': 'Final size',
         'muntatge': 'Mounting',
         'proteccio': 'Protection',
         'interior': 'Interior',
@@ -1459,6 +1489,15 @@ PDF_T = {
         'total_iva': 'TOTAL incl. VAT',
         'pendent_short': 'OUTSTANDING',
         'sense_marc': '(no frame)',
+        'encolat_label': 'Mounting',
+        'protter': 'Protter',
+        'vidre_label': 'Glass',
+        'doble_vidre': 'Double glass',
+        'mirall': 'Mirror',
+        'passpartu_label': 'Mat',
+        'doble_passpartu': 'Double mat',
+        'proeco_label': 'ProEco',
+        'inclosa': 'Included',
         'conservar_vidre': 'Keep existing glass',
         'preu_net_pvp': 'Net retail price (excl. VAT)',
         'descompte_sobre_pvp': 'Discount {pct}% on retail price',
@@ -1600,8 +1639,25 @@ def crear_pdf(c):
 
     # ── Detall de la comanda ──────────────────────────────────────────────
     det_rows = []
-    if c.get('pre_marc') and c['pre_marc'] not in ['-','']:
-        det_rows.append(fila(t['premarc']+':', c['pre_marc']))
+    final_size = _final_size_text(c, with_unit=True)
+    photo_size = _photo_size_text(c, with_unit=True)
+    muntatge_label = _display_muntatge(c, t)
+    proteccio_label = _display_proteccio(c, t)
+    interior_label = _display_interior(c, t)
+    impressio_label = _display_impressio(c, t)
+
+    if final_size:
+        det_rows.append(fila(t['mida_final']+':', final_size))
+    if photo_size:
+        det_rows.append(fila(t['mides_foto']+':', photo_size))
+    if muntatge_label:
+        det_rows.append(fila(t['muntatge']+':', muntatge_label))
+    if proteccio_label:
+        det_rows.append(fila(t['vidre_mirall']+':', proteccio_label))
+    if interior_label:
+        det_rows.append(fila(t['interior']+':', interior_label))
+    if impressio_label:
+        det_rows.append(fila(t['impressio']+':', impressio_label))
     det_rows.append(fila(t['marc_principal']+':',
                          c['marc_principal'] if c.get('marc_principal') else t['sense_marc']))
     det_rows.append(fila(t['mides_foto']+':', f"{int(c['amplada'])} × {int(c['alcada'])}"))
@@ -1615,6 +1671,22 @@ def crear_pdf(c):
         det_rows.append(fila(t['interior']+':', c['passpartout']))
     if c.get('impressio') and c['impressio'] not in ['-','']:
         det_rows.append(fila(t['impressio']+':', c['impressio']))
+    if c.get('observacions'):
+        det_rows.append(fila(t['observacions']+':', c['observacions']))
+
+    det_rows = []
+    if final_size:
+        det_rows.append(fila(t['mida_final']+':', final_size))
+    if photo_size:
+        det_rows.append(fila(t['mides_foto']+':', photo_size))
+    if muntatge_label:
+        det_rows.append(fila(t['muntatge']+':', muntatge_label))
+    if proteccio_label:
+        det_rows.append(fila(t['vidre_mirall']+':', proteccio_label))
+    if interior_label:
+        det_rows.append(fila(t['interior']+':', interior_label))
+    if impressio_label:
+        det_rows.append(fila(t['impressio']+':', impressio_label))
     if c.get('observacions'):
         det_rows.append(fila(t['observacions']+':', c['observacions']))
 
@@ -1717,6 +1789,77 @@ def _parse_dims(ref):
         d = m.group(1); mid = len(d)//2
         return int(d[:mid]), int(d[mid:])
     return None, None
+
+def _fmt_measure(value):
+    try:
+        num = float(value or 0)
+    except (TypeError, ValueError):
+        return ''
+    if num.is_integer():
+        return str(int(num))
+    return f"{num:.1f}".rstrip('0').rstrip('.')
+
+def _format_size_text(w, h, sep=' × ', with_unit=False):
+    if w in (None, '') or h in (None, ''):
+        return ''
+    try:
+        wf = float(w)
+        hf = float(h)
+    except (TypeError, ValueError):
+        return ''
+    if wf <= 0 or hf <= 0:
+        return ''
+    text = f"{_fmt_measure(wf)}{sep}{_fmt_measure(hf)}"
+    return text + (' cm' if with_unit else '')
+
+def _photo_size_text(c, sep=' × ', with_unit=False):
+    return _format_size_text(c.get('amplada'), c.get('alcada'), sep=sep, with_unit=with_unit)
+
+def _final_size_text(c, sep=' × ', with_unit=False):
+    for key in ('passpartout', 'vidre', 'encolat'):
+        ref = (c.get(key) or '').strip()
+        if ref and ref not in ('-', 'CONSERVAR'):
+            w, h = _parse_dims(ref)
+            text = _format_size_text(w, h, sep=sep, with_unit=with_unit)
+            if text:
+                return text
+    return _photo_size_text(c, sep=sep, with_unit=with_unit)
+
+def _display_muntatge(c, t):
+    ref = (c.get('encolat') or '').strip().upper()
+    if not ref or ref == '-':
+        return ''
+    if ref.startswith('PRO'):
+        return t['protter']
+    return t['encolat_label']
+
+def _display_proteccio(c, t):
+    ref = (c.get('vidre') or '').strip().upper()
+    if not ref or ref == '-':
+        return ''
+    if ref == 'CONSERVAR':
+        return t['conservar_vidre']
+    if ref.startswith('MIR'):
+        return t['mirall']
+    if ref.startswith('DV-'):
+        return t['doble_vidre']
+    return t['vidre_label']
+
+def _display_interior(c, t):
+    ref = (c.get('passpartout') or '').strip().upper()
+    if not ref or ref == '-':
+        return ''
+    if ref.startswith('DOBPAS'):
+        return t['doble_passpartu']
+    if ref.startswith('PROECO'):
+        return t['proeco_label']
+    return t['passpartu_label']
+
+def _display_impressio(c, t):
+    ref = (c.get('impressio') or '').strip()
+    if not ref or ref == '-':
+        return ''
+    return t['inclosa']
 
 def _find_closest(rows, w, h, prefix=None):
     best, best_score = None, float('inf')
@@ -1851,12 +1994,21 @@ def mailto_data():
             'greet': 'Bon dia,',
             'intro': "Us faig arribar el pressupost d'emmarcació per al client {client}.",
             'detail': 'DETALL DE LA COMANDA:',
-            'marc': 'Marc',
-            'premarc': 'Pre-Marc',
             'mides': 'Mides',
+            'mida_final': 'Mida final',
             'vidre': 'Vidre',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Encolat',
+            'impressio': 'Impressió',
+            'inclosa': 'Inclosa',
+            'encolat_label': 'Encolat',
+            'protter': 'Protter',
+            'vidre_label': 'Vidre',
+            'doble_vidre': 'Doble vidre',
+            'mirall': 'Mirall',
+            'passpartu_label': 'Passpartú',
+            'doble_passpartu': 'Doble passpartú',
+            'proeco_label': 'ProEco',
             'preu': 'PREU FINAL: {price:.2f} EUR (IVA inclòs)',
             'pendent': 'Pendent de cobrar: {pend:.2f} EUR',
             'obs': 'Observacions: {obs}',
@@ -1868,12 +2020,21 @@ def mailto_data():
             'greet': 'Buenos días,',
             'intro': 'Os envío el presupuesto de enmarcación para el cliente {client}.',
             'detail': 'DETALLE DEL PEDIDO:',
-            'marc': 'Marco',
-            'premarc': 'Pre-marco',
             'mides': 'Medidas',
+            'mida_final': 'Medida final',
             'vidre': 'Vidrio',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Montaje',
+            'impressio': 'Impresión',
+            'inclosa': 'Incluida',
+            'encolat_label': 'Encolado',
+            'protter': 'Protter',
+            'vidre_label': 'Vidrio',
+            'doble_vidre': 'Doble vidrio',
+            'mirall': 'Espejo',
+            'passpartu_label': 'Passpartú',
+            'doble_passpartu': 'Doble passpartú',
+            'proeco_label': 'ProEco',
             'preu': 'PRECIO FINAL: {price:.2f} EUR (IVA incluido)',
             'pendent': 'Pendiente de cobro: {pend:.2f} EUR',
             'obs': 'Observaciones: {obs}',
@@ -1885,12 +2046,21 @@ def mailto_data():
             'greet': 'Good morning,',
             'intro': 'Please find the framing quote for client {client}.',
             'detail': 'QUOTE DETAILS:',
-            'marc': 'Frame',
-            'premarc': 'Inner frame',
             'mides': 'Dimensions',
+            'mida_final': 'Final size',
             'vidre': 'Glass',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Mounting',
+            'impressio': 'Print',
+            'inclosa': 'Included',
+            'encolat_label': 'Mounting',
+            'protter': 'Protter',
+            'vidre_label': 'Glass',
+            'doble_vidre': 'Double glass',
+            'mirall': 'Mirror',
+            'passpartu_label': 'Mat',
+            'doble_passpartu': 'Double mat',
+            'proeco_label': 'ProEco',
             'preu': 'FINAL PRICE: {price:.2f} EUR (VAT included)',
             'pendent': 'Outstanding: {pend:.2f} EUR',
             'obs': 'Notes: {obs}',
@@ -1900,25 +2070,31 @@ def mailto_data():
         }
     }
     tt = MAILTO_T.get(lang, MAILTO_T['ca'])
+    final_size = _final_size_text(c, sep=' x ', with_unit=True)
+    photo_size = _photo_size_text(c, sep=' x ', with_unit=True)
+    proteccio_label = _display_proteccio(c, tt)
+    interior_label = _display_interior(c, tt)
+    muntatge_label = _display_muntatge(c, tt)
+    impressio_label = _display_impressio(c, tt)
     lines = [
         tt['greet'],
         "",
         tt['intro'].format(client=c['client_nom']),
         "",
         tt['detail'],
-        f"  {tt['marc']}: {c['marc_principal']}",
     ]
-    if c['pre_marc'] and c['pre_marc'] != '-':
-        lines.append(f"  {tt['premarc']}: {c['pre_marc']}")
-    lines += [
-        f"  {tt['mides']}: {int(c['amplada'])} x {int(c['alcada'])} cm",
-    ]
-    if c['vidre'] and c['vidre'] != '-':
-        lines.append(f"  {tt['vidre']}: {c['vidre']}")
-    if c['passpartout'] and c['passpartout'] != '-':
-        lines.append(f"  {tt['passpartout']}: {c['passpartout']}")
-    if c['encolat'] and c['encolat'] != '-':
-        lines.append(f"  {tt['encolat']}: {c['encolat']}")
+    if final_size:
+        lines.append(f"  {tt['mida_final']}: {final_size}")
+    if photo_size:
+        lines.append(f"  {tt['mides']}: {photo_size}")
+    if proteccio_label:
+        lines.append(f"  {tt['vidre']}: {proteccio_label}")
+    if interior_label:
+        lines.append(f"  {tt['passpartout']}: {interior_label}")
+    if muntatge_label:
+        lines.append(f"  {tt['encolat']}: {muntatge_label}")
+    if impressio_label:
+        lines.append(f"  {tt['impressio']}: {tt['inclosa']}")
     lines += [
         "",
         tt['preu'].format(price=c['preu_final']),
@@ -1959,6 +2135,13 @@ def enviar_email():
         return jsonify({'ok': False, 'error': "Configura el Gmail a l'admin primer."})
     dest = 'reusrevela@gmail.com'
     obs = c['observacions'] or ''
+    pdf_lang = PDF_T.get((c.get('lang') or 'ca').lower(), PDF_T['ca'])
+    final_size = _final_size_text(c, sep=' x ', with_unit=True) or '-'
+    photo_size = _photo_size_text(c, sep=' x ', with_unit=True) or '-'
+    proteccio_label = _display_proteccio(c, pdf_lang) or '-'
+    interior_label = _display_interior(c, pdf_lang) or '-'
+    muntatge_label = _display_muntatge(c, pdf_lang) or '-'
+    impressio_label = _display_impressio(c, pdf_lang) or '-'
     nota_html = f"<p style='font-family:sans-serif;color:#C8873A'><b>Nota:</b> {nota}</p>" if nota else ""
     html = f"""
     <h2 style='color:#1A6B45;font-family:sans-serif;border-bottom:2px solid #1A6B45;padding-bottom:8px'>
@@ -1967,10 +2150,12 @@ def enviar_email():
     <p style='font-family:sans-serif;font-size:15px'><b>Client:</b> {c['client_nom']} &nbsp;·&nbsp; {c['client_tel'] or '-'}</p>
     <p style='font-family:sans-serif;font-size:15px'><b>Data:</b> {c['data']}</p>
     <hr style='border:1px solid #E5E2DB;margin:12px 0'>
-    <p style='font-family:sans-serif;font-size:14px'><b>Marc principal:</b> {c['marc_principal']}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Mides:</b> {c['amplada']} x {c['alcada']} cm</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Vidre:</b> {c['vidre'] or '-'}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Passpartout:</b> {c['passpartout'] or '-'}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>Mida final:</b> {final_size}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>Mides foto:</b> {photo_size}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>Muntatge:</b> {muntatge_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>Vidre:</b> {proteccio_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>Passpartout:</b> {interior_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>Impressio:</b> {impressio_label}</p>
     {"<p style='font-family:sans-serif;font-size:14px'><b>Obs:</b> " + obs + "</p>" if obs else ""}
     <hr style='border:1px solid #E5E2DB;margin:12px 0'>
     <p style='font-family:sans-serif;font-size:16px'><b>Preu final:</b>
