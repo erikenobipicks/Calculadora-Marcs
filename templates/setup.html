@@ -124,6 +124,12 @@ p.desc{font-size:13px;color:var(--muted);margin-bottom:1.5rem;line-height:1.7}
 </div>
 <script>
 var step=1, _logoFile=null;
+function readNumber(id,fallback){
+  var raw=document.getElementById(id).value;
+  if(raw===null||raw==='') return fallback;
+  var num=parseFloat(raw);
+  return Number.isFinite(num) ? num : fallback;
+}
 
 function anarPas(n){
   document.getElementById('step-'+step).classList.remove('active');
@@ -167,15 +173,15 @@ function pujarLogoWizard(){
 }
 
 function pas3(){
-  var m=parseFloat(document.getElementById('s-marge').value)||60;
+  var m=readNumber('s-marge',60);
   fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({marge:m,marge_impressio:0,nom_empresa:document.getElementById('s-nom').value||''})
   }).then(r=>r.json()).then(function(d){if(d.ok) anarPas(4);});
 }
 
 function pas4(){
-  var mi=parseFloat(document.getElementById('s-mimp').value)||0;
-  var m=parseFloat(document.getElementById('s-marge').value)||60;
+  var mi=readNumber('s-mimp',0);
+  var m=readNumber('s-marge',60);
   fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:document.getElementById('s-nom').value||''})
   }).then(r=>r.json()).then(function(){
