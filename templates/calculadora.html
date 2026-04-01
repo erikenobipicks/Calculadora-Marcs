@@ -1173,7 +1173,7 @@ function calcular(){
   var desc = parseFloat(document.getElementById('descompte').value)||0;
   var qty  = parseFloat(document.getElementById('quantitat').value)||1;
   var ent  = parseFloat(document.getElementById('entrega').value)||0;
-  marge    = parseFloat(document.getElementById('marge_val').value)||marge||60;
+  marge    = readNumberValue('marge_val', typeof marge === 'number' ? marge : 60);
 
   var cMuntatge  = costGrup('muntatge');
   var cProteccio = costGrup('proteccio');
@@ -1247,10 +1247,17 @@ function toggleCost(){
   calcular();
 }
 
+function readNumberValue(id, fallback){
+  var raw = document.getElementById(id).value;
+  if(raw === null || raw === '') return fallback;
+  var num = parseFloat(raw);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 // ── Desar marge ───────────────────────────────────────────────────────────
 function desarMarge(){
   fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({marge:parseFloat(document.getElementById('marge_val').value)||60,marge_impressio:marge_impressio})})
+    body:JSON.stringify({marge:readNumberValue('marge_val',60),marge_impressio:marge_impressio})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.ok){var e=document.getElementById('saved-ok');e.style.display='block';setTimeout(function(){e.style.display='none';},2500);}
     });

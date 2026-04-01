@@ -706,7 +706,7 @@ def api_empresa():
 @app.route('/api/desar-marge', methods=['POST'])
 @login_required
 def desar_marge():
-    d = request.json
+    d = request.get_json(silent=True) or {}
     m = float(d.get('marge', 60))
     mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
@@ -1689,8 +1689,12 @@ def crear_pdf(c):
 @login_required
 def ajustos():
     u = query('SELECT marge, marge_impressio, nom_empresa FROM usuaris WHERE id=?', [session['user_id']], one=True)
-    marge_actual = int(u['marge']) if u and u['marge'] is not None else 60
-    marge_imp = int(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
+    marge_actual = float(u['marge']) if u and u['marge'] is not None else 60
+    marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
+    if float(marge_actual).is_integer():
+        marge_actual = int(marge_actual)
+    if float(marge_imp).is_integer():
+        marge_imp = int(marge_imp)
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}

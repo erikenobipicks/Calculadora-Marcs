@@ -95,9 +95,15 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 </div>
 <script>
 function showAlert(msg,t){var a=document.getElementById('alert');a.className='alert alert-'+t;a.textContent=msg;a.style.display='block';setTimeout(function(){a.style.display='none';},4000);}
+function readNumber(id,fallback){
+  var raw=document.getElementById(id).value;
+  if(raw===null||raw==='') return fallback;
+  var num=parseFloat(raw);
+  return Number.isFinite(num) ? num : fallback;
+}
 function desarTot(){
-  var m=parseFloat(document.getElementById('marge-input').value)||60;
-  var mi=parseFloat(document.getElementById('imp-input').value)||0;
+  var m=readNumber('marge-input',60);
+  var mi=readNumber('imp-input',0);
   var ne=document.getElementById('nom-empresa').value||'';
   var ea=document.getElementById('empresa-adreca').value||'';
   var et=document.getElementById('empresa-tel').value||'';
