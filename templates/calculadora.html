@@ -18,6 +18,9 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .wrap{max-width:1060px;margin:0 auto;padding:1.75rem 1.25rem 3rem}
 .ph h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;letter-spacing:-.3px;margin-bottom:4px}
 .ph p{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+.ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.return-link{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;background:var(--green-l);color:var(--green);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}
+.return-link:hover{background:#dcefe6}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
 @media(max-width:700px){.cols{grid-template-columns:1fr}}
 @media(max-width:920px){
@@ -166,7 +169,12 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
 <div class="wrap">
   <div class="ph">
-    <h1>Nova comanda</h1>
+    <div class="ph-top">
+      <h1>Nova comanda</h1>
+      {% if web_return_url %}
+      <a href="{{ web_return_url }}" class="return-link">Tornar a Reus Revela</a>
+      {% endif %}
+    </div>
     <p>Emplena les dades, calcula el preu i genera el PDF per al client</p>
   </div>
   <div id="alert" class="alert"></div>

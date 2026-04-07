@@ -734,6 +734,7 @@ def calculadora():
     except:
         pass
     return render_template('calculadora.html',
+                           web_return_url=_current_web_return_url(),
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS)
 
@@ -1142,7 +1143,8 @@ def historial():
         grp[0]['entregat'] = any(op.get('entregat') for op in grp)
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
                            usuaris_list=usuaris_list if session.get('is_admin') else [],
-                           filtre_uid=filtre_uid)
+                           filtre_uid=filtre_uid,
+                           web_return_url=_current_web_return_url())
 
 @app.route('/pdf-comparativa/<sessio_id>')
 @login_required
