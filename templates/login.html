@@ -19,10 +19,14 @@ button{width:100%;padding:11px;background:#0984e3;color:#fff;border:none;border-
 button:hover{background:#0773c5}
 .alert{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1.2rem}
 .bar{width:40px;height:4px;background:#0984e3;border-radius:2px;margin:0 auto 1.5rem}
+.back{display:inline-block;margin-bottom:1rem;color:#0984e3;text-decoration:none;font-size:13px;font-weight:600}
+.back:hover{text-decoration:underline}
+.helper{margin-top:1rem;font-size:12px;line-height:1.6;color:#636e72}
 </style>
 </head>
 <body>
 <div class="card">
+  {% if web_return_url %}<a class="back" href="{{ web_return_url }}">Tornar a Reus Revela</a>{% endif %}
   <div class="logo">
     <div class="bar"></div>
     <h1>REUS REVELA</h1>
@@ -42,6 +46,7 @@ button:hover{background:#0773c5}
     </div>
     <button type="submit">Entrar</button>
   </form>
+  <div class="helper">Aquest espai continua sent la calculadora real de marcs. Si has arribat des de la web principal, despres podras tornar al teu entorn professional.</div>
 </div>
 </body>
 </html>

@@ -18,8 +18,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .wrap{max-width:1060px;margin:0 auto;padding:1.75rem 1.25rem 3rem}
 .ph{margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem}
 .ph h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;letter-spacing:-.3px}
+.ph-left{display:flex;flex-direction:column;gap:.35rem}
 .search-bar input{padding:9px 13px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;width:260px;transition:border-color .15s}
 .search-bar input:focus{border-color:var(--green)}
+.return-link{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;background:var(--green-l);color:var(--green);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}
+.return-link:hover{background:#dcefe6}
 .sessio-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:1rem;overflow:hidden}
 .sessio-head{padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s;gap:1rem}
 .sessio-head:hover{background:var(--bg)}
@@ -85,7 +88,12 @@ tr:hover td{background:#FAFAF8}
 
 <div class="wrap">
   <div class="ph">
-    <h1>Historial de comandes</h1>
+    <div class="ph-left">
+      <h1>Historial de comandes</h1>
+      {% if web_return_url %}
+      <div><a href="{{ web_return_url }}" class="return-link">Tornar a Reus Revela</a></div>
+      {% endif %}
+    </div>
     <div class="search-bar">
       <input type="text" id="cerca" placeholder="Cerca per client o marc..." oninput="filtrar()">
     </div>
