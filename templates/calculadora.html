@@ -14,11 +14,19 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .nav-r{display:flex;align-items:center;gap:1.25rem}
 .nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}.nav-r a:hover{color:#fff}
 .nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:3px 11px;border-radius:20px;font-weight:500}
+.nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:transparent;color:#fff;font-size:20px;cursor:pointer}
 .wrap{max-width:1060px;margin:0 auto;padding:1.75rem 1.25rem 3rem}
 .ph h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;letter-spacing:-.3px;margin-bottom:4px}
 .ph p{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
 @media(max-width:700px){.cols{grid-template-columns:1fr}}
+@media(max-width:920px){
+  nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
+  .nav-toggle{display:flex}
+  .nav-r{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
+  nav.nav-open .nav-r{display:flex}
+  .nav-u{padding:5px 11px}
+}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1.1rem}
 .card-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.1px;color:var(--hint);margin-bottom:1.1rem;padding-bottom:.6rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .card-t::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -140,8 +148,9 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 </style>
 </head>
 <body>
-<nav>
+<nav class="site-nav">
   <div class="brand"><a href="/" style="text-decoration:none;color:inherit">{{ session.get("empresa_nom", "Calculadora") }}</a></div>
+  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="/">Portal</a>
@@ -250,9 +259,19 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
       <div class="card">
         <div class="card-t">Mides</div>
+        <div class="f" style="margin-bottom:.7rem">
+          <label>Peça a emmarcar</label>
+          <select id="tipus-peca" onchange="onPieceTypeChange()">
+            <option value="fotografia">Fotografia</option>
+            <option value="lamina">Làmina</option>
+            <option value="pintura_sense_bastidor">Pintura sense bastidor</option>
+            <option value="pintura_amb_bastidor">Pintura amb bastidor</option>
+            <option value="puzzle">Puzzle</option>
+          </select>
+        </div>
         <div class="f2">
-          <div class="f"><label>Amplada foto (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
-          <div class="f"><label>Alçada foto (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
+          <div class="f"><label>Amplada peça (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
+          <div class="f"><label>Alçada peça (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
         </div>
 
 
@@ -362,7 +381,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
                 <span style="font-size:12px;color:var(--muted);padding-bottom:10px">Per defecte: 1 finestra inclosa</span>
               </div>
             </div>
-            <div class="nota" style="margin-top:0">Marc i vidre es calculen amb la mida gran (foto + passpartú). La impressió usa la mida de la foto.</div>
+            <div class="nota" style="margin-top:0">Marc i vidre es calculen amb la mida gran (peça + passpartú). La impressió usa la mida original de la peça.</div>
           </div>
         </div>
 
@@ -398,8 +417,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost motllures</span><strong id="ci-mol" style="color:#fff">—</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total</span><strong id="ci-tot" style="color:#fff">—</strong></div>
         </div>
-        <input type="hidden" id="marc-w" value="30">
-        <input type="hidden" id="marc-h" value="40">
+        <input type="hidden" id="marc-w" value="0">
+        <input type="hidden" id="marc-h" value="0">
       </div>
 
       <div class="card">
@@ -452,6 +471,16 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 
 <div class="zoom-panel" id="zoom-panel"></div>
 <script>
+
+function toggleMobileNav(btn){
+  var nav = btn.closest('nav');
+  if(nav) nav.classList.toggle('nav-open');
+}
+document.addEventListener('click', function(ev){
+  document.querySelectorAll('nav.nav-open').forEach(function(nav){
+    if(!nav.contains(ev.target)) nav.classList.remove('nav-open');
+  });
+});
 
 // ── Variables globals ─────────────────────────────────────────────────────
 var REFS    = {pre:[], marc:[]};
@@ -510,10 +539,11 @@ var T = {
     hola: "Hola! Us envio el pressupost d\'emmarcacio",
     ref: "Ref.",
     client: "Client",
+    piece: "Peca a emmarcar",
     marc: "Marc",
     midaFinal: "Mida final",
     premarcLabel: "pre-marc",
-    mides: "Mides",
+    mides: "Mides peça",
     muntatge: "Muntatge",
     proteccio: "Proteccio",
     interior: "Interior",
@@ -535,10 +565,11 @@ var T = {
     hola: "Hola! Os enviamos el presupuesto de enmarcacion",
     ref: "Ref.",
     client: "Cliente",
+    piece: "Pieza a enmarcar",
     marc: "Marco",
     midaFinal: "Medida final",
     premarcLabel: "pre-marco",
-    mides: "Medidas",
+    mides: "Medidas pieza",
     muntatge: "Montaje",
     proteccio: "Proteccion",
     interior: "Interior",
@@ -560,10 +591,11 @@ var T = {
     hola: "Hello! Here is your framing quote",
     ref: "Ref.",
     client: "Client",
+    piece: "Item to frame",
     marc: "Frame",
     midaFinal: "Final size",
     premarcLabel: "inner frame",
-    mides: "Dimensions",
+    mides: "Item size",
     muntatge: "Mounting",
     proteccio: "Protection",
     interior: "Interior",
@@ -580,6 +612,29 @@ var T = {
     discountApplied: "Discount applied",
     yes: "Yes",
     printIncluded: "Photo print included"
+  }
+};
+var PIECE_LABELS = {
+  ca: {
+    fotografia: 'Fotografia',
+    lamina: 'Làmina',
+    pintura_sense_bastidor: 'Pintura sense bastidor',
+    pintura_amb_bastidor: 'Pintura amb bastidor',
+    puzzle: 'Puzzle'
+  },
+  es: {
+    fotografia: 'Fotografía',
+    lamina: 'Lámina',
+    pintura_sense_bastidor: 'Pintura sin bastidor',
+    pintura_amb_bastidor: 'Pintura con bastidor',
+    puzzle: 'Puzzle'
+  },
+  en: {
+    fotografia: 'Photograph',
+    lamina: 'Poster',
+    pintura_sense_bastidor: 'Unstretched painting',
+    pintura_amb_bastidor: 'Stretched painting',
+    puzzle: 'Puzzle'
   }
 };
 var LIM_MSG = {
@@ -630,6 +685,15 @@ function getPhotoSizeText(){
   var h = parseFloat(document.getElementById('alcada').value);
   if(!Number.isFinite(w) || !Number.isFinite(h) || w<=0 || h<=0) return '';
   return fmtMesura(w)+' x '+fmtMesura(h)+' cm';
+}
+function getPieceTypeValue(){
+  var el = document.getElementById('tipus-peca');
+  return el ? (el.value || 'fotografia') : 'fotografia';
+}
+function getPieceTypeLabel(){
+  var labels = PIECE_LABELS[_lang] || PIECE_LABELS.ca;
+  var value = getPieceTypeValue();
+  return labels[value] || value;
 }
 function getFinalSizeText(){
   var w = parseFloat(document.getElementById('marc-w').value);
@@ -976,7 +1040,7 @@ function recalcMides(){
   document.getElementById('marc-h').value=mH;
   if(hasP&&cms>0){
     document.getElementById('mida-total').value=mW+' x '+mH+' cm';
-    document.getElementById('mida-total-simple').textContent='Mida marc: '+mW+'x'+mH+' cm (foto '+w+'x'+h+')';
+    document.getElementById('mida-total-simple').textContent='Mida marc: '+mW+'x'+mH+' cm (peça '+w+'x'+h+')';
   } else {
     document.getElementById('mida-total').value='';
     document.getElementById('mida-total-simple').textContent=(w>0&&h>0)?'Mida: '+w+' x '+h+' cm':'';
@@ -1062,6 +1126,7 @@ function setProtterDisabled(dis){
 }
 
 function applyIncompatibilities(){
+  var pieceType = getPieceTypeValue();
   var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var hasPasspartu = interior==='passpartu'||interior==='doble_pas';
@@ -1082,6 +1147,39 @@ function applyIncompatibilities(){
     'proteccio-cap':   hasPasspartu,
   };
 
+  if(pieceType === 'lamina'){
+    rules.protter = true;
+  }
+  if(pieceType === 'puzzle'){
+    rules.protter = true;
+    rules.passpartu = true;
+    rules.doble_pas = true;
+    rules.proeco = true;
+  }
+  if(pieceType === 'pintura_sense_bastidor'){
+    rules.encolat = true;
+    rules.protter = true;
+    rules.vidre = true;
+    rules.doble_vidre = true;
+    rules.mirall = true;
+    rules['conservar-vidre'] = true;
+    rules.passpartu = true;
+    rules.doble_pas = true;
+    rules.proeco = true;
+  }
+  if(pieceType === 'pintura_amb_bastidor'){
+    rules.encolat = true;
+    rules.protter = true;
+    rules.vidre = true;
+    rules.doble_vidre = true;
+    rules.mirall = true;
+    rules['conservar-vidre'] = true;
+    rules.passpartu = true;
+    rules.doble_pas = true;
+    rules.proeco = true;
+    rules['proteccio-cap'] = false;
+  }
+
   Object.keys(rules).forEach(function(k){
     var el=document.getElementById('opt-'+k); if(!el) return;
     el.classList.toggle('disabled',rules[k]);
@@ -1094,6 +1192,19 @@ function applyIncompatibilities(){
       }
     }
   });
+
+  var disablePrint = pieceType !== 'fotografia';
+  var printBtn = document.getElementById('opt-impressio');
+  var printChk = document.getElementById('chk-impressio');
+  if(printBtn){
+    printBtn.classList.toggle('disabled', disablePrint);
+    printBtn.title = disablePrint ? 'Disponible només quan la peça a emmarcar és una fotografia' : '';
+  }
+  if(disablePrint && printChk && printChk.checked){
+    printChk.checked = false;
+    printBtn.classList.remove('selected');
+    updateImpressioPreu();
+  }
 
   // Force vidre when passpartú
   if(hasPasspartu){
@@ -1111,6 +1222,12 @@ function applyIncompatibilities(){
 
   document.getElementById('bloc-passpartu').style.display=hasPasspartu?'block':'none';
   document.getElementById('vidre-obligatori').style.display=hasPasspartu?'inline':'none';
+}
+
+function onPieceTypeChange(){
+  applyIncompatibilities();
+  recalcMides();
+  calcular();
 }
 
 // ── Grups canvi ───────────────────────────────────────────────────────────
@@ -1133,6 +1250,10 @@ function onGrupChange(grup){
 
 function toggleImpressio(){
   var chk = document.getElementById('chk-impressio');
+  if(document.getElementById('opt-impressio').classList.contains('disabled')){
+    showAlert('La impressió només està disponible quan la peça a emmarcar és una fotografia.', 'err');
+    return;
+  }
   chk.checked = !chk.checked;  // toggle manually
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
@@ -1293,8 +1414,11 @@ function guardar(){
     client_tel:document.getElementById('client_tel').value,
     pre_marc:document.getElementById('pre_marc').value||'-',
     marc_principal:document.getElementById('marc_principal').value,
+    tipus_peca:getPieceTypeValue(),
     amplada:parseFloat(document.getElementById('amplada').value)||0,
     alcada:parseFloat(document.getElementById('alcada').value)||0,
+    final_amplada:parseFloat(document.getElementById('marc-w').value)||0,
+    final_alcada:parseFloat(document.getElementById('marc-h').value)||0,
     copia:0,
     encolat:document.getElementById('ref-muntatge').value||'-',
     vidre:document.getElementById('ref-proteccio').value||'-',
@@ -1349,6 +1473,7 @@ function capturaEstat(){
     client_tel:document.getElementById('client_tel').value,
     pre_marc:document.getElementById('pre_marc').value||'',
     marc_principal:document.getElementById('marc_principal').value||'',
+    tipus_peca:getPieceTypeValue(),
     amplada:document.getElementById('amplada').value,
     alcada:document.getElementById('alcada').value,
     cm_passpartu:document.getElementById('cm-passpartu').value,
@@ -1372,6 +1497,7 @@ function capturaEstat(){
 function restauraEstat(e){
   document.getElementById('client_nom').value=e.client_nom||'';
   document.getElementById('client_tel').value=e.client_tel||'';
+  document.getElementById('tipus-peca').value=e.tipus_peca||'fotografia';
   document.getElementById('amplada').value=(e.amplada !== undefined && e.amplada !== null && e.amplada !== 0) ? e.amplada : '';
   document.getElementById('alcada').value=(e.alcada !== undefined && e.alcada !== null && e.alcada !== 0) ? e.alcada : '';
   document.getElementById('cm-passpartu').value=e.cm_passpartu||4;
@@ -1473,6 +1599,7 @@ function pdfComparativa(){
 // ── Netejar ───────────────────────────────────────────────────────────────
 function netejar(){
   ['client_nom','client_tel','pre_marc','marc_principal','observacions'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('tipus-peca').value='fotografia';
   document.getElementById('amplada').value='';
   document.getElementById('alcada').value='';
   ['descompte','entrega'].forEach(function(id){document.getElementById(id).value=0;});
@@ -1531,9 +1658,11 @@ function buildWAtext(){
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var num = window._numPressupost || '';
   var t = T[_lang] || T.ca;
+  var pieceLabel = getPieceTypeLabel();
   var midaFinal = getFinalSizeText();
   var midaFoto = getPhotoSizeText();
   var lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
+  if(pieceLabel) lines.push(t.piece+': '+pieceLabel);
   if(midaFinal) lines.push(t.midaFinal+': '+midaFinal);
   if(midaFoto) lines.push(t.mides+': '+midaFoto);
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
@@ -1581,6 +1710,7 @@ function buildWAtext_intern(){
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
 
   var t = T[_lang] || T.ca;
+  var pieceLabel = getPieceTypeLabel();
   var midaFinal = getFinalSizeText();
   var midaFoto = getPhotoSizeText();
   var lines = [
@@ -1588,6 +1718,7 @@ function buildWAtext_intern(){
     t.numPres+': *' + num + '*',
     t.client+': ' + client,'',
   ];
+  if(pieceLabel) lines.push(t.piece+': ' + pieceLabel);
   if(midaFinal) lines.push(t.midaFinal+': ' + midaFinal);
   if(midaFoto) lines.push(t.mides+': ' + midaFoto);
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);

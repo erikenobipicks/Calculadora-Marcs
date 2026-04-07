@@ -725,16 +725,19 @@ def guardar():
         (user_id, data, client_nom, client_tel,
          pre_marc, marc_principal, amplada, alcada, copia,
          encolat, vidre, passpartout, impressio,
+         tipus_peca, final_amplada, final_alcada,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
         d.get('amplada',0), d.get('alcada',0), d.get('copia',0),
         d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
         d.get('impressio',''),
+        d.get('tipus_peca','fotografia'),
+        d.get('final_amplada',0), d.get('final_alcada',0),
         d.get('marge',60), d.get('descompte',0), d.get('quantitat',1),
         d.get('preu_net',0), d.get('preu_final',0),
         d.get('entrega',0), d.get('pendent',0),
@@ -1199,6 +1202,7 @@ def crear_pdf_comparativa(comandes):
         return '—' if v in ['','-','None'] else str(v)
 
     fields = [
+        (t['tipus_peca'],     'piece_type',       False),
         (t['mida_final'],     'final_size',      False),
         (t['mides_foto'],     'photo_size',      False),
         (t['muntatge'],       'muntatge_label',  False),
@@ -1218,7 +1222,9 @@ def crear_pdf_comparativa(comandes):
         lbl_color = DARK if not is_price else colors.HexColor("#1A6B45") if key=='preu_final' else                     RED if key=='pendent' else colors.HexColor("#6B6860")
         row = [p(lbl, bold=is_price, size=9, color=lbl_color)]
         for c in comandes:
-            if key == 'final_size':
+            if key == 'piece_type':
+                val = _display_piece_type(c, t)
+            elif key == 'final_size':
                 val = _final_size_text(c, sep=' x ', with_unit=True)
             elif key == 'photo_size':
                 val = _photo_size_text(c, sep=' x ', with_unit=True)
@@ -1384,6 +1390,7 @@ PDF_T = {
         'premarc': 'Pre-Marc',
         'mides': 'Mides',
         'mida_final': 'Mida final',
+        'tipus_peca': 'Peça a emmarcar',
         'muntatge': 'Muntatge',
         'proteccio': 'Protecció',
         'interior': 'Interior',
@@ -1397,7 +1404,7 @@ PDF_T = {
         'num': 'Num. Pressupost',
         'comparativa': 'COMPARATIVA DE PRESSUPOSTOS',
         'marc_principal': 'Marc principal',
-        'mides_foto': 'Mides foto (cm)',
+        'mides_foto': 'Mides peça (cm)',
         'vidre_mirall': 'Vidre / Mirall',
         'preu_net_label': 'Preu net',
         'total_iva': 'TOTAL amb IVA',
@@ -1412,6 +1419,11 @@ PDF_T = {
         'doble_passpartu': 'Doble passpartú',
         'proeco_label': 'ProEco',
         'inclosa': 'Inclosa',
+        'piece_photo': 'Fotografia',
+        'piece_lamina': 'Làmina',
+        'piece_painting_unstretched': 'Pintura sense bastidor',
+        'piece_painting_stretched': 'Pintura amb bastidor',
+        'piece_puzzle': 'Puzzle',
         'conservar_vidre': 'Conservar vidre existent',
         'preu_net_pvp': 'Preu net PVP (sense IVA)',
         'descompte_sobre_pvp': 'Descompte {pct}% sobre PVP',
@@ -1427,6 +1439,7 @@ PDF_T = {
         'premarc': 'Pre-Marco',
         'mides': 'Medidas',
         'mida_final': 'Medida final',
+        'tipus_peca': 'Pieza a enmarcar',
         'muntatge': 'Montaje',
         'proteccio': 'Protección',
         'interior': 'Interior',
@@ -1440,7 +1453,7 @@ PDF_T = {
         'num': 'Num. Presupuesto',
         'comparativa': 'COMPARATIVA DE PRESUPUESTOS',
         'marc_principal': 'Marco principal',
-        'mides_foto': 'Medidas foto (cm)',
+        'mides_foto': 'Medidas pieza (cm)',
         'vidre_mirall': 'Vidrio / Espejo',
         'preu_net_label': 'Precio neto',
         'total_iva': 'TOTAL con IVA',
@@ -1455,6 +1468,11 @@ PDF_T = {
         'doble_passpartu': 'Doble passpartú',
         'proeco_label': 'ProEco',
         'inclosa': 'Incluida',
+        'piece_photo': 'Fotografía',
+        'piece_lamina': 'Lámina',
+        'piece_painting_unstretched': 'Pintura sin bastidor',
+        'piece_painting_stretched': 'Pintura con bastidor',
+        'piece_puzzle': 'Puzzle',
         'conservar_vidre': 'Conservar vidrio existente',
         'preu_net_pvp': 'Precio neto PVP (sin IVA)',
         'descompte_sobre_pvp': 'Descuento {pct}% sobre PVP',
@@ -1470,6 +1488,7 @@ PDF_T = {
         'premarc': 'Inner frame',
         'mides': 'Dimensions',
         'mida_final': 'Final size',
+        'tipus_peca': 'Item to frame',
         'muntatge': 'Mounting',
         'proteccio': 'Protection',
         'interior': 'Interior',
@@ -1483,7 +1502,7 @@ PDF_T = {
         'num': 'Quote No.',
         'comparativa': 'QUOTE COMPARISON',
         'marc_principal': 'Main frame',
-        'mides_foto': 'Photo size (cm)',
+        'mides_foto': 'Item size (cm)',
         'vidre_mirall': 'Glass / Mirror',
         'preu_net_label': 'Net price',
         'total_iva': 'TOTAL incl. VAT',
@@ -1498,6 +1517,11 @@ PDF_T = {
         'doble_passpartu': 'Double mat',
         'proeco_label': 'ProEco',
         'inclosa': 'Included',
+        'piece_photo': 'Photograph',
+        'piece_lamina': 'Poster',
+        'piece_painting_unstretched': 'Unstretched painting',
+        'piece_painting_stretched': 'Stretched painting',
+        'piece_puzzle': 'Puzzle',
         'conservar_vidre': 'Keep existing glass',
         'preu_net_pvp': 'Net retail price (excl. VAT)',
         'descompte_sobre_pvp': 'Discount {pct}% on retail price',
@@ -1641,6 +1665,7 @@ def crear_pdf(c):
     det_rows = []
     final_size = _final_size_text(c, with_unit=True)
     photo_size = _photo_size_text(c, with_unit=True)
+    piece_type = _display_piece_type(c, t)
     muntatge_label = _display_muntatge(c, t)
     proteccio_label = _display_proteccio(c, t)
     interior_label = _display_interior(c, t)
@@ -1675,6 +1700,8 @@ def crear_pdf(c):
         det_rows.append(fila(t['observacions']+':', c['observacions']))
 
     det_rows = []
+    if piece_type:
+        det_rows.append(fila(t['tipus_peca']+':', piece_type))
     if final_size:
         det_rows.append(fila(t['mida_final']+':', final_size))
     if photo_size:
@@ -1816,14 +1843,29 @@ def _photo_size_text(c, sep=' × ', with_unit=False):
     return _format_size_text(c.get('amplada'), c.get('alcada'), sep=sep, with_unit=with_unit)
 
 def _final_size_text(c, sep=' × ', with_unit=False):
-    for key in ('passpartout', 'vidre', 'encolat'):
-        ref = (c.get(key) or '').strip()
-        if ref and ref not in ('-', 'CONSERVAR'):
-            w, h = _parse_dims(ref)
-            text = _format_size_text(w, h, sep=sep, with_unit=with_unit)
-            if text:
-                return text
+    text = _format_size_text(c.get('final_amplada'), c.get('final_alcada'), sep=sep, with_unit=with_unit)
+    if text:
+        return text
+    ref = (c.get('passpartout') or '').strip()
+    if ref and ref not in ('-', 'CONSERVAR'):
+        w, h = _parse_dims(ref)
+        text = _format_size_text(w, h, sep=sep, with_unit=with_unit)
+        if text:
+            return text
     return _photo_size_text(c, sep=sep, with_unit=with_unit)
+
+def _display_piece_type(c, t):
+    value = (c.get('tipus_peca') or '').strip().lower()
+    if not value:
+        return ''
+    labels = {
+        'fotografia': t['piece_photo'],
+        'lamina': t['piece_lamina'],
+        'pintura_sense_bastidor': t['piece_painting_unstretched'],
+        'pintura_amb_bastidor': t['piece_painting_stretched'],
+        'puzzle': t['piece_puzzle'],
+    }
+    return labels.get(value, value.replace('_', ' ').title())
 
 def _display_muntatge(c, t):
     ref = (c.get('encolat') or '').strip().upper()
@@ -1994,8 +2036,9 @@ def mailto_data():
             'greet': 'Bon dia,',
             'intro': "Us faig arribar el pressupost d'emmarcació per al client {client}.",
             'detail': 'DETALL DE LA COMANDA:',
-            'mides': 'Mides',
+            'mides': 'Mides peça',
             'mida_final': 'Mida final',
+            'tipus_peca': 'Peça a emmarcar',
             'vidre': 'Vidre',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Encolat',
@@ -2009,6 +2052,11 @@ def mailto_data():
             'passpartu_label': 'Passpartú',
             'doble_passpartu': 'Doble passpartú',
             'proeco_label': 'ProEco',
+            'piece_photo': 'Fotografia',
+            'piece_lamina': 'Làmina',
+            'piece_painting_unstretched': 'Pintura sense bastidor',
+            'piece_painting_stretched': 'Pintura amb bastidor',
+            'piece_puzzle': 'Puzzle',
             'preu': 'PREU FINAL: {price:.2f} EUR (IVA inclòs)',
             'pendent': 'Pendent de cobrar: {pend:.2f} EUR',
             'obs': 'Observacions: {obs}',
@@ -2020,8 +2068,9 @@ def mailto_data():
             'greet': 'Buenos días,',
             'intro': 'Os envío el presupuesto de enmarcación para el cliente {client}.',
             'detail': 'DETALLE DEL PEDIDO:',
-            'mides': 'Medidas',
+            'mides': 'Medidas pieza',
             'mida_final': 'Medida final',
+            'tipus_peca': 'Pieza a enmarcar',
             'vidre': 'Vidrio',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Montaje',
@@ -2035,6 +2084,11 @@ def mailto_data():
             'passpartu_label': 'Passpartú',
             'doble_passpartu': 'Doble passpartú',
             'proeco_label': 'ProEco',
+            'piece_photo': 'Fotografía',
+            'piece_lamina': 'Lámina',
+            'piece_painting_unstretched': 'Pintura sin bastidor',
+            'piece_painting_stretched': 'Pintura con bastidor',
+            'piece_puzzle': 'Puzzle',
             'preu': 'PRECIO FINAL: {price:.2f} EUR (IVA incluido)',
             'pendent': 'Pendiente de cobro: {pend:.2f} EUR',
             'obs': 'Observaciones: {obs}',
@@ -2046,8 +2100,9 @@ def mailto_data():
             'greet': 'Good morning,',
             'intro': 'Please find the framing quote for client {client}.',
             'detail': 'QUOTE DETAILS:',
-            'mides': 'Dimensions',
+            'mides': 'Item size',
             'mida_final': 'Final size',
+            'tipus_peca': 'Item to frame',
             'vidre': 'Glass',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Mounting',
@@ -2061,6 +2116,11 @@ def mailto_data():
             'passpartu_label': 'Mat',
             'doble_passpartu': 'Double mat',
             'proeco_label': 'ProEco',
+            'piece_photo': 'Photograph',
+            'piece_lamina': 'Poster',
+            'piece_painting_unstretched': 'Unstretched painting',
+            'piece_painting_stretched': 'Stretched painting',
+            'piece_puzzle': 'Puzzle',
             'preu': 'FINAL PRICE: {price:.2f} EUR (VAT included)',
             'pendent': 'Outstanding: {pend:.2f} EUR',
             'obs': 'Notes: {obs}',
@@ -2072,6 +2132,7 @@ def mailto_data():
     tt = MAILTO_T.get(lang, MAILTO_T['ca'])
     final_size = _final_size_text(c, sep=' x ', with_unit=True)
     photo_size = _photo_size_text(c, sep=' x ', with_unit=True)
+    piece_type = _display_piece_type(c, tt)
     proteccio_label = _display_proteccio(c, tt)
     interior_label = _display_interior(c, tt)
     muntatge_label = _display_muntatge(c, tt)
@@ -2083,6 +2144,8 @@ def mailto_data():
         "",
         tt['detail'],
     ]
+    if piece_type:
+        lines.append(f"  {tt['tipus_peca']}: {piece_type}")
     if final_size:
         lines.append(f"  {tt['mida_final']}: {final_size}")
     if photo_size:
@@ -2138,6 +2201,7 @@ def enviar_email():
     pdf_lang = PDF_T.get((c.get('lang') or 'ca').lower(), PDF_T['ca'])
     final_size = _final_size_text(c, sep=' x ', with_unit=True) or '-'
     photo_size = _photo_size_text(c, sep=' x ', with_unit=True) or '-'
+    piece_type = _display_piece_type(c, pdf_lang)
     proteccio_label = _display_proteccio(c, pdf_lang) or '-'
     interior_label = _display_interior(c, pdf_lang) or '-'
     muntatge_label = _display_muntatge(c, pdf_lang) or '-'
@@ -2150,12 +2214,13 @@ def enviar_email():
     <p style='font-family:sans-serif;font-size:15px'><b>Client:</b> {c['client_nom']} &nbsp;·&nbsp; {c['client_tel'] or '-'}</p>
     <p style='font-family:sans-serif;font-size:15px'><b>Data:</b> {c['data']}</p>
     <hr style='border:1px solid #E5E2DB;margin:12px 0'>
-    <p style='font-family:sans-serif;font-size:14px'><b>Mida final:</b> {final_size}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Mides foto:</b> {photo_size}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Muntatge:</b> {muntatge_label}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Vidre:</b> {proteccio_label}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Passpartout:</b> {interior_label}</p>
-    <p style='font-family:sans-serif;font-size:14px'><b>Impressio:</b> {impressio_label}</p>
+    {"<p style='font-family:sans-serif;font-size:14px'><b>" + pdf_lang['tipus_peca'] + ":</b> " + piece_type + "</p>" if piece_type else ""}
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['mida_final']}:</b> {final_size}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['mides_foto']}:</b> {photo_size}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['muntatge']}:</b> {muntatge_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['vidre_mirall']}:</b> {proteccio_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['interior']}:</b> {interior_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['impressio']}:</b> {impressio_label}</p>
     {"<p style='font-family:sans-serif;font-size:14px'><b>Obs:</b> " + obs + "</p>" if obs else ""}
     <hr style='border:1px solid #E5E2DB;margin:12px 0'>
     <p style='font-family:sans-serif;font-size:16px'><b>Preu final:</b>
@@ -2218,6 +2283,8 @@ def init_db():
                     client_nom TEXT, client_tel TEXT, pre_marc TEXT,
                     marc_principal TEXT, amplada REAL, alcada REAL, copia REAL,
                     encolat TEXT, vidre TEXT, passpartout TEXT, impressio TEXT,
+                    tipus_peca TEXT DEFAULT '',
+                    final_amplada REAL DEFAULT 0, final_alcada REAL DEFAULT 0,
                     marge REAL, descompte REAL, quantitat REAL,
                     preu_net REAL, preu_final REAL, entrega REAL, pendent REAL,
                     observacions TEXT, sessio_id TEXT,
@@ -2233,6 +2300,9 @@ def init_db():
                     print("DDL err:", e)
             for tbl, col, typ in [
                 ('comandes','impressio','TEXT'),
+                ('comandes','tipus_peca',"TEXT DEFAULT ''"),
+                ('comandes','final_amplada','REAL DEFAULT 0'),
+                ('comandes','final_alcada','REAL DEFAULT 0'),
                 ('comandes','sessio_id','TEXT'),
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
@@ -2312,6 +2382,8 @@ def init_db():
                     pre_marc TEXT, marc_principal TEXT,
                     amplada REAL, alcada REAL, copia REAL,
                     encolat TEXT, vidre TEXT, passpartout TEXT, impressio TEXT,
+                    tipus_peca TEXT DEFAULT '',
+                    final_amplada REAL DEFAULT 0, final_alcada REAL DEFAULT 0,
                     marge REAL, descompte REAL, quantitat REAL,
                     preu_net REAL, preu_final REAL,
                     entrega REAL, pendent REAL, observacions TEXT,

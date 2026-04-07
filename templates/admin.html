@@ -10,10 +10,11 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 nav{background:#1C1B18;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
-nav .brand{color:#fff;font-family:'DM Serif Display',serif;font-size:20px}
-nav .links{display:flex;align-items:center;gap:1rem}
+nav .brand{color:#fff;font-family:'DM Serif Display',serif;font-size:20px;order:1}
+nav .links{display:flex;align-items:center;gap:1rem;order:3}
 nav .links a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}
 nav .links a:hover{color:#fff}
+nav .nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:transparent;color:#fff;font-size:20px;cursor:pointer;order:2;margin-left:auto}
 .container{max-width:1320px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
 .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.1rem}
 .page-title{font-family:'DM Serif Display',serif;font-size:34px;font-weight:400;letter-spacing:-.5px}
@@ -59,11 +60,18 @@ tr:last-child td{border-bottom:none}
 .field-stack{display:grid;gap:.55rem}
 .muted{font-size:12px;color:var(--muted);line-height:1.6}
 .actions-col{display:grid;gap:.45rem}
-@media(max-width:980px){.grid,.stats{grid-template-columns:1fr}.hero{align-items:flex-start}.form-grid{grid-template-columns:1fr}}
+@media(max-width:980px){
+  nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
+  nav .nav-toggle{display:flex}
+  nav .links{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
+  nav.nav-open .links{display:flex}
+  .grid,.stats{grid-template-columns:1fr}.hero{align-items:flex-start}.form-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
-<nav>
+<nav class="site-nav">
+  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <span class="brand">OBJECTIU — Admin</span>
   <div class="links">
     <a href="/">Portal</a>
@@ -314,5 +322,16 @@ tr:last-child td{border-bottom:none}
     </div>
   </div>
 </div>
+<script>
+function toggleMobileNav(btn){
+  var nav = btn.closest('nav');
+  if(nav) nav.classList.toggle('nav-open');
+}
+document.addEventListener('click', function(ev){
+  document.querySelectorAll('nav.nav-open').forEach(function(nav){
+    if(!nav.contains(ev.target)) nav.classList.remove('nav-open');
+  });
+});
+</script>
 </body>
 </html>

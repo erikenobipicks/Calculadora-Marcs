@@ -13,6 +13,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px;cursor:pointer}
 .nav-r{display:flex;align-items:center;gap:1rem}
 .nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:#fff}
+.nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:transparent;color:#fff;font-size:20px;cursor:pointer}
 .wrap{max-width:1240px;margin:0 auto;padding:2rem 1.5rem}
 .page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
 .page-header h1{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400}
@@ -55,12 +56,19 @@ tr:hover td{background:#FAFAF8}
 .empty{text-align:center;padding:3rem;color:var(--hint)}
 .footer-bar{margin-top:1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
 .footer-bar p{font-size:12px;color:var(--hint)}
+@media(max-width:920px){
+  nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
+  .nav-toggle{display:flex}
+  .nav-r{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
+  nav.nav-open .nav-r{display:flex}
+}
 @media(max-width:860px){.wrap{padding:1.25rem 1rem 2rem}.header-actions,.filters,.stat-pills,.footer-bar{width:100%}.table-wrap{overflow:auto}}
 </style>
 </head>
 <body>
-<nav>
+<nav class="site-nav">
   <div class="brand" onclick="window.location='/'">{{ session.get('empresa_nom','Calculadora') }}</div>
+  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-r">
     <a href="/">Portal</a>
     <a href="/calculadora">Calculadora</a>
@@ -171,6 +179,15 @@ tr:hover td{background:#FAFAF8}
 <div class="zoom-panel" id="zoom-panel"></div>
 
 <script>
+function toggleMobileNav(btn){
+  var nav = btn.closest('nav');
+  if(nav) nav.classList.toggle('nav-open');
+}
+document.addEventListener('click', function(ev){
+  document.querySelectorAll('nav.nav-open').forEach(function(nav){
+    if(!nav.contains(ev.target)) nav.classList.remove('nav-open');
+  });
+});
 var zoomPanel = document.getElementById('zoom-panel');
 function moveZoomPanel(ev, source){
   if(!zoomPanel || !source) return;
