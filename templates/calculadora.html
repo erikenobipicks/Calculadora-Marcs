@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
@@ -1488,7 +1488,8 @@ function buildWebOrderPayload(){
     print_label: printLabel,
     total: parseMoneyEU((document.getElementById('r-final') || {}).textContent || '0'),
     pending: parseMoneyEU((document.getElementById('r-pend') || {}).textContent || '0'),
-    deposit: parseFloat((document.getElementById('entrega') || {}).value || '0') || 0
+    deposit: parseFloat((document.getElementById('entrega') || {}).value || '0') || 0,
+    notes: (document.getElementById('observacions') || {}).value || ''
   };
 }
 
