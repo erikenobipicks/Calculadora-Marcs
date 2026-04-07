@@ -369,6 +369,10 @@ def _bridge_signing_secret():
     return os.environ.get('BRIDGE_LOGIN_SECRET', '').strip() or _bridge_api_token()
 
 
+def _main_site_url():
+    return os.environ.get('MAIN_SITE_URL', 'https://reusrevela.cat').strip().rstrip('/')
+
+
 def _urlsafe_b64encode(raw):
     return base64.urlsafe_b64encode(raw).decode().rstrip('=')
 
@@ -427,6 +431,25 @@ def _load_empresa_nom_for_session(user):
         return nom_emp or 'Calculadora'
     except Exception:
         return 'Calculadora'
+
+
+def _build_web_return_url(source=None, lang=None):
+    base = _main_site_url()
+    if not base:
+        return ''
+
+    source = str(source or '').strip().lower()
+    lang = (lang or 'ca').strip().lower() or 'ca'
+    path = '/area-privada' if source in {'private_area', 'web_private', 'area_privada', 'web'} else '/'
+    if path == '/':
+        return f'{base}/?lang={lang}'
+    return f'{base}{path}?lang={lang}'
+
+
+def _current_web_return_url():
+    source = session.get('bridge_source') or request.args.get('source') or 'web'
+    lang = session.get('bridge_lang') or request.args.get('lang') or 'ca'
+    return _build_web_return_url(source, lang)
 
 
 def _needs_setup(user_id):
@@ -519,6 +542,7 @@ def admin_required(f):
 # ── Routes: Auth ─────────────────────────────────────────────────────────
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    web_return_url = _current_web_return_url()
     if request.method == 'POST':
         user = query('SELECT * FROM usuaris WHERE username=?',
                      [request.form['username']], one=True)
@@ -529,13 +553,15 @@ def login():
                     flash("El teu accés encara està pendent de validació.", 'error')
                 else:
                     flash("El teu accés està bloquejat. Contacta amb l'administrador.", 'error')
-                return render_template('login.html')
+                return render_template('login.html', web_return_url=web_return_url)
             _start_user_session(user)
+            session['bridge_source'] = (request.args.get('source') or session.get('bridge_source') or '').strip().lower()
+            session['bridge_lang'] = (request.args.get('lang') or session.get('bridge_lang') or 'ca').strip().lower()
             if _needs_setup(user['id']):
                 return redirect(url_for('setup'))
             return redirect(url_for('index'))
         flash('Usuari o contrasenya incorrectes.', 'error')
-    return render_template('login.html')
+    return render_template('login.html', web_return_url=web_return_url)
 
 @app.route('/logout')
 def logout():
@@ -657,6 +683,8 @@ def bridge_auth():
         return redirect(url_for('login'))
 
     _start_user_session(user)
+    session['bridge_source'] = str(payload.get('source') or '').strip().lower()
+    session['bridge_lang'] = str(payload.get('lang') or 'ca').strip().lower()
     target = _safe_next_path(payload.get('next'), '/')
     if _needs_setup(user['id']) and target != url_for('logout'):
         return redirect(url_for('setup'))
@@ -693,7 +721,7 @@ def index():
     except:
         pass
     user = query('SELECT nom, username, nom_empresa, profile_type, access_status, web_url, instagram, fiscal_id, notes_validacio FROM usuaris WHERE id=?', [session['user_id']], one=True)
-    return render_template('portal.html', user=user)
+    return render_template('portal.html', user=user, web_return_url=_current_web_return_url())
 
 
 @app.route('/calculadora')
