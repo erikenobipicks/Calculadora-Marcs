@@ -54,6 +54,19 @@ nav{
   flex-wrap:wrap;
   justify-content:flex-end;
 }
+.nav-toggle{
+  display:none;
+  align-items:center;
+  justify-content:center;
+  width:40px;
+  height:40px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:10px;
+  background:transparent;
+  color:#fff;
+  font-size:20px;
+  cursor:pointer;
+}
 .nav-right a{
   color:#d7d0c4;
   text-decoration:none;
@@ -379,10 +392,22 @@ nav{
 @media (max-width:700px){
   nav{
     padding:.85rem 1rem;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .nav-toggle{
+    display:flex;
   }
   .nav-right{
+    display:none;
+    width:100%;
     gap:.75rem;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:flex-start;
+    padding:.25rem 0 .35rem;
   }
+  nav.nav-open .nav-right{display:flex}
   .page{
     padding:1.2rem .9rem 2rem;
   }
@@ -395,8 +420,9 @@ nav{
 </style>
 </head>
 <body>
-<nav>
+<nav class="site-nav">
   <a class="brand" href="/">{{ session.get('empresa_nom', 'Calculadora') }}</a>
+  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-right">
     <span class="nav-user">{{ session.nom }}</span>
     <a href="/">Portal</a>
@@ -782,6 +808,15 @@ nav{
 </main>
 
 <script>
+function toggleMobileNav(btn){
+  var nav = btn.closest('nav');
+  if(nav) nav.classList.toggle('nav-open');
+}
+document.addEventListener('click', function(ev){
+  document.querySelectorAll('nav.nav-open').forEach(function(nav){
+    if(!nav.contains(ev.target)) nav.classList.remove('nav-open');
+  });
+});
 const searchInput = document.getElementById('help-search');
 const sectionCards = Array.from(document.querySelectorAll('.help-section'));
 const filterButtons = Array.from(document.querySelectorAll('.pill'));

@@ -16,6 +16,7 @@ nav{background:#1C1B18;height:56px;display:flex;align-items:center;justify-conte
 .nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}
 .nav-r a:hover{color:#fff}
 .nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:4px 11px;border-radius:20px;font-weight:500}
+.nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:transparent;color:#fff;font-size:20px;cursor:pointer}
 .wrap{max-width:1120px;margin:0 auto;padding:2rem 1.25rem 3rem}
 .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:1.25rem;align-items:stretch;margin-bottom:1.25rem}
 .hero-copy,.hero-side,.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r)}
@@ -53,11 +54,18 @@ nav{background:#1C1B18;height:56px;display:flex;align-items:center;justify-conte
 .info-strip strong{display:block;font-size:13px;color:var(--ink);margin-bottom:.25rem}
 .info-strip span{font-size:13px;color:var(--muted);line-height:1.65}
 @media(max-width:920px){.hero,.grid{grid-template-columns:1fr}.hero-copy h1{font-size:34px}}
+@media(max-width:920px){
+  nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
+  .nav-toggle{display:flex}
+  .nav-r{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
+  nav.nav-open .nav-r{display:flex}
+}
 </style>
 </head>
 <body>
-<nav>
+<nav class="site-nav">
   <div class="brand"><a href="/">Reus Revela</a></div>
+  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="/calculadora">Calculadora</a>
@@ -190,5 +198,16 @@ nav{background:#1C1B18;height:56px;display:flex;align-items:center;justify-conte
     </article>
   </section>
 </div>
+<script>
+function toggleMobileNav(btn){
+  var nav = btn.closest('nav');
+  if(nav) nav.classList.toggle('nav-open');
+}
+document.addEventListener('click', function(ev){
+  document.querySelectorAll('nav.nav-open').forEach(function(nav){
+    if(!nav.contains(ev.target)) nav.classList.remove('nav-open');
+  });
+});
+</script>
 </body>
 </html>
