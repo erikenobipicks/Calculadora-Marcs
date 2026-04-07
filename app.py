@@ -452,6 +452,12 @@ def _current_web_return_url():
     return _build_web_return_url(source, lang)
 
 
+def _current_web_order_url():
+    base = _main_site_url()
+    lang = (session.get('bridge_lang') or request.args.get('lang') or 'ca').strip().lower() or 'ca'
+    return f'{base}/area-privada/comanda?lang={lang}'
+
+
 def _needs_setup(user_id):
     try:
         u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user_id], one=True)
@@ -735,6 +741,7 @@ def calculadora():
         pass
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
+                           web_order_url=_current_web_order_url(),
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS)
 

@@ -469,6 +469,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="WhatsApp al client">WA Client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="WhatsApp a Reus Revela">WA Reus Revela</button>
+        <button class="btn btn-a" onclick="portarAComandaWeb()" title="Porta aquest resum al modul de comanda de Reus Revela">Portar a comanda</button>
         <button class="btn btn-o" onclick="novaComanda()">Nova comanda</button>
       </div>
     </div>
@@ -503,6 +504,7 @@ var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
 var _filterTimer = {pre:null, marc:null};
 var zoomPanel = document.getElementById('zoom-panel');
+var WEB_ORDER_URL = {{ web_order_url|tojson }};
 
 function moveZoomPanel(ev, source){
   if(!zoomPanel || !source) return;
@@ -1460,6 +1462,54 @@ function guardar(){
 }
 
 function generarPDF(){if(!uid){alert('Primer guarda la comanda.');return;}window.open('/pdf/'+uid,'_blank');}
+
+function buildWebOrderPayload(){
+  var pieceType = (document.getElementById('tipus_peca') || {}).value || '';
+  var photoW = parseFloat((document.getElementById('amplada') || {}).value || '0');
+  var photoH = parseFloat((document.getElementById('alcada') || {}).value || '0');
+  var passpartu = (document.getElementById('passpartout') || {}).value || '';
+  var glass = (document.getElementById('vidre') || {}).value || '';
+  var printLabel = (document.getElementById('impressio') || {}).value || '';
+  var ref = uid || '';
+  var quoteNum = document.getElementById('num_pressupost') ? document.getElementById('num_pressupost').value : '';
+  return {
+    source: 'frames',
+    quote_ref: quoteNum || ref || '',
+    client_name: (document.getElementById('client_nom') || {}).value || '',
+    client_phone: (document.getElementById('client_tel') || {}).value || '',
+    piece_type: pieceType,
+    piece_width: isNaN(photoW) ? '' : String(photoW),
+    piece_height: isNaN(photoH) ? '' : String(photoH),
+    final_size: (document.getElementById('mida_final') || {}).value || '',
+    frame_main: (document.getElementById('marc_principal') || {}).value || '',
+    frame_pre: (document.getElementById('pre_marc') || {}).value || '',
+    glass: glass,
+    interior: passpartu,
+    print_label: printLabel,
+    total: parseMoneyEU((document.getElementById('r-final') || {}).textContent || '0'),
+    pending: parseMoneyEU((document.getElementById('r-pend') || {}).textContent || '0'),
+    deposit: parseFloat((document.getElementById('entrega') || {}).value || '0') || 0
+  };
+}
+
+function portarAComandaWeb(){
+  var payload = buildWebOrderPayload();
+  if(!WEB_ORDER_URL){
+    showAlert('La connexio amb la comanda privada no esta disponible ara mateix.','err');
+    return;
+  }
+  if(!payload.frame_main && !payload.frame_pre){
+    showAlert('Selecciona almenys una motllura abans de portar la comanda al privat.','err');
+    return;
+  }
+  var url = new URL(WEB_ORDER_URL);
+  Object.keys(payload).forEach(function(key){
+    var value = payload[key];
+    if(value === '' || value === null || value === undefined) return;
+    url.searchParams.set(key, value);
+  });
+  window.location.assign(url.toString());
+}
 
 // ── Pestanyes ─────────────────────────────────────────────────────────────
 function renderTabs(){
