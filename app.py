@@ -1,4 +1,4 @@
-import hashlib, secrets, os, json, unicodedata
+import base64, hashlib, hmac, secrets, os, json, time, unicodedata
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g)
 from datetime import datetime
@@ -361,6 +361,93 @@ def _clean_profile_type(value):
     return value if value in allowed else 'professional'
 
 
+def _bridge_api_token():
+    return os.environ.get('PUBLIC_BRIDGE_TOKEN', '').strip()
+
+
+def _bridge_signing_secret():
+    return os.environ.get('BRIDGE_LOGIN_SECRET', '').strip() or _bridge_api_token()
+
+
+def _urlsafe_b64encode(raw):
+    return base64.urlsafe_b64encode(raw).decode().rstrip('=')
+
+
+def _urlsafe_b64decode(text):
+    text = str(text or '').strip()
+    if not text:
+        return b''
+    padding = '=' * (-len(text) % 4)
+    return base64.urlsafe_b64decode((text + padding).encode())
+
+
+def _safe_next_path(value, default='/'):
+    text = str(value or '').strip()
+    if not text.startswith('/') or text.startswith('//') or '://' in text:
+        return default
+    return text
+
+
+def _build_bridge_token(data):
+    secret = _bridge_signing_secret()
+    if not secret:
+        raise RuntimeError('Missing bridge signing secret.')
+    payload = _urlsafe_b64encode(json.dumps(data, separators=(',', ':'), ensure_ascii=True).encode())
+    signature = _urlsafe_b64encode(hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest())
+    return f'{payload}.{signature}'
+
+
+def _read_bridge_token(token, max_age=120):
+    secret = _bridge_signing_secret()
+    if not secret or '.' not in str(token or ''):
+        return None
+
+    payload, signature = token.split('.', 1)
+    expected = _urlsafe_b64encode(hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest())
+    if not hmac.compare_digest(signature, expected):
+        return None
+
+    try:
+        data = json.loads(_urlsafe_b64decode(payload).decode())
+    except Exception:
+        return None
+
+    issued_at = int(data.get('iat') or 0)
+    if not issued_at or (time.time() - issued_at) > max_age:
+        return None
+    return data
+
+
+def _load_empresa_nom_for_session(user):
+    try:
+        nom_emp = user['nom_empresa'] if user['nom_empresa'] else ''
+        if not nom_emp:
+            r_cfg = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+            nom_emp = r_cfg['valor'] if r_cfg and r_cfg['valor'] else ''
+        return nom_emp or 'Calculadora'
+    except Exception:
+        return 'Calculadora'
+
+
+def _needs_setup(user_id):
+    try:
+        u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user_id], one=True)
+        return bool(u2) and not u2.get('setup_done')
+    except Exception as exc:
+        print(f'setup check error: {exc}')
+        return False
+
+
+def _start_user_session(user):
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['is_admin'] = bool(user['is_admin'])
+    session['nom'] = user['nom']
+    session['access_status'] = _user_access_status(user)
+    session['profile_type'] = user.get('profile_type', 'professional') if user else 'professional'
+    session['empresa_nom'] = _load_empresa_nom_for_session(user)
+
+
 def _can_access_comanda(row):
     return bool(row) and (_is_admin_session() or row['user_id'] == session.get('user_id'))
 
@@ -443,28 +530,9 @@ def login():
                 else:
                     flash("El teu accés està bloquejat. Contacta amb l'administrador.", 'error')
                 return render_template('login.html')
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['is_admin'] = bool(user['is_admin'])
-            session['nom'] = user['nom']
-            session['access_status'] = _user_access_status(user)
-            session['profile_type'] = user.get('profile_type', 'professional') if user else 'professional'
-            # Load empresa_nom for nav
-            try:
-                nom_emp = user['nom_empresa'] if user['nom_empresa'] else ''
-                if not nom_emp:
-                    r_cfg = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
-                    nom_emp = r_cfg['valor'] if r_cfg and r_cfg['valor'] else ''
-                session['empresa_nom'] = nom_emp or 'Calculadora'
-            except:
-                session['empresa_nom'] = 'Calculadora'
-            # First time setup
-            try:
-                u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user['id']], one=True)
-                if u2 and not u2.get('setup_done'):
-                    return redirect(url_for('setup'))
-            except Exception as _se:
-                print(f'setup check error: {_se}')
+            _start_user_session(user)
+            if _needs_setup(user['id']):
+                return redirect(url_for('setup'))
             return redirect(url_for('index'))
         flash('Usuari o contrasenya incorrectes.', 'error')
     return render_template('login.html')
@@ -532,6 +600,67 @@ def public_professional_signup():
         [email, hash_pw(temp_password), name, 0, business_name, 'pending', profile_type, web_url, instagram, fiscal_id, notes]
     )
     return jsonify({'ok': True, 'action': 'created', 'status': 'pending'})
+
+
+@app.route('/api/public/bridge-login', methods=['POST'])
+def public_bridge_login():
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    lang = (data.get('lang') or 'ca').strip().lower()
+    source = (data.get('source') or 'web_private').strip().lower()
+    service = (data.get('service') or '').strip().lower()
+    next_path = _safe_next_path(data.get('next') or '', '/calculadora' if service == 'frames' else '/')
+
+    if not username or not password:
+        return jsonify({'ok': False, 'error': 'missing_credentials'}), 400
+
+    user = query('SELECT * FROM usuaris WHERE username=?', [username], one=True)
+    if not user or user['password'] != hash_pw(password):
+        return jsonify({'ok': False, 'error': 'invalid_credentials'}), 401
+
+    if not _user_is_allowed(user):
+        return jsonify({'ok': False, 'error': _user_access_status(user)}), 403
+
+    token = _build_bridge_token({
+        'uid': user['id'],
+        'next': next_path,
+        'lang': lang,
+        'source': source,
+        'service': service,
+        'iat': int(time.time()),
+    })
+    host = request.host_url.rstrip('/')
+    return jsonify({
+        'ok': True,
+        'redirect_url': f'{host}{url_for("bridge_auth")}?token={token}',
+        'next': next_path,
+    })
+
+
+@app.route('/auth/bridge')
+def bridge_auth():
+    payload = _read_bridge_token(request.args.get('token'))
+    if not payload:
+        flash("L'accÃ©s unificat ha caducat o no Ã©s vÃ lid. Torna a iniciar sessiÃ³.", 'error')
+        return redirect(url_for('login'))
+
+    user = query('SELECT * FROM usuaris WHERE id=?', [payload.get('uid')], one=True)
+    if not _user_is_allowed(user):
+        flash("No hem pogut validar aquest accÃ©s. Contacta amb administraciÃ³ si cal.", 'error')
+        return redirect(url_for('login'))
+
+    _start_user_session(user)
+    target = _safe_next_path(payload.get('next'), '/')
+    if _needs_setup(user['id']) and target != url_for('logout'):
+        return redirect(url_for('setup'))
+    return redirect(target)
 
 # ── Routes: App principal ─────────────────────────────────────────────────
 
