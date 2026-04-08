@@ -341,18 +341,26 @@ def _is_admin_session():
     return bool(session.get('is_admin'))
 
 
+def _row_get(row, key, default=None):
+    if row is None:
+        return default
+    try:
+        return row[key]
+    except Exception:
+        pass
+    try:
+        return row.get(key, default)
+    except Exception:
+        return default
+
+
 def _user_access_status(user):
-    status = ''
-    if user:
-        try:
-            status = (user.get('access_status') or '').strip().lower()
-        except Exception:
-            status = ''
+    status = str(_row_get(user, 'access_status', '') or '').strip().lower()
     return status or 'active'
 
 
 def _user_is_allowed(user):
-    return bool(user) and (bool(user.get('is_admin')) or _user_access_status(user) == 'active')
+    return bool(user) and (bool(_row_get(user, 'is_admin', 0)) or _user_access_status(user) == 'active')
 
 
 def _clean_profile_type(value):
@@ -461,7 +469,7 @@ def _current_web_order_url():
 def _needs_setup(user_id):
     try:
         u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user_id], one=True)
-        return bool(u2) and not u2.get('setup_done')
+        return bool(u2) and not bool(_row_get(u2, 'setup_done', 0))
     except Exception as exc:
         print(f'setup check error: {exc}')
         return False
@@ -473,7 +481,7 @@ def _start_user_session(user):
     session['is_admin'] = bool(user['is_admin'])
     session['nom'] = user['nom']
     session['access_status'] = _user_access_status(user)
-    session['profile_type'] = user.get('profile_type', 'professional') if user else 'professional'
+    session['profile_type'] = _row_get(user, 'profile_type', 'professional') if user else 'professional'
     session['empresa_nom'] = _load_empresa_nom_for_session(user)
 
 
@@ -722,7 +730,7 @@ def setup_done():
 def index():
     try:
         u = query('SELECT setup_done FROM usuaris WHERE id=?', [session['user_id']], one=True)
-        if u and not u.get('setup_done'):
+        if u and not bool(_row_get(u, 'setup_done', 0)):
             return redirect(url_for('setup'))
     except:
         pass
@@ -735,7 +743,7 @@ def index():
 def calculadora():
     try:
         u = query('SELECT setup_done FROM usuaris WHERE id=?', [session['user_id']], one=True)
-        if u and not u.get('setup_done'):
+        if u and not bool(_row_get(u, 'setup_done', 0)):
             return redirect(url_for('setup'))
     except:
         pass
@@ -839,7 +847,7 @@ def upload_logo():
 @login_required
 def get_logo():
     r = query('SELECT logo_b64 FROM usuaris WHERE id=?', [session['user_id']], one=True)
-    return jsonify({'url': r['logo_b64'] if r and r.get('logo_b64') else ''})
+    return jsonify({'url': _row_get(r, 'logo_b64', '') or ''})
 
 @app.route('/static/logo-preview')
 @login_required
@@ -1074,7 +1082,7 @@ def admin_moldura_editar(ref):
         except ValueError as e:
             moldura_data = dict(moldura)
             moldura_data.update(d)
-            moldura_data['foto'] = foto or _resolve_moldura_photo(ref, moldura.get('foto', ''))
+            moldura_data['foto'] = foto or _resolve_moldura_photo(ref, _row_get(moldura, 'foto', ''))
             return render_template('admin_moldura_form.html', error=str(e), moldura=moldura_data, nova=False)
         if uploaded_photo:
             foto = uploaded_photo
@@ -1097,7 +1105,7 @@ def admin_moldura_eliminar(ref):
 @admin_required
 def admin_moldura_toggle(ref):
     m = query('SELECT actiu FROM moldures WHERE referencia=?', [ref], one=True)
-    nou = 0 if (m and m.get('actiu', 1)) else 1
+    nou = 0 if (m and _row_get(m, 'actiu', 1)) else 1
     try:
         execute('UPDATE moldures SET actiu=? WHERE referencia=?', [nou, ref])
     except:
@@ -1730,8 +1738,8 @@ def crear_pdf(c):
     # Get empresa info for this user
     u_data = query('SELECT nom_empresa FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
     nom_empresa = ''
-    if u_data and u_data.get('nom_empresa'):
-        nom_empresa = u_data['nom_empresa']
+    if u_data and _row_get(u_data, 'nom_empresa', ''):
+        nom_empresa = _row_get(u_data, 'nom_empresa', '')
     if not nom_empresa:
         _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
         nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
@@ -1758,7 +1766,7 @@ def crear_pdf(c):
     # ── Logo (si existeix) ────────────────────────────────────────────────
     try:
         u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
-        logo_data_url = (u_logo['logo_b64'] if u_logo and u_logo.get('logo_b64') else '')
+        logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
         if logo_data_url and logo_data_url.startswith('data:'):
             import base64 as _b64
             data_url = logo_data_url
