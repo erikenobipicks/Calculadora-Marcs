@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ajuda | Calculadora</title>
+<title>Reus Revela — Ajuda</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -440,26 +440,26 @@ nav{
 <main class="page">
   <section class="hero">
     <div>
-      <div class="eyebrow">Guia d'&uacute;s</div>
-      <h1>Ajuda r&agrave;pida, clara i m&eacute;s visual.</h1>
+      <div class="eyebrow">Ajuda</div>
+      <h1>Tot el que necessites per treballar amb la calculadora sense encallar-te.</h1>
       <p>
-        Aquesta guia t'ajuda a treballar m&eacute;s de pressa amb la calculadora:
-        com preparar una comanda, com trobar motllures, com revisar preus i com
-        compartir el pressupost amb el client sense perdre temps.
+        Aquí tens una guia directa per preparar pressupostos, trobar motllures,
+        revisar preus, recuperar feines guardades i compartir el resultat amb el client
+        o amb el taller.
       </p>
     </div>
     <div class="hero-side">
       <div class="quick-card">
-        <strong>Per comen&ccedil;ar r&agrave;pid</strong>
-        <p>Omple client, tria motllura, posa mides, revisa total i desa la comanda.</p>
+        <strong>Per començar ràpid</strong>
+        <p>Entra les dades del client, tria motllura, posa mides, revisa el total i desa el pressupost.</p>
       </div>
       <div class="quick-card">
-        <strong>Si busques una funci&oacute; concreta</strong>
-        <p>Utilitza el cercador de sota i la guia et mostrar&agrave; nom&eacute;s els blocs relacionats.</p>
+        <strong>Si busques una funció concreta</strong>
+        <p>Fes servir el cercador de sota i la guia et mostrarà només els blocs que et poden ajudar.</p>
       </div>
       <div class="quick-card">
         <strong>Si ets administrador</strong>
-        <p>Tamb&eacute; trobar&agrave;s accessos a cat&agrave;leg, usuaris, importacions i control general del sistema.</p>
+        <p>També hi trobaràs accessos a usuaris, catàleg, importacions i manteniment general de l'aplicació.</p>
       </div>
     </div>
   </section>
@@ -467,7 +467,7 @@ nav{
   <div class="toolbar">
     <label class="search-wrap">
       <span>Cercar</span>
-      <input id="help-search" type="text" placeholder="Cerca ajuda per mot clau: PDF, WhatsApp, passpart&uacute;, motllura...">
+      <input id="help-search" type="text" placeholder="Cerca ajuda per paraula clau: PDF, WhatsApp, passpart&uacute;, motllura...">
     </label>
     <div class="pill-row" id="pill-row">
       <button class="pill active" type="button" data-filter="all">Tot</button>
@@ -487,8 +487,8 @@ nav{
       <div class="side-card">
         <h2>Accions r&agrave;pides</h2>
         <div class="mini-links">
-          <button type="button" data-jump="inici">Comen&ccedil;ar una comanda</button>
-          <button type="button" data-jump="calculadora">Entendre la calculadora</button>
+          <button type="button" data-jump="inici">Comen&ccedil;ar un pressupost</button>
+          <button type="button" data-jump="calculadora">Entendre cada bloc</button>
           <button type="button" data-jump="motllures">Treballar amb motllures</button>
           <button type="button" data-jump="sortida">Enviar PDF o WhatsApp</button>
           {% if session.is_admin %}
@@ -499,9 +499,9 @@ nav{
       <div class="side-card">
         <h2>Recordatoris &uacute;tils</h2>
         <div class="hint-box">
-          La mida que introdueixes &eacute;s la de la foto o l'obra. El sistema
-          calcula la mida final del marc segons el passpart&uacute;, el gruix i
-          els materials seleccionats.
+          La mida que introdueixes és la de la foto o de l'obra. La mida exterior
+          del marc la calcula el sistema segons el passpartú, el gruix de la motllura
+          i la resta de materials seleccionats.
         </div>
       </div>
     </aside>
@@ -511,30 +511,30 @@ nav{
         <div class="section-head">
           <div>
             <h2>Inici r&agrave;pid</h2>
-            <p>La seq&uuml;&egrave;ncia m&eacute;s habitual per preparar un pressupost sense oblidar cap pas.</p>
+            <p>La seqüència més habitual per preparar un pressupost complet sense deixar-te cap pas important.</p>
           </div>
           <span class="tag">Essencial</span>
         </div>
         <div class="steps">
           <div class="step">
             <strong>1. Identifica el client</strong>
-            <p>Escriu el nom i, si vols compartir el pressupost, tamb&eacute; el tel&egrave;fon.</p>
+            <p>Escriu el nom i, si vols enviar el pressupost o guardar millor la feina, també el telèfon.</p>
           </div>
           <div class="step">
-            <strong>2. Tria motllura i pre-marc</strong>
-            <p>Busca per refer&egrave;ncia, color o gruix. La foto t'ajuda a confirmar la tria visualment.</p>
+            <strong>2. Tria motllura i premarc</strong>
+            <p>Busca per referència, color o gruix. La imatge t'ajuda a confirmar millor l'acabat abans de pressupostar.</p>
           </div>
           <div class="step">
-            <strong>3. Introdueix les mides de la imatge</strong>
-            <p>Treballa sempre amb la mida real de la foto o de l'obra, no amb la mida exterior del marc.</p>
+            <strong>3. Introdueix les mides de la peça</strong>
+            <p>Treballa sempre amb la mida real de la foto o de l'obra, no amb la mida exterior final del marc.</p>
           </div>
           <div class="step">
             <strong>4. Configura interiors i proteccions</strong>
-            <p>Passpart&uacute;, vidre, muntatge o impressi&oacute; influeixen directament en cost i PVP.</p>
+            <p>Passpartú, vidre, muntatge o impressió influeixen directament en el cost intern i en el PVP final.</p>
           </div>
           <div class="step">
             <strong>5. Revisa resum i sortida</strong>
-            <p>Comprova total, entrega a compte i pendent. Despr&eacute;s pots desar, generar PDF o enviar per WhatsApp.</p>
+            <p>Comprova total, entrega a compte i pendent. Després pots desar, generar el PDF o compartir-ho per WhatsApp.</p>
           </div>
         </div>
       </article>
@@ -543,7 +543,7 @@ nav{
         <div class="section-head">
           <div>
             <h2>Calculadora</h2>
-            <p>Qu&egrave; fa cada bloc del formulari principal i com influeix en el pressupost.</p>
+            <p>Què fa cada bloc del formulari principal i en què afecta el pressupost final.</p>
           </div>
           <span class="tag">Treball diari</span>
         </div>
@@ -552,35 +552,35 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">Dades del client</span>
-                <span class="item-sub">Nom, tel&egrave;fon, quantitat i observacions b&agrave;siques.</span>
+                <span class="item-sub">Nom, telèfon, quantitat i observacions bàsiques.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El nom identifica la comanda a l'historial, al PDF i a les opcions m&uacute;ltiples.
-              El tel&egrave;fon serveix per preparar l'enviament per WhatsApp. La quantitat
+              El nom identifica el pressupost a l'historial, al PDF i a les opcions múltiples.
+              El telèfon serveix per preparar l'enviament per WhatsApp. La quantitat
               multiplica el preu final del conjunt.
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
-                <span class="item-title">Mides de la foto i passpart&uacute;</span>
-                <span class="item-sub">La base de tot el c&agrave;lcul.</span>
+                <span class="item-title">Mides de la peça i passpartú</span>
+                <span class="item-sub">La base de tot el càlcul.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              Quan afegeixes passpart&uacute;, el sistema calcula autom&agrave;ticament la mida
+              Quan afegeixes passpartú, el sistema calcula automàticament la mida
               final del marc a partir del marge indicat per banda.
-              <div class="formula">mida final = mida foto + (marge passpart&uacute; x 2)</div>
+              <div class="formula">mida final = mida peça + (marge passpartú x 2)</div>
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
                 <span class="item-title">Descompte i entrega a compte</span>
-                <span class="item-sub">Per ajustar el tancament comercial sense tocar el cost intern.</span>
+                <span class="item-sub">Per ajustar la venda sense perdre el control del marge.</span>
               </span>
               <span class="chev">+</span>
             </button>
@@ -596,7 +596,7 @@ nav{
         <div class="section-head">
           <div>
             <h2>Motllures i cat&agrave;leg</h2>
-            <p>Com trobar la refer&egrave;ncia correcta i aprofitar millor les imatges i els filtres.</p>
+            <p>Com trobar la referència correcta i aprofitar millor els filtres i les imatges.</p>
           </div>
           <span class="tag">Producte</span>
         </div>
@@ -605,39 +605,39 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">Cerca i filtres</span>
-                <span class="item-sub">Busca per refer&egrave;ncia, color, gruix o text descriptiu.</span>
+                <span class="item-sub">Busca per referència, color, gruix o descripció.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El cat&agrave;leg i la calculadora permeten reduir opcions abans de triar.
-              Aix&ograve; va especialment b&eacute; quan tens moltes motllures similars.
+              El catàleg i la calculadora permeten reduir opcions abans de triar.
+              Això va especialment bé quan tens moltes motllures semblants.
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
-                <span class="item-title">Pre-marc i marc principal</span>
-                <span class="item-sub">Per crear combinacions dobles amb una lectura m&eacute;s clara.</span>
+                <span class="item-title">Premarc i marc principal</span>
+                <span class="item-sub">Per preparar combinacions dobles amb més criteri visual.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El pre-marc &eacute;s opcional. Si el fas servir, la calculadora suma el seu cost
-              i mant&eacute; separat el marc principal per facilitar comparatives.
+              El premarc és opcional. Si el fas servir, la calculadora suma el seu cost
+              i manté separat el marc principal per facilitar comparatives.
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
                 <span class="item-title">Miniatures amb lupa</span>
-                <span class="item-sub">Ara amb una ampliaci&oacute; m&eacute;s suau i m&eacute;s controlada.</span>
+                <span class="item-sub">Per revisar millor textura, acabat i color de la motllura.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              Quan passes el cursor per sobre de la miniatura, veus una ampliaci&oacute; per
-              revisar textura, acabat i color sense que la imatge es dispari massa.
+              Quan passes el cursor per sobre de la miniatura, veus una ampliació útil per
+              revisar textura, acabat i color sense haver d'obrir cap fitxa extra.
             </div>
           </div>
         </div>
@@ -647,7 +647,7 @@ nav{
         <div class="section-head">
           <div>
             <h2>Preus, cost i marges</h2>
-            <p>Com interpreta el sistema el cost intern i com calcula el preu de venda final.</p>
+            <p>Com interpreta el sistema el cost intern i com calcula el preu final de venda.</p>
           </div>
           <span class="tag">Control</span>
         </div>
@@ -655,27 +655,27 @@ nav{
           <div class="item">
             <button type="button">
               <span>
-                <span class="item-title">C&agrave;lcul del marc</span>
-                <span class="item-sub">Es basa en per&iacute;metre, gruix i preu de tarifa.</span>
+                <span class="item-title">Càlcul del marc</span>
+                <span class="item-sub">Es basa en perímetre, gruix i preu de tarifa.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              <div class="formula">cost marc = (per&iacute;metre + gruix x 8) x (preu / 100)</div>
-              Aix&ograve; permet adaptar el cost al desenvolupament real de la motllura.
+              <div class="formula">cost marc = (perímetre + gruix x 8) x (preu / 100)</div>
+              Això permet adaptar el cost al desenvolupament real de la motllura.
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
-                <span class="item-title">Marge general i marge d'impressi&oacute;</span>
-                <span class="item-sub">Pots separar el comportament de la impressi&oacute; de la resta del pressupost.</span>
+                <span class="item-title">Marge general i marge d'impressió</span>
+                <span class="item-sub">Pots separar la impressió de la resta del pressupost si ho necessites.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El marge general afecta marc, vidre, passpart&uacute; i altres components.
-              El marge d'impressi&oacute; es reserva per a la foto impresa quan conv&eacute;
+              El marge general afecta marc, vidre, passpartú i altres components.
+              El marge d'impressió es reserva per a la foto impresa quan convé
               treballar amb una rendibilitat diferent.
             </div>
           </div>
@@ -683,13 +683,13 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">Mode cost i mode PVP</span>
-                <span class="item-sub">Dues lectures del mateix pressupost segons el moment de treball.</span>
+                <span class="item-sub">Dues maneres de llegir el mateix pressupost segons el moment.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El mode PVP &eacute;s el que veu el client. El mode cost et serveix per revisar
-              viabilitat i marge abans de tancar la venda.
+              El mode PVP és el que veu el client. El mode cost et serveix per revisar
+              viabilitat, cost intern i marge abans de tancar la venda.
             </div>
           </div>
         </div>
@@ -699,7 +699,7 @@ nav{
         <div class="section-head">
           <div>
             <h2>PDF, historial i WhatsApp</h2>
-            <p>Com convertir el pressupost en una proposta presentable i f&agrave;cil de recuperar.</p>
+            <p>Com convertir el pressupost en una proposta clara i fàcil de recuperar després.</p>
           </div>
           <span class="tag">Sortida</span>
         </div>
@@ -708,12 +708,12 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">Guardar opcions</span>
-                <span class="item-sub">Crea alternatives A, B o C per comparar marcs i materials.</span>
+                <span class="item-sub">Crea alternatives A, B o C per comparar marcs, interiors o acabats.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              Cada opci&oacute; queda associada al mateix client i pot generar el seu PDF individual
+              Cada opció queda associada al mateix client i pot generar el seu PDF individual
               o entrar en una comparativa conjunta.
             </div>
           </div>
@@ -721,26 +721,26 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">PDF individual i comparatiu</span>
-                <span class="item-sub">Presentaci&oacute; clara per al client i suport comercial.</span>
+                <span class="item-sub">Presentació clara per al client i suport comercial per tancar millor.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
               El PDF individual resumeix una sola proposta. El comparatiu mostra diverses opcions
-              en paral&middot;lel per facilitar la decisi&oacute;.
+              en paral·lel per facilitar la decisió.
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
                 <span class="item-title">WhatsApp client i intern</span>
-                <span class="item-sub">Un missatge comercial i un missatge operatiu amb usos diferents.</span>
+                <span class="item-sub">Un missatge comercial i un missatge operatiu, cadascun per a un ús diferent.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El missatge al client mostra el pressupost. El missatge intern resumeix la producci&oacute;
-              i pot treballar amb cost intern per organitzar el taller.
+              El missatge al client mostra el pressupost. El missatge intern resumeix la producció
+              i pot treballar amb cost intern per organitzar millor el taller.
             </div>
           </div>
         </div>
@@ -751,7 +751,7 @@ nav{
         <div class="section-head">
           <div>
             <h2>Administrador</h2>
-            <p>Eines de control per mantenir l'aplicaci&oacute; ordenada i el cat&agrave;leg actualitzat.</p>
+            <p>Eines de control per mantenir l'aplicació ordenada i el catàleg al dia.</p>
           </div>
           <span class="tag">Gesti&oacute;</span>
         </div>
@@ -760,25 +760,25 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">Usuaris i permisos</span>
-                <span class="item-sub">Crea accessos, ajusta marges i separa l'&uacute;s intern del comercial.</span>
+                <span class="item-sub">Crea accessos, ajusta marges i separa l'ús intern del comercial.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
               Des del panell d'admin pots gestionar usuaris, revisar configuracions i mantenir el flux
-              de treball m&eacute;s ordenat per a tot l'equip.
+              de treball més ordenat per a tot l'equip.
             </div>
           </div>
           <div class="item">
             <button type="button">
               <span>
-                <span class="item-title">Cat&agrave;leg complet i PDF de motllures</span>
-                <span class="item-sub">Vista ampliada amb informaci&oacute; interna i exportaci&oacute; per a revisi&oacute;.</span>
+                <span class="item-title">Catàleg complet i PDF de motllures</span>
+                <span class="item-sub">Vista ampliada amb informació interna i exportació per revisar fora de pantalla.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              El cat&agrave;leg d'administraci&oacute; mostra dades internes com prove&iuml;dor, cost o ubicaci&oacute;,
+              El catàleg d'administració mostra dades internes com proveïdor, cost o ubicació,
               i permet generar un PDF complet per consultar-lo fora de pantalla.
             </div>
           </div>
@@ -786,13 +786,13 @@ nav{
             <button type="button">
               <span>
                 <span class="item-title">Importacions i manteniment</span>
-                <span class="item-sub">Actualitza tarifes i conserva les imatges associades a les motllures.</span>
+                <span class="item-sub">Actualitza tarifes i conserva les imatges associades a cada motllura.</span>
               </span>
               <span class="chev">+</span>
             </button>
             <div class="item-body">
-              Quan reimportes dades, el sistema ja est&agrave; preparat per no perdre les fotos
-              que s'han vinculat pr&egrave;viament a les refer&egrave;ncies.
+              Quan reimportes dades, el sistema ja està preparat per no perdre les fotos
+              que s'han vinculat prèviament a les referències.
             </div>
           </div>
         </div>
