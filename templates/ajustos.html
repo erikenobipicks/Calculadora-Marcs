@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Objectiu — Ajustos</title>
+<title>Reus Revela — Ajustos</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--r:10px}
@@ -56,13 +56,13 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   </div>
 </nav>
 <div class="wrap">
-  <div class="ph"><h1>Ajustos</h1><p>Marge de benefici i dades del comerç</p></div>
+  <div class="ph"><h1>Ajustos</h1><p>Dades del teu negoci i marges de treball</p></div>
   <div id="alert" class="alert"></div>
 
   <div class="section">
-    <div class="section-title">Dades del comerç</div>
+    <div class="section-title">Dades del negoci</div>
     <div class="card">
-      <div class="hint-box">Apareixeran als PDFs i als missatges de WhatsApp.</div>
+      <div class="hint-box">Aquestes dades sortiran als pressupostos, als PDFs i als missatges compartits amb el client.</div>
       <div class="f"><label>Nom del comerç</label><input type="text" id="nom-empresa" value="{{ nom_empresa }}" placeholder="Ex: Taller d'Emmarcació La Rambla"></div>
       <div class="f"><label>Adreça</label><input type="text" id="empresa-adreca" value="{{ empresa_adreca }}" placeholder="C/ Mare Molas, 26 - Reus"></div>
       <div class="f"><label>Telèfon</label><input type="text" id="empresa-tel" value="{{ empresa_tel }}" placeholder="977 316 111"></div>
@@ -70,27 +70,27 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   </div>
 
   <div class="section">
-    <div class="section-title">Marge de benefici general</div>
+    <div class="section-title">Marge general</div>
     <div class="card">
-      <div class="hint-box">Preu client = cost × (1 + marge%). Privat — el client no el veurà.</div>
+      <div class="hint-box">El marge s'aplica sobre el cost base per calcular el preu final. És un ajust intern.</div>
       <div class="marge-big"><span id="marge-preview">{{ marge_actual }}</span><span>%</span></div>
       <div class="f"><label>Marge (%)</label><input type="number" id="marge-input" value="{{ marge_actual }}" min="0" max="500" oninput="document.getElementById('marge-preview').textContent=this.value||0"></div>
     </div>
   </div>
 
   <div class="section">
-    <div class="section-title">Marge impressió fotogràfica</div>
+    <div class="section-title">Marge per a impressió fotogràfica</div>
     <div class="card">
-      <div class="hint-box">Marge addicional <strong>només</strong> sobre impressió. Posa <strong>0</strong> per usar el marge general.</div>
+      <div class="hint-box">Marge addicional <strong>només</strong> per a impressió fotogràfica. Si poses <strong>0</strong>, s'aplicarà el marge general.</div>
       <div class="marge-big" style="font-size:32px"><span id="imp-preview">{{ marge_imp }}</span><span>%</span></div>
       <div class="f"><label>Marge impressió (%)</label><input type="number" id="imp-input" value="{{ marge_imp }}" min="0" max="500" oninput="document.getElementById('imp-preview').textContent=this.value||0"></div>
     </div>
   </div>
 
     <div class="section">
-    <div class="section-title">Logo del comerç (opcional)</div>
+    <div class="section-title">Logotip del negoci (opcional)</div>
     <div class="card">
-      <div class="hint-box">El logo apareixerà als PDFs dels pressupostos. Formats acceptats: PNG, JPG. Mida recomanada: 300×100 px.</div>
+      <div class="hint-box">El logotip sortirà als PDFs de pressupost. Formats acceptats: PNG i JPG. Mida recomanada: 300 × 100 px.</div>
       <div id="logo-preview" style="margin-bottom:.85rem;min-height:50px;display:flex;align-items:center">
         <span style="color:var(--hint);font-size:13px" id="logo-txt">Cap logo carregat</span>
       </div>

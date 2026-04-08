@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Objectiu — Calculadora</title>
+<title>Reus Revela — Calculadora de marcs</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--border2:#D4D0C8;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
@@ -170,12 +170,12 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 <div class="wrap">
   <div class="ph">
     <div class="ph-top">
-      <h1>Nova comanda</h1>
+      <h1>Nou pressupost</h1>
       {% if web_return_url %}
       <a href="{{ web_return_url }}" class="return-link">Tornar a Reus Revela</a>
       {% endif %}
     </div>
-    <p>Emplena les dades, calcula el preu i genera el PDF per al client</p>
+    <p>Defineix mides, materials i acabats per preparar el pressupost i el PDF del client.</p>
   </div>
   <div id="alert" class="alert"></div>
   <div id="constraints-box" class="constraints-box">
@@ -196,7 +196,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     <!-- COL ESQUERRA -->
     <div>
       <div class="card">
-        <div class="card-t">Client</div>
+        <div class="card-t">Dades del client</div>
         <div class="f"><label>Nom del client</label><input type="text" id="client_nom"></div>
         <div class="f2">
           <div class="f"><label>Telèfon</label><input type="text" id="client_tel"></div>
@@ -205,7 +205,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       </div>
 
       <div class="card">
-        <div class="card-t">Motllures</div>
+        <div class="card-t">Selecció de motllures</div>
         <div class="f2">
           <div class="f">
             <label>Filtre per color</label>
@@ -227,11 +227,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;margin:-.15rem 0 .85rem;flex-wrap:wrap">
-          <div class="desc" id="moldura-filter-meta" style="margin-top:0">Mostrant tot el cat&agrave;leg de motllures.</div>
+          <div class="desc" id="moldura-filter-meta" style="margin-top:0">Mostrant totes les motllures disponibles.</div>
           <button type="button" class="btn btn-o" style="padding:7px 12px;font-size:12px" onclick="resetMolduraFilters()">Netejar filtres</button>
         </div>
         <div class="f">
-          <label>Pre-Marc <span style="color:var(--hint);font-weight:400">(marc interior opcional, segon marc)</span></label>
+          <label>Premarc <span style="color:var(--hint);font-weight:400">(marc interior opcional o segon marc)</span></label>
           <div class="ss" id="ss-pre">
             <input type="text" id="pre_marc" placeholder="Escriu per cercar o deixa buit..." autocomplete="off"
                    onfocus="openSS('pre')" oninput="filterSS('pre')" onblur="closeSS('pre')">
@@ -252,12 +252,12 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.85rem" id="fotos-grid">
           <div>
-            <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Pre-Marc</div>
+            <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Premarc</div>
             <div class="foto-box js-moldura-zoom" id="foto-box-pre"><div class="no-foto">—</div></div>
           </div>
           <div>
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Marc principal</div>
-            <div class="foto-box js-moldura-zoom" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure la foto</div></div>
+            <div class="foto-box js-moldura-zoom" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure'n la imatge</div></div>
           </div>
         </div>
       </div>
@@ -266,9 +266,9 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       <input type="hidden" id="mida-manual-h" value="0">
 
       <div class="card">
-        <div class="card-t">Mides</div>
+        <div class="card-t">Peça i mides</div>
         <div class="f" style="margin-bottom:.7rem">
-          <label>Peça a emmarcar</label>
+          <label>Tipus de peça</label>
           <select id="tipus-peca" onchange="onPieceTypeChange()">
             <option value="fotografia">Fotografia</option>
             <option value="lamina">Làmina</option>
@@ -278,8 +278,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
           </select>
         </div>
         <div class="f2">
-          <div class="f"><label>Amplada peça (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
-          <div class="f"><label>Alçada peça (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
+          <div class="f"><label>Amplada de la peça (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
+          <div class="f"><label>Alçada de la peça (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
         </div>
 
 
@@ -430,8 +430,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       </div>
 
       <div class="card">
-        <div class="card-t">Notes</div>
-        <div class="f"><label>Observacions</label><input type="text" id="observacions" placeholder="Data d'entrega, instruccions..."></div>
+        <div class="card-t">Dades finals</div>
+        <div class="f"><label>Observacions</label><input type="text" id="observacions" placeholder="Termini d'entrega, observacions o indicacions..."></div>
         <div class="f" style="margin-top:.75rem">
           <label>Idioma del pressupost</label>
           <div style="display:flex;gap:.4rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px;width:max-content">
@@ -460,17 +460,17 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
           <div class="r-row"><span class="r-lbl">IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
           <div class="r-row"><span class="r-lbl" id="r-lbl-final">Total amb IVA</span><span class="r-val big" id="r-final">0,00 €</span></div>
           <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="calcular()"></div>
-          <div class="r-row"><span class="r-lbl">PENDENT de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
+          <div class="r-row"><span class="r-lbl">Pendent de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
         </div>
       </div>
 
       <div class="actions">
         <button class="btn btn-g" onclick="guardar()">Guardar</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
-        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="WhatsApp al client">WA Client</button>
-        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="WhatsApp a Reus Revela">WA Reus Revela</button>
-        <button class="btn btn-a" onclick="portarAComandaWeb()" title="Porta aquest resum al modul de comanda de Reus Revela">Portar a comanda</button>
-        <button class="btn btn-o" onclick="novaComanda()">Nova comanda</button>
+        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp client</button>
+        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp Reus Revela</button>
+        <button class="btn btn-a" onclick="portarAComandaWeb()" title="Porta aquest resum al mòdul de comanda de Reus Revela">Portar a comanda online</button>
+        <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
       </div>
     </div>
   </div>
@@ -664,7 +664,7 @@ var LIM_MSG = {
     foam: 'Foam/ProEco is not possible: maximum board size is 122 × 244 cm.'
   }
 };
-var empresa_nom = 'Objectiu Emmarcació', empresa_adreca = '', empresa_tel = '';
+var empresa_nom = 'Reus Revela', empresa_adreca = '', empresa_tel = '';
 
 var valToId = {
   encolat:'encolat', protter:'protter',
@@ -839,7 +839,7 @@ document.getElementById('data_comanda').value = new Date().toLocaleDateString('c
 
 fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
   marge = d.marge; marge_impressio = d.marge_impressio||0;
-  empresa_nom    = d.empresa_nom    || 'Objectiu Emmarcació';
+  empresa_nom    = d.empresa_nom    || 'Reus Revela';
   empresa_adreca = d.empresa_adreca || '';
   empresa_tel    = d.empresa_tel    || '';
   document.getElementById('marge_val').value = marge;
@@ -990,7 +990,7 @@ function selectRef(t,ref){
 }
 
 // ── Lookup motllura ───────────────────────────────────────────────────────
-function resetFoto(){ document.getElementById('foto-box').innerHTML='<div class="no-foto">Selecciona un marc<br>per veure la foto</div>'; }
+function resetFoto(){ document.getElementById('foto-box').innerHTML='<div class="no-foto">Selecciona un marc<br>per veure\\'n la imatge</div>'; }
 function setChips(t,items){ document.getElementById('chips-'+t).innerHTML=items.map(function(i){return '<span class="chip '+i.cls+'">'+i.txt+'</span>';}).join(''); }
 
 function lookupRef(t,ref){
@@ -1008,12 +1008,12 @@ function lookupRef(t,ref){
         if(t==='pre'){
           document.getElementById('desc-pre').textContent=d.descripcio||'';
           document.getElementById('desc-pre').style.color='';
-          document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense foto</div>';
+          document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
         }
         if(t==='marc'){
           document.getElementById('desc-marc').textContent=d.descripcio||'';
           document.getElementById('desc-marc').style.color='';
-          document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense foto</div>';
+          document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
           setProtterDisabled(true);
           _lastFetchKey=''; recalcMides(); return;
         }
@@ -1454,14 +1454,14 @@ function guardar(){
         document.getElementById('btn-wa-client').disabled=false;
         document.getElementById('btn-wa-objectiu').disabled=false;
         var numLabel = d.num ? ' · ' + d.num : ' #'+d.id;
-        showAlert('Comanda guardada ('+opcions[opcioActual].nom + numLabel + ')','ok');
+        showAlert('Pressupost guardat ('+opcions[opcioActual].nom + numLabel + ')','ok');
         window._numPressupost = d.num || ('#'+d.id);
         renderTabs();
       }
     });
 }
 
-function generarPDF(){if(!uid){alert('Primer guarda la comanda.');return;}window.open('/pdf/'+uid,'_blank');}
+function generarPDF(){if(!uid){alert('Primer guarda el pressupost.');return;}window.open('/pdf/'+uid,'_blank');}
 
 function buildWebOrderPayload(){
   var pieceType = (document.getElementById('tipus_peca') || {}).value || '';
@@ -1488,18 +1488,19 @@ function buildWebOrderPayload(){
     print_label: printLabel,
     total: parseMoneyEU((document.getElementById('r-final') || {}).textContent || '0'),
     pending: parseMoneyEU((document.getElementById('r-pend') || {}).textContent || '0'),
-    deposit: parseFloat((document.getElementById('entrega') || {}).value || '0') || 0
+    deposit: parseFloat((document.getElementById('entrega') || {}).value || '0') || 0,
+    notes: (document.getElementById('observacions') || {}).value || ''
   };
 }
 
 function portarAComandaWeb(){
   var payload = buildWebOrderPayload();
   if(!WEB_ORDER_URL){
-    showAlert('La connexio amb la comanda privada no esta disponible ara mateix.','err');
+    showAlert('La connexió amb la comanda online no està disponible ara mateix.','err');
     return;
   }
   if(!payload.frame_main && !payload.frame_pre){
-    showAlert('Selecciona almenys una motllura abans de portar la comanda al privat.','err');
+    showAlert('Selecciona almenys una motllura abans de portar el pressupost al portal.','err');
     return;
   }
   var url = new URL(WEB_ORDER_URL);
