@@ -507,6 +507,26 @@ var _filterTimer = {pre:null, marc:null};
 var zoomPanel = document.getElementById('zoom-panel');
 var WEB_ORDER_URL = {{ web_order_url|tojson }};
 
+function getCommercialMarginOverrides(){
+  var params = new URLSearchParams(window.location.search);
+  var frameMargin = parseFloat(params.get('commercial_margin'));
+  var printMargin = parseFloat(params.get('commercial_print_margin'));
+  return {
+    frame: Number.isFinite(frameMargin) ? Math.max(frameMargin, 0) : null,
+    print: Number.isFinite(printMargin) ? Math.max(printMargin, 0) : null
+  };
+}
+
+function applyCommercialMarginOverrides(){
+  var overrides = getCommercialMarginOverrides();
+  if(overrides.frame !== null){
+    marge = overrides.frame;
+  }
+  if(overrides.print !== null){
+    marge_impressio = overrides.print;
+  }
+}
+
 function moveZoomPanel(ev, source){
   if(!zoomPanel || !source) return;
   var img = source.querySelector('img');
@@ -843,6 +863,7 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
   empresa_nom    = d.empresa_nom    || 'Reus Revela';
   empresa_adreca = d.empresa_adreca || '';
   empresa_tel    = d.empresa_tel    || '';
+  applyCommercialMarginOverrides();
   document.getElementById('marge_val').value = marge;
   calcular();
 });
