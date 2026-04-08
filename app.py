@@ -4,6 +4,8 @@ from flask import (Flask, render_template, request, redirect, url_for,
 from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
@@ -381,6 +383,40 @@ def _main_site_url():
     return os.environ.get('MAIN_SITE_URL', 'https://reusrevela.cat').strip().rstrip('/')
 
 
+def _sync_private_commercial_settings(frame_margin, print_margin):
+    api_token = _bridge_api_token()
+    base = _main_site_url()
+    if not api_token or not base:
+        return {'attempted': False, 'reason': 'missing_config'}
+
+    payload = {
+        'general': float(frame_margin),
+        'frames': float(frame_margin),
+        'canvas': float(frame_margin),
+        'fine_art': float(frame_margin),
+        'prints': float(print_margin),
+        'foam': float(print_margin),
+    }
+    req = urllib_request.Request(
+        f'{base}/api/private/commercial-settings-sync',
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+            'X-Bridge-Token': api_token,
+        },
+        method='POST',
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=12) as resp:
+            body = resp.read().decode('utf-8')
+            return {'attempted': True, 'ok': True, 'response': json.loads(body or '{}')}
+    except urllib_error.HTTPError as exc:
+        detail = exc.read().decode('utf-8', errors='ignore')
+        return {'attempted': True, 'ok': False, 'status': exc.code, 'detail': detail}
+    except (urllib_error.URLError, TimeoutError, ValueError) as exc:
+        return {'attempted': True, 'ok': False, 'detail': str(exc)}
+
+
 def _urlsafe_b64encode(raw):
     return base64.urlsafe_b64encode(raw).decode().rstrip('=')
 
@@ -691,6 +727,35 @@ def public_bridge_login():
     })
 
 
+@app.route('/api/public/commercial-settings-sync', methods=['POST'])
+def public_commercial_settings_sync():
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip().lower()
+    if not username:
+        return jsonify({'ok': False, 'error': 'missing_username'}), 400
+
+    try:
+        marge = float(data.get('marge', 60))
+        marge_impressio = float(data.get('marge_impressio', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid_margin'}), 400
+
+    user = query('SELECT id FROM usuaris WHERE lower(username)=?', [username], one=True)
+    if not user:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    execute(
+        'UPDATE usuaris SET marge=?, marge_impressio=? WHERE id=?',
+        [marge, marge_impressio, user['id']]
+    )
+    return jsonify({'ok': True, 'username': username, 'marge': marge, 'marge_impressio': marge_impressio})
+
+
 @app.route('/auth/bridge')
 def bridge_auth():
     payload = _read_bridge_token(request.args.get('token'))
@@ -898,6 +963,7 @@ def desar_marge():
     ne = d.get('nom_empresa', '')
     execute('UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=? WHERE id=?', [m, mi, ne, session['user_id']])
     if ne: session['empresa_nom'] = ne
+    _sync_private_commercial_settings(m, mi)
     return jsonify({'ok': True})
 
 # ── Routes: Guardar comanda i historial ──────────────────────────────────
