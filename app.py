@@ -412,8 +412,8 @@ def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None
         'frames': frame_value,
         'canvas': max(_safe_float(data.get('canvas'), frame_value), 0.0),
         'prints': print_value,
-        'foam': max(_safe_float(data.get('foam'), print_value), 0.0),
-        'laminate_foam': max(_safe_float(data.get('laminate_foam'), print_value), 0.0),
+        'foam': general_margin,
+        'laminate_foam': general_margin,
         'fine_art': max(_safe_float(data.get('fine_art'), frame_value), 0.0),
         'albums': max(_safe_float(data.get('albums'), frame_value), 0.0),
     }
@@ -2125,7 +2125,7 @@ def ajustos():
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
-                           margin_entries=margin_entries,
+                           margin_entries=[dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry for entry in margin_entries if entry['key'] not in ('foam', 'laminate_foam')],
                            nom_empresa=nom_emp,
                            empresa_adreca=cfg.get('empresa_adreca',''),
                            empresa_tel=cfg.get('empresa_tel',''))
