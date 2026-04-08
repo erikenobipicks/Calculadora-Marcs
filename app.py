@@ -466,6 +466,13 @@ def _current_web_order_url():
     return f'{base}/area-privada/comanda?lang={lang}'
 
 
+def _current_web_module_url(path):
+    base = _main_site_url()
+    lang = (session.get('bridge_lang') or request.args.get('lang') or 'ca').strip().lower() or 'ca'
+    clean_path = '/' + str(path or '').strip().lstrip('/')
+    return f'{base}{clean_path}?lang={lang}'
+
+
 def _needs_setup(user_id):
     try:
         u2 = query('SELECT setup_done FROM usuaris WHERE id=?', [user_id], one=True)
@@ -735,7 +742,13 @@ def index():
     except:
         pass
     user = query('SELECT nom, username, nom_empresa, profile_type, access_status, web_url, instagram, fiscal_id, notes_validacio FROM usuaris WHERE id=?', [session['user_id']], one=True)
-    return render_template('portal.html', user=user, web_return_url=_current_web_return_url())
+    return render_template(
+        'portal.html',
+        user=user,
+        web_return_url=_current_web_return_url(),
+        web_canvas_url=_current_web_module_url('/area-privada/lienzos'),
+        web_prints_url=_current_web_module_url('/area-privada/impresiones'),
+    )
 
 
 @app.route('/calculadora')
