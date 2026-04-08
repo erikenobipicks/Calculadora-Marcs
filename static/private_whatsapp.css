@@ -1,0 +1,116 @@
+.rr-wa-fab{
+  position:fixed;
+  right:1.25rem;
+  bottom:1.25rem;
+  z-index:260;
+  width:58px;
+  height:58px;
+  border:none;
+  border-radius:50%;
+  background:#25d366;
+  color:#fff;
+  box-shadow:0 16px 36px rgba(28,27,24,.24);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:1.45rem;
+  cursor:pointer;
+}
+.rr-wa-fab:hover{background:#1fb85a}
+.rr-wa-panel{
+  position:fixed;
+  right:1.25rem;
+  bottom:5.55rem;
+  z-index:255;
+  width:min(360px, calc(100vw - 1.5rem));
+  border:1px solid #E5E2DB;
+  border-radius:20px;
+  background:rgba(255,255,255,.98);
+  box-shadow:0 22px 44px rgba(28,27,24,.14);
+  backdrop-filter:blur(12px);
+  padding:1rem;
+  display:none;
+}
+.rr-wa-panel.open{display:block}
+.rr-wa-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:.8rem;
+  margin-bottom:.85rem;
+}
+.rr-wa-head strong{
+  display:block;
+  font-size:.98rem;
+  color:#1C1B18;
+  margin-bottom:.2rem;
+}
+.rr-wa-head p{
+  margin:0;
+  font-size:.9rem;
+  line-height:1.55;
+  color:#6B6860;
+}
+.rr-wa-close{
+  width:34px;
+  height:34px;
+  border:none;
+  border-radius:50%;
+  background:rgba(28,27,24,.06);
+  color:#1C1B18;
+  font-size:1.1rem;
+  flex-shrink:0;
+  cursor:pointer;
+}
+.rr-wa-options{
+  display:grid;
+  gap:.6rem;
+}
+.rr-wa-option{
+  display:block;
+  width:100%;
+  padding:.9rem .95rem;
+  border:1px solid #E5E2DB;
+  border-radius:14px;
+  background:#fff;
+  text-align:left;
+  color:#1C1B18;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  cursor:pointer;
+}
+.rr-wa-option:hover{
+  transform:translateY(-1px);
+  border-color:#1A6B45;
+  box-shadow:0 12px 22px rgba(28,27,24,.08);
+}
+.rr-wa-option strong{
+  display:block;
+  font-size:.95rem;
+  margin-bottom:.18rem;
+}
+.rr-wa-option span{
+  display:block;
+  font-size:.86rem;
+  line-height:1.48;
+  color:#6B6860;
+}
+.rr-wa-direct{
+  display:inline-flex;
+  align-items:center;
+  gap:.4rem;
+  margin-top:.8rem;
+  color:#1A6B45;
+  font-size:.9rem;
+  font-weight:700;
+  text-decoration:none;
+}
+@media(max-width:920px){
+  .rr-wa-fab{
+    right:1rem;
+    bottom:1rem;
+  }
+  .rr-wa-panel{
+    right:1rem;
+    bottom:5.25rem;
+  }
+}

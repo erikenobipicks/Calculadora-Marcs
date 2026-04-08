@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reus Revela — Calculadora de marcs</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='private_whatsapp.css') }}">
 <style>
 :root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--border2:#D4D0C8;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1805,5 +1806,7 @@ applyIncompatibilities();
 recalcMides();
 
 </script>
+{% include '_private_whatsapp_widget.html' %}
+<script src="{{ url_for('static', filename='private_whatsapp.js') }}"></script>
 </body>
 </html>
