@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Objectiu - Cat&agrave;leg de motllures</title>
+<title>Reus Revela — Cat&agrave;leg de motllures</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--r:12px}
@@ -73,13 +73,13 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   <div class="page-head">
     <div>
       <h1>Cat&agrave;leg de motllures</h1>
-      <p>Consulta les motllures disponibles amb una vista simplificada per a usuaris professionals.</p>
+      <p>Consulta el cat&agrave;leg de motllures disponibles i filtra per refer&egrave;ncia, color o gruix.</p>
     </div>
   </div>
 
   <form method="get" class="search-card">
     <div class="search-row">
-      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per refer&egrave;ncia o descripci&oacute;...">
+      <input type="text" name="q" value="{{ q }}" placeholder="Cerca per refer&egrave;ncia o acabat...">
       <select name="color">
         <option value="">Tots els colors</option>
         {% for value, label in color_filters %}
@@ -95,7 +95,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
       <button type="submit" class="btn btn-g">Cercar</button>
       {% if q or color or gruix %}<a href="/cataleg" class="btn btn-o">Netejar</a>{% endif %}
     </div>
-    <div class="meta">{{ moldures|length }} resultats visibles de {{ total }} motllures</div>
+    <div class="meta">{{ moldures|length }} motllures visibles de {{ total }} disponibles</div>
   </form>
 
   {% if moldures %}
@@ -118,7 +118,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
           <span class="chip chip-soft">{{ color }}</span>
           {% endif %}
         </div>
-        <div class="desc">{{ m.descripcio or 'Sense descripci&oacute;' }}</div>
+        <div class="desc">{{ m.descripcio or 'Sense descripció disponible.' }}</div>
       </div>
     </article>
     {% endfor %}
@@ -128,7 +128,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
     {% if q %}
     No s'han trobat motllures per a "{{ q }}".
     {% else %}
-    No hi ha motllures disponibles al cat&agrave;leg.
+    No hi ha motllures disponibles al cat&agrave;leg ara mateix.
     {% endif %}
   </div>
   {% endif %}

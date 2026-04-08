@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Objectiu — Historial</title>
+<title>Reus Revela — Historial</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
@@ -89,13 +89,14 @@ tr:hover td{background:#FAFAF8}
 <div class="wrap">
   <div class="ph">
     <div class="ph-left">
-      <h1>Historial de comandes</h1>
+      <h1>Pressupostos guardats</h1>
+      <div style="font-size:13px;color:var(--muted)">Recupera pressupostos, compara opcions i continua feines pendents sense començar de nou.</div>
       {% if web_return_url %}
       <div><a href="{{ web_return_url }}" class="return-link">Tornar a Reus Revela</a></div>
       {% endif %}
     </div>
     <div class="search-bar">
-      <input type="text" id="cerca" placeholder="Cerca per client o marc..." oninput="filtrar()">
+      <input type="text" id="cerca" placeholder="Cerca per client, referència o marc..." oninput="filtrar()">
     </div>
   </div>
 
@@ -141,6 +142,7 @@ tr:hover td{background:#FAFAF8}
               <th>Mides</th>
               <th>Vidre</th>
               <th>Interior</th>
+              <th>Impressió</th>
               <th>Total (€)</th>
               <th>Pendent</th>
               <th>PDF</th>
@@ -184,12 +186,12 @@ tr:hover td{background:#FAFAF8}
         </table>
         <div class="sessio-actions" id="actions-{{ sessio_id }}">
           {% if multi %}
-          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">PDF comparativa</a>
+          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">Comparativa PDF</a>
           {% endif %}
           {% for op in opcions %}{% if loop.first %}
           <button onclick="liquidarComanda({{ op.id }}, this)"
             class="btn-sm btn-liq" title="Liquidar saldo pendent">
-            💰 Liquidar
+            Liquidar pendent
           </button>
           {% endif %}{% endfor %}
           <button onclick="marcarPagat('{{ sessio_id }}', this)"
@@ -205,7 +207,7 @@ tr:hover td{background:#FAFAF8}
     </div>
     {% endfor %}
   {% else %}
-    <div class="empty">Encara no hi ha comandes guardades.</div>
+    <div class="empty">Encara no tens pressupostos guardats.</div>
   {% endif %}
 </div>
 
@@ -236,7 +238,7 @@ var first = document.querySelector('.sessio-head');
 if (first) toggleSessio(first);
 
 function liquidarComanda(id, btn) {
-  if(!confirm('Marcar el pagament total com a completat?')) return;
+  if(!confirm('Vols marcar el pagament total com a completat?')) return;
   fetch('/comanda/'+id+'/liquidar', {method:'POST'})
     .then(r=>r.json()).then(function(d){
       if(d.ok){
@@ -297,7 +299,7 @@ function updateSeleccio(){
 function eliminarSeleccio(){
   var chks = document.querySelectorAll('.sessio-chk:checked');
   if(!chks.length) return;
-  if(!confirm('Eliminar ' + chks.length + ' pressupost(os) seleccionats?')) return;
+  if(!confirm('Vols eliminar ' + chks.length + ' pressupost(os) seleccionats?')) return;
   var sids = Array.from(chks).map(function(c){return c.dataset.sid;});
   fetch('/admin/eliminar-tot',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({sessio_ids:sids})
@@ -310,7 +312,7 @@ function eliminarSeleccio(){
 }
 
 function eliminarTotClient(uid){
-  if(!confirm('Eliminar TOTS els pressupostos d\'aquest client? Aquesta acció no es pot desfer.')) return;
+  if(!confirm('Vols eliminar tots els pressupostos d\'aquest client? Aquesta acció no es pot desfer.')) return;
   fetch('/admin/eliminar-tot',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({user_id:uid})
   }).then(r=>r.json()).then(function(d){
@@ -319,7 +321,7 @@ function eliminarTotClient(uid){
 }
 
 function eliminarComanda(id, btn) {
-  if(!confirm('Segur que vols eliminar aquest pressupost?')) return;
+  if(!confirm('Vols eliminar aquest pressupost?')) return;
   fetch('/comanda/'+id+'/eliminar', {method:'POST'})
     .then(r=>r.json()).then(function(d){
       if(d.ok){ btn.closest('tr').remove(); }
