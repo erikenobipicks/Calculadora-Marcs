@@ -51,6 +51,17 @@ MOLDURA_GRUIX_FILTERS = [
     ('extra', 'Extra de mes de 6 cm'),
 ]
 
+COMMERCIAL_MARGIN_DEFAULTS = {
+    'general': 60.0,
+    'frames': 60.0,
+    'canvas': 60.0,
+    'prints': 60.0,
+    'foam': 60.0,
+    'laminate_foam': 60.0,
+    'fine_art': 60.0,
+    'albums': 60.0,
+}
+
 
 def _safe_moldura_ref(ref):
     ref = (ref or '').strip().lower()
@@ -383,20 +394,60 @@ def _main_site_url():
     return os.environ.get('MAIN_SITE_URL', 'https://reusrevela.cat').strip().rstrip('/')
 
 
-def _sync_private_commercial_settings(frame_margin, print_margin):
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None):
+    data = raw if isinstance(raw, dict) else {}
+    general_margin = max(_safe_float(data.get('general'), frame_margin if frame_margin is not None else COMMERCIAL_MARGIN_DEFAULTS['general']), 0.0)
+    frame_value = max(_safe_float(data.get('frames'), frame_margin if frame_margin is not None else general_margin), 0.0)
+    print_seed = print_margin if print_margin is not None else frame_value
+    print_value = max(_safe_float(data.get('prints'), print_seed), 0.0)
+    normalized = {
+        'general': general_margin,
+        'frames': frame_value,
+        'canvas': max(_safe_float(data.get('canvas'), frame_value), 0.0),
+        'prints': print_value,
+        'foam': max(_safe_float(data.get('foam'), print_value), 0.0),
+        'laminate_foam': max(_safe_float(data.get('laminate_foam'), print_value), 0.0),
+        'fine_art': max(_safe_float(data.get('fine_art'), frame_value), 0.0),
+        'albums': max(_safe_float(data.get('albums'), frame_value), 0.0),
+    }
+    return normalized
+
+
+def _load_user_commercial_margins(user_row):
+    payload = {}
+    raw = user_row['margins_json'] if user_row and 'margins_json' in user_row.keys() else ''
+    if raw:
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            payload = {}
+    frame_margin = user_row['marge'] if user_row and user_row['marge'] is not None else COMMERCIAL_MARGIN_DEFAULTS['frames']
+    print_margin = None
+    if user_row and 'marge_impressio' in user_row.keys() and user_row['marge_impressio'] is not None:
+        print_margin = user_row['marge_impressio']
+    return _normalize_commercial_margins(payload, frame_margin=frame_margin, print_margin=print_margin)
+
+
+def _format_margin_for_view(value):
+    value = _safe_float(value, 0.0)
+    return int(value) if float(value).is_integer() else round(value, 2)
+
+
+def _sync_private_commercial_settings(frame_margin, print_margin, margins=None):
     api_token = _bridge_api_token()
     base = _main_site_url()
     if not api_token or not base:
         return {'attempted': False, 'reason': 'missing_config'}
 
-    payload = {
-        'general': float(frame_margin),
-        'frames': float(frame_margin),
-        'canvas': float(frame_margin),
-        'fine_art': float(frame_margin),
-        'prints': float(print_margin),
-        'foam': float(print_margin),
-    }
+    normalized = _normalize_commercial_margins(margins or {}, frame_margin=frame_margin, print_margin=print_margin)
+    payload = dict(normalized)
     req = urllib_request.Request(
         f'{base}/api/private/commercial-settings-sync',
         data=json.dumps(payload).encode('utf-8'),
@@ -739,21 +790,22 @@ def public_commercial_settings_sync():
     if not username:
         return jsonify({'ok': False, 'error': 'missing_username'}), 400
 
-    try:
-        marge = float(data.get('marge', 60))
-        marge_impressio = float(data.get('marge_impressio', 0))
-    except (TypeError, ValueError):
-        return jsonify({'ok': False, 'error': 'invalid_margin'}), 400
-
     user = query('SELECT id FROM usuaris WHERE lower(username)=?', [username], one=True)
     if not user:
         return jsonify({'ok': False, 'error': 'user_not_found'}), 404
 
-    execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=? WHERE id=?',
-        [marge, marge_impressio, user['id']]
+    margins = _normalize_commercial_margins(
+        data.get('margins') if isinstance(data.get('margins'), dict) else data,
+        frame_margin=data.get('marge'),
+        print_margin=data.get('marge_impressio'),
     )
-    return jsonify({'ok': True, 'username': username, 'marge': marge, 'marge_impressio': marge_impressio})
+    marge = margins['frames']
+    marge_impressio = margins['prints']
+    execute(
+        'UPDATE usuaris SET marge=?, marge_impressio=?, margins_json=? WHERE id=?',
+        [marge, marge_impressio, json.dumps(margins, ensure_ascii=True), user['id']]
+    )
+    return jsonify({'ok': True, 'username': username, 'marge': marge, 'marge_impressio': marge_impressio, 'margins': margins})
 
 
 @app.route('/auth/bridge')
@@ -887,10 +939,11 @@ def moldura_options():
 @app.route('/api/marge')
 @login_required
 def get_marge():
-    u = query('SELECT marge, marge_impressio, nom_empresa FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
+    margins = _load_user_commercial_margins(u)
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
@@ -898,6 +951,7 @@ def get_marge():
     return jsonify({
         'marge': marge,
         'marge_impressio': marge_imp,
+        'margins': margins,
         'empresa_nom': nom_emp,
         'empresa_adreca': cfg.get('empresa_adreca',''),
         'empresa_tel': cfg.get('empresa_tel',''),
@@ -961,10 +1015,18 @@ def desar_marge():
     m = float(d.get('marge', 60))
     mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
-    execute('UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=? WHERE id=?', [m, mi, ne, session['user_id']])
+    margins = _normalize_commercial_margins(
+        d.get('margins') if isinstance(d.get('margins'), dict) else d,
+        frame_margin=m,
+        print_margin=mi,
+    )
+    execute(
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, margins_json=? WHERE id=?',
+        [margins['frames'], margins['prints'], ne, json.dumps(margins, ensure_ascii=True), session['user_id']]
+    )
     if ne: session['empresa_nom'] = ne
-    _sync_private_commercial_settings(m, mi)
-    return jsonify({'ok': True})
+    _sync_private_commercial_settings(margins['frames'], margins['prints'], margins=margins)
+    return jsonify({'ok': True, 'margins': margins})
 
 # ── Routes: Guardar comanda i historial ──────────────────────────────────
 @app.route('/guardar', methods=['POST'])
@@ -2040,19 +2102,30 @@ def crear_pdf(c):
 @app.route('/ajustos')
 @login_required
 def ajustos():
-    u = query('SELECT marge, marge_impressio, nom_empresa FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge_actual = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     if float(marge_actual).is_integer():
         marge_actual = int(marge_actual)
     if float(marge_imp).is_integer():
         marge_imp = int(marge_imp)
+    margins = _load_user_commercial_margins(u)
+    margin_entries = [
+        {'key': 'frames', 'label': 'Marcs', 'description': 'Marge principal de la calculadora de marcs.', 'value': _format_margin_for_view(margins['frames'])},
+        {'key': 'canvas', 'label': 'Llenços', 'description': 'S\'utilitza al privat per a llenços i fine art si no es defineix un altre marge.', 'value': _format_margin_for_view(margins['canvas'])},
+        {'key': 'prints', 'label': 'Impressió fotogràfica', 'description': 'S\'aplica a còpia fotogràfica i serveix també de base per a acabats d\'impressió.', 'value': _format_margin_for_view(margins['prints'])},
+        {'key': 'foam', 'label': 'Foam', 'description': 'Permet separar el marge de foam del de la impressió si ho necessites.', 'value': _format_margin_for_view(margins['foam'])},
+        {'key': 'laminate_foam', 'label': 'Laminat + foam', 'description': 'Per si voleu treballar aquesta combinació amb un marge propi.', 'value': _format_margin_for_view(margins['laminate_foam'])},
+        {'key': 'fine_art', 'label': 'Fine art', 'description': 'Marge específic per a papers fine art i treballs més cuidats.', 'value': _format_margin_for_view(margins['fine_art'])},
+        {'key': 'albums', 'label': 'Àlbums', 'description': 'Preparat per quan l\'àrea privada també gestioni àlbums amb el mateix compte.', 'value': _format_margin_for_view(margins['albums'])},
+    ]
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
+                           margin_entries=margin_entries,
                            nom_empresa=nom_emp,
                            empresa_adreca=cfg.get('empresa_adreca',''),
                            empresa_tel=cfg.get('empresa_tel',''))
@@ -2512,6 +2585,7 @@ def init_db():
                     password TEXT NOT NULL, nom TEXT NOT NULL,
                     is_admin INTEGER DEFAULT 0, marge REAL DEFAULT 60,
                     marge_impressio REAL DEFAULT 100, nom_empresa TEXT DEFAULT '',
+                    margins_json TEXT DEFAULT '',
                     access_status TEXT DEFAULT 'active',
                     profile_type TEXT DEFAULT 'professional',
                     web_url TEXT DEFAULT '',
@@ -2559,6 +2633,7 @@ def init_db():
                 ('comandes','sessio_id','TEXT'),
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
+                ('usuaris','margins_json',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
                 ('usuaris','logo_b64','TEXT'),
                 ('usuaris','marge_impressio_setup','INTEGER DEFAULT 0'),
@@ -2603,6 +2678,7 @@ def init_db():
                     marge REAL DEFAULT 60,
                     marge_impressio REAL DEFAULT 100,
                     nom_empresa TEXT DEFAULT '',
+                    margins_json TEXT DEFAULT '',
                     access_status TEXT DEFAULT 'active',
                     profile_type TEXT DEFAULT 'professional',
                     web_url TEXT DEFAULT '',
@@ -2650,6 +2726,7 @@ def init_db():
             for sql in [
                 "ALTER TABLE usuaris ADD COLUMN setup_done INTEGER DEFAULT 0",
                 "ALTER TABLE usuaris ADD COLUMN logo_b64 TEXT",
+                "ALTER TABLE usuaris ADD COLUMN margins_json TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN marge_impressio_setup INTEGER DEFAULT 0",
                 "ALTER TABLE usuaris ADD COLUMN access_status TEXT DEFAULT 'active'",
                 "ALTER TABLE usuaris ADD COLUMN profile_type TEXT DEFAULT 'professional'",

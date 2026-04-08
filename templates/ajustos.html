@@ -27,8 +27,9 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .f input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none;transition:border-color .15s}
 .f input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
 .hint-box{background:#F0F9F4;border:1px solid #B8DCC9;border-radius:7px;padding:11px 14px;font-size:13px;color:#2D6E4E;line-height:1.6;margin-bottom:1rem}
-.marge-big{font-size:40px;font-family:'DM Serif Display',serif;color:var(--green);text-align:center;padding:.75rem 0;letter-spacing:-1px}
-.marge-big span{font-size:22px;color:var(--muted)}
+.margins-grid{display:grid;gap:.85rem}
+.margin-row{display:grid;grid-template-columns:1.2fr .8fr;gap:1rem;align-items:start;padding:1rem;border:1px solid var(--border);border-radius:10px;background:#fcfbf8}
+.margin-row p{font-size:13px;color:var(--muted);margin-top:.35rem;line-height:1.55}
 .btn-g{display:block;width:100%;padding:13px;border-radius:7px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;background:var(--green);color:#fff;margin-top:1.25rem;transition:background .15s}
 .btn-g:hover{background:#155c3a}
 .alert{border-radius:7px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:1.25rem;display:none}
@@ -39,6 +40,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   .nav-toggle{display:flex}
   .nav-r{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
   nav.nav-open .nav-r{display:flex}
+  .margin-row{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -71,20 +73,23 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   </div>
 
   <div class="section">
-    <div class="section-title">Marge general</div>
+    <div class="section-title">Marges comercials</div>
     <div class="card">
-      <div class="hint-box">El marge s'aplica sobre el cost base per calcular el preu final. És un ajust intern.</div>
-      <div class="marge-big"><span id="marge-preview">{{ marge_actual }}</span><span>%</span></div>
-      <div class="f"><label>Marge (%)</label><input type="number" id="marge-input" value="{{ marge_actual }}" min="0" max="500" oninput="document.getElementById('marge-preview').textContent=this.value||0"></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Marge per a impressió fotogràfica</div>
-    <div class="card">
-      <div class="hint-box">Marge addicional <strong>només</strong> per a impressió fotogràfica. Si poses <strong>0</strong>, s'aplicarà el marge general.</div>
-      <div class="marge-big" style="font-size:32px"><span id="imp-preview">{{ marge_imp }}</span><span>%</span></div>
-      <div class="f"><label>Marge impressió (%)</label><input type="number" id="imp-input" value="{{ marge_imp }}" min="0" max="500" oninput="document.getElementById('imp-preview').textContent=this.value||0"></div>
+      <div class="hint-box">Si el client ja tenia marge guardat, el mantenim. Els camps nous parteixen de 60% o del marge existent que els correspongui. Marcs continua calculant amb el seu marge principal i el d'impressió, però aquí ja pots ordenar tota la resta per producte.</div>
+      <div class="margins-grid">
+        {% for item in margin_entries %}
+        <div class="margin-row">
+          <div>
+            <label for="margin-{{ item.key }}">{{ item.label }}</label>
+            <p>{{ item.description }}</p>
+          </div>
+          <div class="f" style="margin-bottom:0">
+            <label for="margin-{{ item.key }}">Marge (%)</label>
+            <input type="number" id="margin-{{ item.key }}" data-margin-key="{{ item.key }}" value="{{ item.value }}" min="0" max="500" step="0.1">
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     </div>
   </div>
 
@@ -120,21 +125,26 @@ function readNumber(id,fallback){
   return Number.isFinite(num) ? num : fallback;
 }
 function desarTot(){
-  var m=readNumber('marge-input',60);
-  var mi=readNumber('imp-input',0);
+  var margins={};
+  document.querySelectorAll('[data-margin-key]').forEach(function(input){
+    var key=input.getAttribute('data-margin-key');
+    margins[key]=readNumber(input.id,60);
+  });
+  var m=typeof margins.frames==='number' ? margins.frames : 60;
+  var mi=typeof margins.prints==='number' ? margins.prints : m;
   var ne=document.getElementById('nom-empresa').value||'';
   var ea=document.getElementById('empresa-adreca').value||'';
   var et=document.getElementById('empresa-tel').value||'';
   {% if session.get('is_admin') %}
   Promise.all([
-    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:ne})}).then(function(r){return r.json();}),
+    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne})}).then(function(r){return r.json();}),
     fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();})
   ]).then(function(res){
     if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
     else showAlert('Error en desar.','err');
   });
   {% else %}
-  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,nom_empresa:ne})})
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne})})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok) showAlert('Canvis desats correctament.','ok');
