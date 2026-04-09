@@ -1,7 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="ca">
 <head>
-<meta name="theme-color" content="#1C1B18">
+<meta name="theme-color" content="{{ nav_color|default('#1A6B45') }}">
 <link rel="shortcut icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
 <link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
@@ -18,8 +18,12 @@
   --text:#1d1b18;
   --muted:#6c675f;
   --soft:#f1ece3;
-  --accent:#2f6b49;
-  --accent-soft:#e5f1ea;
+  --accent:{{ brand_color|default('#1A6B45') }};
+  --accent-soft:{{ brand_color_light|default('#E8F3EE') }};
+  --nav:{{ nav_color|default('#1A6B45') }};
+  --nav-text:{{ nav_text_color|default('#FFFFFF') }};
+  --nav-muted:{{ nav_muted_color|default('#D7D0C4') }};
+  --nav-pill:{{ nav_pill_color|default('rgba(255,255,255,.12)') }};
   --radius:16px;
   --shadow:0 18px 40px rgba(29,27,24,.06);
 }
@@ -35,7 +39,7 @@ body{
   color:var(--text);
 }
 nav{
-  background:#1d1b18;
+  background:var(--nav);
   min-height:56px;
   display:flex;
   align-items:center;
@@ -49,7 +53,7 @@ nav{
 .brand{
   font-family:'DM Serif Display',serif;
   font-size:1.15rem;
-  color:#fff;
+  color:var(--nav-text);
   text-decoration:none;
 }
 .nav-right{
@@ -65,23 +69,23 @@ nav{
   justify-content:center;
   width:40px;
   height:40px;
-  border:1px solid rgba(255,255,255,.14);
+  border:1px solid color-mix(in srgb, var(--nav-text) 18%, transparent);
   border-radius:10px;
   background:transparent;
-  color:#fff;
+  color:var(--nav-text);
   font-size:20px;
   cursor:pointer;
 }
 .nav-right a{
-  color:#d7d0c4;
+  color:var(--nav-muted);
   text-decoration:none;
   font-size:.92rem;
 }
-.nav-right a:hover{color:#fff}
+.nav-right a:hover{color:var(--nav-text)}
 .nav-user{
-  color:#fff;
+  color:var(--nav-text);
   font-size:.88rem;
-  background:rgba(255,255,255,.11);
+  background:var(--nav-pill);
   padding:.35rem .8rem;
   border-radius:999px;
 }

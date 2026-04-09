@@ -6,13 +6,13 @@
 <title>{{ 'Nova motllura' if nova else 'Editar motllura' }} — Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--red:#C0392B;--r:10px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--red:#C0392B;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
-nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
-.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px;cursor:pointer}.brand em{color:#C8873A;font-style:normal}
+nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:var(--nav-text);font-size:19px;cursor:pointer}.brand em{color:#C8873A;font-style:normal}
 .nav-r{display:flex;align-items:center;gap:1rem}
-.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:#fff}
+.nav-r a{color:var(--nav-muted);text-decoration:none;font-size:13px;font-weight:500}.nav-r a:hover{color:var(--nav-text)}
 .wrap{max-width:720px;margin:0 auto;padding:2rem 1.5rem}
 .page-header{margin-bottom:1.75rem}
 .page-header h1{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400}
@@ -42,6 +42,7 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   <div class="nav-r">
     <a href="/">Portal</a>
     <a href="/calculadora">Calculadora</a>
+    <a href="/ajustos">Ajustos</a>
     <a href="/admin/cataleg">← Catàleg</a>
     <a href="/admin">Admin</a>
     <a href="/logout">Sortir</a>

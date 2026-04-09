@@ -1,6 +1,6 @@
 import base64, hashlib, hmac, secrets, os, json, time, unicodedata
 from flask import (Flask, render_template, request, redirect, url_for,
-                   session, flash, jsonify, send_file, g)
+                   session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
@@ -90,6 +90,64 @@ def _mix_with_white(hex_color, ratio=0.88):
     ng = int(g + (255 - g) * ratio)
     nb = int(b + (255 - b) * ratio)
     return f'#{nr:02X}{ng:02X}{nb:02X}'
+
+
+def _mix_hex(hex_color, target_hex, ratio=0.5):
+    base = _normalize_hex_color(hex_color)
+    target = _normalize_hex_color(target_hex, '#FFFFFF')
+    ratio = min(max(float(ratio), 0.0), 1.0)
+    r = int(base[1:3], 16)
+    g = int(base[3:5], 16)
+    b = int(base[5:7], 16)
+    tr = int(target[1:3], 16)
+    tg = int(target[3:5], 16)
+    tb = int(target[5:7], 16)
+    nr = int(r + (tr - r) * ratio)
+    ng = int(g + (tg - g) * ratio)
+    nb = int(b + (tb - b) * ratio)
+    return f'#{nr:02X}{ng:02X}{nb:02X}'
+
+
+def _hex_luminance(hex_color):
+    base = _normalize_hex_color(hex_color)
+    r = int(base[1:3], 16) / 255.0
+    g = int(base[3:5], 16) / 255.0
+    b = int(base[5:7], 16) / 255.0
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b)
+
+
+def _contrast_text_color(hex_color):
+    return '#1C1B18' if _hex_luminance(hex_color) >= 0.62 else '#FFFFFF'
+
+
+def _current_brand_palette():
+    brand_color = DEFAULT_BRAND_COLOR
+    if has_request_context():
+        brand_color = _normalize_hex_color(session.get('brand_color', DEFAULT_BRAND_COLOR))
+    nav_text_color = _contrast_text_color(brand_color)
+    nav_muted_color = (
+        _mix_hex(brand_color, '#FFFFFF', 0.62)
+        if nav_text_color == '#FFFFFF'
+        else _mix_hex(brand_color, '#1C1B18', 0.58)
+    )
+    nav_pill_color = (
+        'rgba(255,255,255,.14)'
+        if nav_text_color == '#FFFFFF'
+        else 'rgba(28,27,24,.10)'
+    )
+    return {
+        'brand_color': brand_color,
+        'brand_color_light': _mix_with_white(brand_color, 0.88),
+        'nav_color': brand_color,
+        'nav_text_color': nav_text_color,
+        'nav_muted_color': nav_muted_color,
+        'nav_pill_color': nav_pill_color,
+    }
+
+
+@app.context_processor
+def inject_brand_theme():
+    return _current_brand_palette()
 
 LAMINATE_ONLY_PRICES = {
     '20x30': 7.35,
@@ -645,6 +703,7 @@ def _start_user_session(user):
     session['access_status'] = _user_access_status(user)
     session['profile_type'] = _row_get(user, 'profile_type', 'professional') if user else 'professional'
     session['empresa_nom'] = _load_empresa_nom_for_session(user)
+    session['brand_color'] = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
 
 
 def _can_access_comanda(row):
@@ -1100,6 +1159,7 @@ def desar_marge():
         [margins['frames'], margins['prints'], ne, json.dumps(margins, ensure_ascii=True), brand_color, session['user_id']]
     )
     if ne: session['empresa_nom'] = ne
+    session['brand_color'] = brand_color
     _sync_private_commercial_settings(margins['frames'], margins['prints'], margins=margins)
     return jsonify({'ok': True, 'margins': margins})
 

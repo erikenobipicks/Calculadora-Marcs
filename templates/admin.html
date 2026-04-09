@@ -6,15 +6,15 @@
 <title>Objectiu - Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:14px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-nav{background:#1C1B18;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
-nav .brand{color:#fff;font-family:'DM Serif Display',serif;font-size:20px;order:1}
+nav{background:var(--nav);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+nav .brand{color:var(--nav-text);font-family:'DM Serif Display',serif;font-size:20px;order:1}
 nav .links{display:flex;align-items:center;gap:1rem;order:3}
-nav .links a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500}
-nav .links a:hover{color:#fff}
-nav .nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:transparent;color:#fff;font-size:20px;cursor:pointer;order:2;margin-left:auto}
+nav .links a{color:var(--nav-muted);text-decoration:none;font-size:13px;font-weight:500}
+nav .links a:hover{color:var(--nav-text)}
+nav .nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid color-mix(in srgb, var(--nav-text) 18%, transparent);border-radius:10px;background:transparent;color:var(--nav-text);font-size:20px;cursor:pointer;order:2;margin-left:auto}
 .container{max-width:1320px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
 .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.1rem}
 .page-title{font-family:'DM Serif Display',serif;font-size:34px;font-weight:400;letter-spacing:-.5px}
@@ -77,6 +77,7 @@ tr:last-child td{border-bottom:none}
     <a href="/">Portal</a>
     <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
+    <a href="/ajustos">Ajustos</a>
     <a href="/admin/cataleg">Cat&agrave;leg admin</a>
     <a href="/logout">Sortir</a>
   </div>
@@ -95,6 +96,7 @@ tr:last-child td{border-bottom:none}
       <div class="page-subtitle">Centralitza des d'aquí usuaris, configuració general i tarifes d'impressió. He ordenat la pantalla perquè el treball diari quedi més clar i visual.</div>
     </div>
     <div class="hero-actions">
+      <a href="/ajustos" class="btn btn-secondary">Ajustos</a>
       <a href="/admin/cataleg" class="btn btn-secondary">Obrir catàleg admin</a>
       <a href="/cataleg" class="btn btn-secondary">Veure catàleg públic</a>
     </div>

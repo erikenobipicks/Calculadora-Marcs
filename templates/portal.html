@@ -1,7 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="ca">
 <head>
-<meta name="theme-color" content="#1C1B18">
+<meta name="theme-color" content="{{ nav_color|default('#1A6B45') }}">
 <link rel="shortcut icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
 <link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
@@ -11,17 +11,17 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='private_whatsapp.css') }}">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--ink:#1C1B18;--r:14px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--ink:#1C1B18;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--nav-pill:{{ nav_pill_color|default('rgba(255,255,255,.12)') }};--r:14px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-nav{background:#1C1B18;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
-.brand{font-family:'DM Serif Display',serif;color:#fff;font-size:19px}
+nav{background:var(--nav);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-family:'DM Serif Display',serif;color:var(--nav-text);font-size:19px}
 .brand a{color:inherit;text-decoration:none}
 .nav-r{display:flex;align-items:center;gap:1.2rem}
-.nav-r a{color:#9E9B94;text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}
-.nav-r a:hover{color:#fff}
-.nav-u{font-size:13px;color:#fff;background:rgba(255,255,255,.1);padding:4px 11px;border-radius:20px;font-weight:500}
-.nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:transparent;color:#fff;font-size:20px;cursor:pointer}
+.nav-r a{color:var(--nav-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .15s}
+.nav-r a:hover{color:var(--nav-text)}
+.nav-u{font-size:13px;color:var(--nav-text);background:var(--nav-pill);padding:4px 11px;border-radius:20px;font-weight:500}
+.nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid color-mix(in srgb, var(--nav-text) 18%, transparent);border-radius:10px;background:transparent;color:var(--nav-text);font-size:20px;cursor:pointer}
 .wrap{max-width:1120px;margin:0 auto;padding:2rem 1.25rem 3rem}
 .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:1.25rem;align-items:stretch;margin-bottom:1.25rem}
 .hero-copy,.hero-side,.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r)}
