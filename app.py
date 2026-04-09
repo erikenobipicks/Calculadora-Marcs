@@ -2183,7 +2183,7 @@ def crear_pdf(c):
 @app.route('/ajustos')
 @login_required
 def ajustos():
-    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge_actual = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     if float(marge_actual).is_integer():
@@ -2192,6 +2192,7 @@ def ajustos():
         marge_imp = int(marge_imp)
     margins = _load_user_commercial_margins(u)
     margin_entries = [
+        {'key': 'general', 'label': 'General', 'description': 'Marge base per a productes generals i acabats que no tenen marge propi.', 'value': _format_margin_for_view(margins['general'])},
         {'key': 'frames', 'label': 'Marcs', 'description': 'Marge principal de la calculadora de marcs.', 'value': _format_margin_for_view(margins['frames'])},
         {'key': 'canvas', 'label': 'Llenços', 'description': 'S\'utilitza al privat per a llenços i fine art si no es defineix un altre marge.', 'value': _format_margin_for_view(margins['canvas'])},
         {'key': 'prints', 'label': 'Impressió fotogràfica', 'description': 'S\'aplica a còpia fotogràfica i serveix també de base per a acabats d\'impressió.', 'value': _format_margin_for_view(margins['prints'])},
@@ -2201,12 +2202,16 @@ def ajustos():
         {'key': 'albums', 'label': 'Àlbums', 'description': 'Preparat per quan l\'àrea privada també gestioni àlbums amb el mateix compte.', 'value': _format_margin_for_view(margins['albums'])},
     ]
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
+    brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
-                           margin_entries=[dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry for entry in margin_entries if entry['key'] not in ('foam', 'laminate_foam')],
+                           margin_entries=[
+                               dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry
+                               for entry in margin_entries if entry['key'] not in ('foam', 'laminate_foam')
+                           ],
                            nom_empresa=nom_emp,
                            brand_color=brand_color,
                            empresa_adreca=cfg.get('empresa_adreca',''),
