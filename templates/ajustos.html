@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='private_whatsapp.css') }}">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--nav-pill:{{ nav_pill_color|default('rgba(255,255,255,.12)') }};--r:10px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--accent-2:{{ brand_secondary_color|default('#C8873A') }};--accent-2-l:{{ brand_secondary_color_light|default('#F3E5D2') }};--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--nav-pill:{{ nav_pill_color|default('rgba(255,255,255,.12)') }};--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
@@ -31,6 +31,16 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .f input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none;transition:border-color .15s}
 .f input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
 .hint-box{background:#F0F9F4;border:1px solid #B8DCC9;border-radius:7px;padding:11px 14px;font-size:13px;color:#2D6E4E;line-height:1.6;margin-bottom:1rem}
+.color-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.85rem}
+.color-preview{display:grid;gap:.85rem;margin-top:1rem}
+.preview-nav{background:var(--nav);color:var(--nav-text);border-radius:10px;padding:.8rem .95rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.preview-nav span{font-size:12px;font-weight:700;letter-spacing:.3px}
+.preview-nav small{font-size:12px;color:var(--nav-muted)}
+.preview-swatches{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+.swatch{border:1px solid var(--border);border-radius:10px;padding:.85rem;background:#fcfbf8}
+.swatch-chip{height:34px;border-radius:8px;margin-bottom:.55rem}
+.swatch strong{display:block;font-size:12px;color:var(--text);margin-bottom:.2rem}
+.swatch small{font-size:12px;color:var(--muted);line-height:1.45}
 .margins-grid{display:grid;gap:.85rem}
 .margin-row{display:grid;grid-template-columns:1.2fr .8fr;gap:1rem;align-items:start;padding:1rem;border:1px solid var(--border);border-radius:10px;background:#fcfbf8}
 .margin-row p{font-size:13px;color:var(--muted);margin-top:.35rem;line-height:1.55}
@@ -44,6 +54,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   .nav-toggle{display:flex}
   .nav-r{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
   nav.nav-open .nav-r{display:flex}
+  .color-grid,.preview-swatches{grid-template-columns:1fr}
   .margin-row{grid-template-columns:1fr}
 }
 </style>
@@ -69,11 +80,33 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   <div class="section">
     <div class="section-title">Dades del negoci</div>
     <div class="card">
-      <div class="hint-box">Aquestes dades sortiran als pressupostos, als PDFs i als missatges compartits amb el client. El color corporatiu s'aplica als accents principals, a la barra superior i al PDF.</div>
+      <div class="hint-box">Aquestes dades sortiran als pressupostos, als PDFs i als missatges compartits amb el client. Pots separar el color principal, el secundari i el de la barra superior perquè la calculadora s'ajusti millor a cada client.</div>
       <div class="f"><label>Nom del comerç</label><input type="text" id="nom-empresa" value="{{ nom_empresa }}" placeholder="Ex: Taller d'Emmarcació La Rambla"></div>
       <div class="f"><label>Adreça</label><input type="text" id="empresa-adreca" value="{{ empresa_adreca }}" placeholder="C/ Mare Molas, 26 - Reus"></div>
       <div class="f"><label>Telèfon</label><input type="text" id="empresa-tel" value="{{ empresa_tel }}" placeholder="977 316 111"></div>
-      <div class="f"><label>Color corporatiu</label><input type="color" id="brand-color" value="{{ brand_color }}"></div>
+      <div class="color-grid">
+        <div class="f"><label>Color principal</label><input type="color" id="brand-color" value="{{ brand_color }}" oninput="updateColorPreview()"></div>
+        <div class="f"><label>Color secundari</label><input type="color" id="brand-color-secondary" value="{{ brand_color_secondary }}" oninput="updateColorPreview()"></div>
+        <div class="f"><label>Color de menú</label><input type="color" id="brand-color-menu" value="{{ brand_color_menu }}" oninput="updateColorPreview()"></div>
+      </div>
+      <div class="color-preview">
+        <div class="preview-nav">
+          <span>Barra superior</span>
+          <small id="preview-nav-note">Vista del menú</small>
+        </div>
+        <div class="preview-swatches">
+          <div class="swatch">
+            <div class="swatch-chip" id="preview-primary-chip"></div>
+            <strong>Accent principal</strong>
+            <small>Botons, resums, focus i accents destacats.</small>
+          </div>
+          <div class="swatch">
+            <div class="swatch-chip" id="preview-secondary-chip"></div>
+            <strong>Accent secundari</strong>
+            <small>Detalls de suport, avisos suaus i elements complementaris.</small>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -141,16 +174,18 @@ function desarTot(){
   var ea=document.getElementById('empresa-adreca').value||'';
   var et=document.getElementById('empresa-tel').value||'';
   var bc=document.getElementById('brand-color').value||'#1A6B45';
+  var bcs=document.getElementById('brand-color-secondary').value||'#C8873A';
+  var bcm=document.getElementById('brand-color-menu').value||bc;
   {% if session.get('is_admin') %}
   Promise.all([
-    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,brand_color:bc})}).then(function(r){return r.json();}),
+    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})}).then(function(r){return r.json();}),
     fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();})
   ]).then(function(res){
     if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
     else showAlert('Error en desar.','err');
   });
   {% else %}
-  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,brand_color:bc})})
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok) showAlert('Canvis desats correctament.','ok');
@@ -158,6 +193,41 @@ function desarTot(){
     });
   {% endif %}
 }
+
+function hexToRgb(hex){
+  var clean=(hex||'').replace('#','');
+  if(clean.length!==6) return {r:26,g:107,b:69};
+  return {
+    r:parseInt(clean.slice(0,2),16),
+    g:parseInt(clean.slice(2,4),16),
+    b:parseInt(clean.slice(4,6),16)
+  };
+}
+function contrastText(hex){
+  var rgb=hexToRgb(hex);
+  var lum=((0.2126*rgb.r)+(0.7152*rgb.g)+(0.0722*rgb.b))/255;
+  return lum>=0.62?'#1C1B18':'#FFFFFF';
+}
+function mixWithWhite(hex, ratio){
+  var rgb=hexToRgb(hex);
+  var r=Math.round(rgb.r+(255-rgb.r)*ratio);
+  var g=Math.round(rgb.g+(255-rgb.g)*ratio);
+  var b=Math.round(rgb.b+(255-rgb.b)*ratio);
+  return 'rgb('+r+','+g+','+b+')';
+}
+function updateColorPreview(){
+  var primary=document.getElementById('brand-color').value||'#1A6B45';
+  var secondary=document.getElementById('brand-color-secondary').value||'#C8873A';
+  var menu=document.getElementById('brand-color-menu').value||primary;
+  var previewNav=document.querySelector('.preview-nav');
+  var navNote=document.getElementById('preview-nav-note');
+  previewNav.style.background=menu;
+  previewNav.style.color=contrastText(menu);
+  navNote.style.color=contrastText(menu)==='#FFFFFF' ? mixWithWhite(menu,0.62) : 'rgba(28,27,24,.62)';
+  document.getElementById('preview-primary-chip').style.background='linear-gradient(135deg,'+primary+' 0%,'+mixWithWhite(primary,0.3)+' 100%)';
+  document.getElementById('preview-secondary-chip').style.background='linear-gradient(135deg,'+secondary+' 0%,'+mixWithWhite(secondary,0.3)+' 100%)';
+}
+updateColorPreview();
 
 // Load existing logo
 fetch('/api/logo').then(r=>r.json()).then(function(d){

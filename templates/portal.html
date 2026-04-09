@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='private_whatsapp.css') }}">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--ink:#1C1B18;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--nav-pill:{{ nav_pill_color|default('rgba(255,255,255,.12)') }};--r:14px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:{{ brand_secondary_color|default('#C8873A') }};--amber-l:{{ brand_secondary_color_light|default('#F3E5D2') }};--red:#B84040;--red-l:#FAEAEA;--ink:#1C1B18;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--nav-pill:{{ nav_pill_color|default('rgba(255,255,255,.12)') }};--r:14px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 nav{background:var(--nav);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
@@ -25,7 +25,7 @@ nav{background:var(--nav);height:56px;display:flex;align-items:center;justify-co
 .wrap{max-width:1120px;margin:0 auto;padding:2rem 1.25rem 3rem}
 .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:1.25rem;align-items:stretch;margin-bottom:1.25rem}
 .hero-copy,.hero-side,.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r)}
-.hero-copy{padding:2rem;background:linear-gradient(135deg,#181512 0%,#30251c 52%,#9b6f41 100%);color:#fff;border:none}
+.hero-copy{padding:2rem;background:linear-gradient(135deg,#181512 0%,#30251c 52%,var(--amber) 100%);color:#fff;border:none}
 .hero-copy .eyebrow{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.58);margin-bottom:1rem}
 .hero-copy h1{font-family:'DM Serif Display',serif;font-size:42px;font-weight:400;line-height:1;max-width:12ch}
 .hero-copy p{margin-top:1rem;max-width:58ch;color:rgba(255,255,255,.74);line-height:1.8}

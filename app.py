@@ -63,6 +63,8 @@ COMMERCIAL_MARGIN_DEFAULTS = {
 }
 
 DEFAULT_BRAND_COLOR = '#1A6B45'
+DEFAULT_BRAND_SECONDARY_COLOR = '#C8873A'
+DEFAULT_BRAND_MENU_COLOR = DEFAULT_BRAND_COLOR
 
 
 def _normalize_hex_color(value, default=DEFAULT_BRAND_COLOR):
@@ -122,13 +124,23 @@ def _contrast_text_color(hex_color):
 
 def _current_brand_palette():
     brand_color = DEFAULT_BRAND_COLOR
+    secondary_color = DEFAULT_BRAND_SECONDARY_COLOR
+    menu_color = DEFAULT_BRAND_MENU_COLOR
     if has_request_context():
         brand_color = _normalize_hex_color(session.get('brand_color', DEFAULT_BRAND_COLOR))
-    nav_text_color = _contrast_text_color(brand_color)
+        secondary_color = _normalize_hex_color(
+            session.get('brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
+            DEFAULT_BRAND_SECONDARY_COLOR,
+        )
+        menu_color = _normalize_hex_color(
+            session.get('brand_color_menu', brand_color or DEFAULT_BRAND_MENU_COLOR),
+            brand_color or DEFAULT_BRAND_MENU_COLOR,
+        )
+    nav_text_color = _contrast_text_color(menu_color)
     nav_muted_color = (
-        _mix_hex(brand_color, '#FFFFFF', 0.62)
+        _mix_hex(menu_color, '#FFFFFF', 0.62)
         if nav_text_color == '#FFFFFF'
-        else _mix_hex(brand_color, '#1C1B18', 0.58)
+        else _mix_hex(menu_color, '#1C1B18', 0.58)
     )
     nav_pill_color = (
         'rgba(255,255,255,.14)'
@@ -138,7 +150,9 @@ def _current_brand_palette():
     return {
         'brand_color': brand_color,
         'brand_color_light': _mix_with_white(brand_color, 0.88),
-        'nav_color': brand_color,
+        'brand_secondary_color': secondary_color,
+        'brand_secondary_color_light': _mix_with_white(secondary_color, 0.86),
+        'nav_color': menu_color,
         'nav_text_color': nav_text_color,
         'nav_muted_color': nav_muted_color,
         'nav_pill_color': nav_pill_color,
@@ -704,6 +718,14 @@ def _start_user_session(user):
     session['profile_type'] = _row_get(user, 'profile_type', 'professional') if user else 'professional'
     session['empresa_nom'] = _load_empresa_nom_for_session(user)
     session['brand_color'] = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
+    session['brand_color_secondary'] = _normalize_hex_color(
+        _row_get(user, 'brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
+        DEFAULT_BRAND_SECONDARY_COLOR,
+    )
+    session['brand_color_menu'] = _normalize_hex_color(
+        _row_get(user, 'brand_color_menu', session.get('brand_color', DEFAULT_BRAND_MENU_COLOR)),
+        session.get('brand_color', DEFAULT_BRAND_MENU_COLOR),
+    )
 
 
 def _can_access_comanda(row):
@@ -1070,11 +1092,19 @@ def moldura_options():
 @app.route('/api/marge')
 @login_required
 def get_marge():
-    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
+    brand_color_secondary = _normalize_hex_color(
+        _row_get(u, 'brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
+        DEFAULT_BRAND_SECONDARY_COLOR,
+    )
+    brand_color_menu = _normalize_hex_color(
+        _row_get(u, 'brand_color_menu', brand_color),
+        brand_color,
+    )
     margins = _load_user_commercial_margins(u)
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
@@ -1149,17 +1179,36 @@ def desar_marge():
     mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
     brand_color = _normalize_hex_color(d.get('brand_color', DEFAULT_BRAND_COLOR))
+    brand_color_secondary = _normalize_hex_color(
+        d.get('brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
+        DEFAULT_BRAND_SECONDARY_COLOR,
+    )
+    brand_color_menu = _normalize_hex_color(
+        d.get('brand_color_menu', brand_color),
+        brand_color,
+    )
     margins = _normalize_commercial_margins(
         d.get('margins') if isinstance(d.get('margins'), dict) else d,
         frame_margin=m,
         print_margin=mi,
     )
     execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, margins_json=?, brand_color=? WHERE id=?',
-        [margins['frames'], margins['prints'], ne, json.dumps(margins, ensure_ascii=True), brand_color, session['user_id']]
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
+        [
+            margins['frames'],
+            margins['prints'],
+            ne,
+            json.dumps(margins, ensure_ascii=True),
+            brand_color,
+            brand_color_secondary,
+            brand_color_menu,
+            session['user_id'],
+        ]
     )
     if ne: session['empresa_nom'] = ne
     session['brand_color'] = brand_color
+    session['brand_color_secondary'] = brand_color_secondary
+    session['brand_color_menu'] = brand_color_menu
     _sync_private_commercial_settings(margins['frames'], margins['prints'], margins=margins)
     return jsonify({'ok': True, 'margins': margins})
 
@@ -2274,6 +2323,8 @@ def ajustos():
                            ],
                            nom_empresa=nom_emp,
                            brand_color=brand_color,
+                           brand_color_secondary=brand_color_secondary,
+                           brand_color_menu=brand_color_menu,
                            empresa_adreca=cfg.get('empresa_adreca',''),
                            empresa_tel=cfg.get('empresa_tel',''))
 
@@ -2789,6 +2840,8 @@ def init_db():
                     is_admin INTEGER DEFAULT 0, marge REAL DEFAULT 60,
                     marge_impressio REAL DEFAULT 100, nom_empresa TEXT DEFAULT '',
                     brand_color TEXT DEFAULT '#1A6B45',
+                    brand_color_secondary TEXT DEFAULT '#C8873A',
+                    brand_color_menu TEXT DEFAULT '#1A6B45',
                     margins_json TEXT DEFAULT '',
                     access_status TEXT DEFAULT 'active',
                     profile_type TEXT DEFAULT 'professional',
@@ -2840,6 +2893,8 @@ def init_db():
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
                 ('usuaris','brand_color',"TEXT DEFAULT '#1A6B45'"),
+                ('usuaris','brand_color_secondary',"TEXT DEFAULT '#C8873A'"),
+                ('usuaris','brand_color_menu',"TEXT DEFAULT '#1A6B45'"),
                 ('usuaris','margins_json',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
                 ('usuaris','logo_b64','TEXT'),
@@ -2886,6 +2941,8 @@ def init_db():
                     marge_impressio REAL DEFAULT 100,
                     nom_empresa TEXT DEFAULT '',
                     brand_color TEXT DEFAULT '#1A6B45',
+                    brand_color_secondary TEXT DEFAULT '#C8873A',
+                    brand_color_menu TEXT DEFAULT '#1A6B45',
                     margins_json TEXT DEFAULT '',
                     access_status TEXT DEFAULT 'active',
                     profile_type TEXT DEFAULT 'professional',
@@ -2935,6 +2992,8 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN setup_done INTEGER DEFAULT 0",
                 "ALTER TABLE usuaris ADD COLUMN logo_b64 TEXT",
                 "ALTER TABLE usuaris ADD COLUMN brand_color TEXT DEFAULT '#1A6B45'",
+                "ALTER TABLE usuaris ADD COLUMN brand_color_secondary TEXT DEFAULT '#C8873A'",
+                "ALTER TABLE usuaris ADD COLUMN brand_color_menu TEXT DEFAULT '#1A6B45'",
                 "ALTER TABLE usuaris ADD COLUMN margins_json TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN marge_impressio_setup INTEGER DEFAULT 0",
                 "ALTER TABLE usuaris ADD COLUMN access_status TEXT DEFAULT 'active'",
