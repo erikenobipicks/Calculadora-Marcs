@@ -2292,7 +2292,11 @@ def crear_pdf(c):
 @app.route('/ajustos')
 @login_required
 def ajustos():
-    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query(
+        'SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+        [session['user_id']],
+        one=True,
+    )
     marge_actual = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     if float(marge_actual).is_integer():
@@ -2312,6 +2316,14 @@ def ajustos():
     ]
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
+    brand_color_secondary = _normalize_hex_color(
+        _row_get(u, 'brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
+        DEFAULT_BRAND_SECONDARY_COLOR,
+    )
+    brand_color_menu = _normalize_hex_color(
+        _row_get(u, 'brand_color_menu', brand_color),
+        brand_color,
+    )
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
