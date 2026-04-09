@@ -62,6 +62,45 @@ COMMERCIAL_MARGIN_DEFAULTS = {
     'albums': 60.0,
 }
 
+LAMINATE_ONLY_PRICES = {
+    '20x30': 7.35,
+    '24x30': 7.35,
+    '24x36': 8.15,
+    '28x35': 9.55,
+    '30x30': 9.55,
+    '30x40': 9.95,
+    '30x45': 10.35,
+    '30x50': 11.35,
+    '35x50': 12.20,
+    '30x60': 12.60,
+    '40x50': 12.50,
+    '40x60': 13.90,
+    '50x50': 16.40,
+    '50x60': 21.30,
+    '50x70': 22.00,
+    '50x75': 22.60,
+    '50x80': 24.20,
+    '60x60': 22.00,
+    '60x70': 20.15,
+    '60x80': 23.50,
+    '60x90': 25.95,
+    '60x100': 31.00,
+    '70x100': 33.00,
+    '80x100': 35.00,
+    '80x120': 31.00,
+    '80x150': 36.00,
+    '80x180': 56.75,
+    '80x200': 60.00,
+    '90x100': 24.80,
+    '90x120': 27.55,
+    '90x150': 36.25,
+    '90x180': 59.00,
+    '90x200': 74.65,
+    '100x100': 32.00,
+    '100x150': 36.75,
+    '100x200': 85.00,
+}
+
 
 def _safe_moldura_ref(ref):
     ref = (ref or '').strip().lower()
@@ -1727,6 +1766,7 @@ PDF_T = {
         'pendent_short': 'PENDENT',
         'sense_marc': '(sense marc)',
         'encolat_label': 'Encolat',
+        'laminat_label': 'Laminat',
         'protter': 'Protter',
         'vidre_label': 'Vidre',
         'doble_vidre': 'Doble vidre',
@@ -1776,6 +1816,7 @@ PDF_T = {
         'pendent_short': 'PENDIENTE',
         'sense_marc': '(sin marco)',
         'encolat_label': 'Encolado',
+        'laminat_label': 'Laminado',
         'protter': 'Protter',
         'vidre_label': 'Vidrio',
         'doble_vidre': 'Doble vidrio',
@@ -1825,6 +1866,7 @@ PDF_T = {
         'pendent_short': 'OUTSTANDING',
         'sense_marc': '(no frame)',
         'encolat_label': 'Mounting',
+        'laminat_label': 'Laminate only',
         'protter': 'Protter',
         'vidre_label': 'Glass',
         'doble_vidre': 'Double glass',
@@ -2198,6 +2240,8 @@ def _display_muntatge(c, t):
     ref = (c.get('encolat') or '').strip().upper()
     if not ref or ref == '-':
         return ''
+    if ref.startswith('LAM'):
+        return t['laminat_label']
     if ref.startswith('PRO'):
         return t['protter']
     return t['encolat_label']
@@ -2290,6 +2334,16 @@ def _imp_closest(fw, fh):
         return {'ref': r['referencia'], 'preu': r.get('preu', 0)}
     return None
 
+
+def _laminate_only_closest(fw, fh):
+    rows = []
+    for ref, price in LAMINATE_ONLY_PRICES.items():
+        rows.append({'referencia': ref, 'preu': float(price)})
+    r = _find_min_contain(rows, fw, fh)
+    if r:
+        return {'ref': r['referencia'], 'preu': r.get('preu', 0)}
+    return None
+
 @app.route('/api/closest')
 @login_required
 def api_closest():
@@ -2344,6 +2398,7 @@ def api_closest():
         'doble_pas':    ca('passpartout', w, h, prefix='DOBPAS'),
         'proeco':       ca('passpartout', w, h, prefix='PROECO'),
         'impressio':    _imp_closest(foto_w, foto_h),
+        'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
     return jsonify(result)
 
@@ -2372,6 +2427,7 @@ def mailto_data():
             'impressio': 'Impressió',
             'inclosa': 'Inclosa',
             'encolat_label': 'Encolat',
+            'laminat_label': 'Laminat',
             'protter': 'Protter',
             'vidre_label': 'Vidre',
             'doble_vidre': 'Doble vidre',
@@ -2404,6 +2460,7 @@ def mailto_data():
             'impressio': 'Impresión',
             'inclosa': 'Incluida',
             'encolat_label': 'Encolado',
+            'laminat_label': 'Laminado',
             'protter': 'Protter',
             'vidre_label': 'Vidrio',
             'doble_vidre': 'Doble vidrio',
@@ -2436,6 +2493,7 @@ def mailto_data():
             'impressio': 'Print',
             'inclosa': 'Included',
             'encolat_label': 'Mounting',
+            'laminat_label': 'Laminate only',
             'protter': 'Protter',
             'vidre_label': 'Glass',
             'doble_vidre': 'Double glass',

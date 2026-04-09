@@ -331,6 +331,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
               <span class="opt-text">Protter</span>
               <span class="opt-preu" id="preu-protter">—</span>
             </label>
+            <label class="opt-btn" id="opt-laminat" title="Laminat al buit sense foam">
+              <input type="radio" name="muntatge" value="laminat" onchange="onGrupChange('muntatge')">
+              <span class="opt-text">Laminat</span>
+              <span class="opt-preu" id="preu-laminat">â€”</span>
+            </label>
             <label class="opt-btn opt-none" id="opt-muntatge-cap">
               <input type="radio" name="muntatge" value="" checked onchange="onGrupChange('muntatge')">
               <span class="opt-text">Cap</span>
@@ -712,17 +717,17 @@ var LIM_MSG = {
 var empresa_nom = 'Reus Revela', empresa_adreca = '', empresa_tel = '';
 
 var valToId = {
-  encolat:'encolat', protter:'protter',
+  encolat:'encolat', protter:'protter', laminat:'laminat',
   vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar-vidre',
   passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'
 };
 var allKeys = {
-  muntatge:  ['encolat','protter','muntatge-cap'],
+  muntatge:  ['encolat','protter','laminat','muntatge-cap'],
   proteccio: ['vidre','doble_vidre','mirall','conservar-vidre','proteccio-cap'],
   interior:  ['passpartu','doble_pas','proeco','interior-cap']
 };
 var _tipusGrupMap = {
-  muntatge:  {encolat:'encolat', protter:'protter'},
+  muntatge:  {encolat:'encolat', protter:'protter', laminat:'laminat'},
   proteccio: {vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar'},
   interior:  {passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'}
 };
@@ -1047,7 +1052,7 @@ function resetMolduraFilters(){
 
 // ── Preus als botons ──────────────────────────────────────────────────────
 function updateBtnPreus(){
-  ['encolat','protter','vidre','doble_vidre','mirall','passpartu','doble_pas','proeco'].forEach(function(k){
+  ['encolat','protter','laminat','vidre','doble_vidre','mirall','passpartu','doble_pas','proeco'].forEach(function(k){
     var el = document.getElementById('preu-'+k); if(!el) return;
     if(CLOSEST[k] && CLOSEST[k].preu) el.textContent = preuDisplay(CLOSEST[k].preu, false);
     else el.textContent = '—';
@@ -1271,6 +1276,7 @@ function applyIncompatibilities(){
   var rules = {
     encolat:           hasProeco||hasDoblVidre||hasPasspartu,
     protter:           hasProeco||hasDoblVidre||hasPasspartu||hasMarc,
+    laminat:           hasProeco||hasDoblVidre||hasPasspartu,
     vidre:             hasProeco,
     doble_vidre:       hasProeco,
     mirall:            hasProeco||hasPasspartu||hasDoblVidre,
@@ -1284,6 +1290,7 @@ function applyIncompatibilities(){
 
   if(pieceType === 'lamina'){
     rules.protter = true;
+    rules.laminat = true;
     note = 'Per a làmina treballem sense impressió i sense Protter.';
   }
   if(pieceType === 'puzzle'){
@@ -1296,11 +1303,13 @@ function applyIncompatibilities(){
     if(puzzleSupport === 'sobre_base'){
       rules.encolat = true;
       rules.proeco = true;
+      rules.laminat = false;
       forcedSelections.proteccio = 'vidre';
-      note = 'Si el puzzle ja ve sobre base, treballem amb marc i vidre. El laminat sol el podem activar quan ens passis la tarifa.';
+      note = 'Si el puzzle ja ve sobre base, pots treballar-lo amb marc i vidre o bé amb laminat sol sense foam.';
     } else {
       rules.encolat = true;
       rules.proeco = false;
+      rules.laminat = true;
       rules['interior-cap'] = true;
       forcedSelections.interior = 'proeco';
       note = 'Si el puzzle no porta base, cal afegir un suport tipus ProEco abans d’emmarcar-lo.';
@@ -1309,6 +1318,7 @@ function applyIncompatibilities(){
   if(pieceType === 'pintura_sense_bastidor'){
     rules.encolat = true;
     rules.protter = true;
+    rules.laminat = true;
     rules.doble_vidre = true;
     rules.mirall = true;
     rules['conservar-vidre'] = true;
@@ -1322,6 +1332,7 @@ function applyIncompatibilities(){
   if(pieceType === 'pintura_amb_bastidor'){
     rules.encolat = true;
     rules.protter = true;
+    rules.laminat = true;
     rules.doble_vidre = true;
     rules.mirall = true;
     rules['conservar-vidre'] = true;
@@ -1359,6 +1370,7 @@ function applyIncompatibilities(){
   });
 
   if(pieceType === 'fotografia'){
+    rules.laminat = true;
     if(photoOrigin === 'laboratori'){
       if(canPrintSize(fw, fh)){
         setPrintState(true, 'locked', 'La impressió queda inclosa automàticament perquè la fa el laboratori.');
@@ -1845,7 +1857,7 @@ function netejar(){
   document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
     var cap=document.getElementById('opt-'+r.name+'-cap'); if(cap) cap.classList.add('selected');
   });
-  ['encolat','protter','vidre','doble_vidre','mirall','conservar-vidre','passpartu','doble_pas','proeco'].forEach(function(k){
+  ['encolat','protter','laminat','vidre','doble_vidre','mirall','conservar-vidre','passpartu','doble_pas','proeco'].forEach(function(k){
     var el=document.getElementById('opt-'+k); if(el) el.classList.remove('disabled');
   });
   document.getElementById('chk-impressio').checked=false;
@@ -1890,7 +1902,7 @@ function buildWAtext(){
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked') ||{}).value||'';
   var chkImp    = document.getElementById('chk-impressio').checked;
-  var nomMuntatge  = {encolat:'Encolat',protter:'Protter'}[muntatge]||'';
+  var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var num = window._numPressupost || '';
@@ -1939,7 +1951,7 @@ function buildWAtext_intern(){
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked') ||{}).value||'';
   var chkImp    = document.getElementById('chk-impressio').checked;
-  var nomMuntatge  = {encolat:'Encolat',protter:'Protter'}[muntatge]||'';
+  var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
 
