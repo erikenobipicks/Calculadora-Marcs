@@ -70,10 +70,18 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .ss input{cursor:pointer}
 .ss-list{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.1);margin-top:2px}
 .ss-list.open{display:block}
-.ss-item{padding:8px 12px;font-size:13px;cursor:pointer;color:var(--text);transition:background .1s}
+.ss-item{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:center;padding:8px 10px;font-size:13px;cursor:pointer;color:var(--text);transition:background .1s}
 .ss-item:hover,.ss-item.active{background:var(--green-l);color:var(--green)}
 .ss-item.empty{color:var(--hint);font-style:italic;cursor:default}
 .ss-item:hover.empty{background:transparent;color:var(--hint)}
+.ss-thumb{width:44px;height:44px;border-radius:8px;border:1px solid var(--border);background:#f6f3ed;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.ss-thumb img{width:100%;height:100%;object-fit:cover}
+.ss-thumb-placeholder{font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--hint);text-transform:uppercase}
+.ss-main{min-width:0;display:grid;gap:2px}
+.ss-ref{font-size:12px;font-weight:700;color:var(--text)}
+.ss-desc{font-size:11px;line-height:1.35;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ss-item:hover .ss-ref,.ss-item.active .ss-ref{color:var(--green)}
+.ss-item:hover .ss-desc,.ss-item.active .ss-desc{color:#356b52}
 .chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;min-height:22px}
 .chip{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
 .chip-g{background:var(--green-l);color:var(--green)}
@@ -1049,6 +1057,41 @@ function getFilteredMolduraRefs(queryText){
   });
 }
 
+function getFilteredMolduraItems(queryText){
+  var q = normalizeMolduraText(queryText);
+  return MOLDURA_OPTIONS.filter(function(item){
+    var ref = item.referencia || '';
+    var desc = item.descripcio || '';
+    return matchesMolduraColor(desc, MOLDURA_FILTERS.color)
+      && matchesMolduraGruix(item.gruix, MOLDURA_FILTERS.gruix)
+      && (!q || normalizeMolduraText(ref).includes(q) || normalizeMolduraText(desc).includes(q));
+  });
+}
+
+function escapeHtml(value){
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderMolduraDropdownItem(type, item){
+  var ref = item.referencia || '';
+  var desc = item.descripcio || 'Sense descripcio';
+  var thumb = item.foto
+    ? '<div class="ss-thumb"><img src="' + escapeHtml(item.foto) + '" alt="' + escapeHtml(ref) + '"></div>'
+    : '<div class="ss-thumb"><span class="ss-thumb-placeholder">Marc</span></div>';
+  return '<div class="ss-item" onmousedown="selectRef(\'' + type + '\',\'' + ref.replace(/'/g, "\\'") + '\')">' +
+    thumb +
+    '<div class="ss-main">' +
+      '<div class="ss-ref">' + escapeHtml(ref) + '</div>' +
+      '<div class="ss-desc">' + escapeHtml(desc) + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
 function updateMolduraFilterMeta(){
   var refs = getFilteredMolduraRefs('');
   var colorSel = document.getElementById('filter-color');
@@ -1099,10 +1142,10 @@ function filterSS(t){
     var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
     var q  = document.getElementById(id).value.trim();
     var list = document.getElementById('list-'+t);
-    var filtered = getFilteredMolduraRefs(q).slice(0,40);
+    var filtered = getFilteredMolduraItems(q).slice(0,40);
     list.innerHTML = filtered.length===0
       ? '<div class="ss-item empty">Cap resultat</div>'
-      : filtered.map(function(r){return '<div class="ss-item" onmousedown="selectRef(\''+t+'\',\''+r+'\')">'+r+'</div>';}).join('');
+      : filtered.map(function(item){ return renderMolduraDropdownItem(t, item); }).join('');
     list.classList.add('open');
   }, 150);
 }

@@ -970,10 +970,10 @@ def refs():
 @app.route('/api/moldura-options')
 @login_required
 def moldura_options():
-    rows = query("""SELECT referencia, gruix, descripcio
+    rows = query("""SELECT referencia, gruix, descripcio, foto
                     FROM moldures
                     ORDER BY referencia""")
-    return jsonify([dict(r) for r in rows])
+    return jsonify(_serialize_moldures(rows))
 
 @app.route('/api/marge')
 @login_required
