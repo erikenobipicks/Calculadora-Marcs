@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='private_whatsapp.css') }}">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--border2:#D4D0C8;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:#1A6B45;--green-l:#E8F3EE;--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--border2:#D4D0C8;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
 nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:100}
@@ -197,13 +197,11 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
   <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
-    <a href="/">Portal</a>
-    <a href="/calculadora">Calculadora</a>
+    <a href="/">Inici</a>
     <a href="/historial">Historial</a>
     <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
-    <a href="/ajuda">Ajuda</a>
-    {% if session.is_admin %}<a href="/admin">Admin</a><a href="/admin/cataleg">Cat&agrave;leg admin</a>{% endif %}
+    {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
     <a href="/logout">Sortir</a>
   </div>
 </nav>
@@ -788,6 +786,38 @@ function getPieceTypeLabel(){
   var value = getPieceTypeValue();
   return labels[value] || value;
 }
+function getPieceDetailText(){
+  var pieceType = getPieceTypeValue();
+  var detail = getPieceDetailValue();
+  var maps = {
+    ca: {
+      fotografia: {client: 'La porta el client', laboratori: 'La imprimeix el laboratori'},
+      puzzle: {sobre_base: 'Ja va sobre una base', sense_base: 'Cal afegir suport abans d’emmarcar-lo'},
+      pintura_sense_bastidor: {'': 'Es resol amb encolat i es pot protegir amb vidre'},
+      pintura_amb_bastidor: {'': 'Pot portar vidre si es vol protegir la peça'}
+    },
+    es: {
+      fotografia: {client: 'La trae el cliente', laboratori: 'La imprime el laboratorio'},
+      puzzle: {sobre_base: 'Ya va sobre una base', sense_base: 'Hay que añadir soporte antes de enmarcarlo'},
+      pintura_sense_bastidor: {'': 'Se trabaja con encolado y puede protegerse con vidrio'},
+      pintura_amb_bastidor: {'': 'Puede llevar vidrio si se quiere proteger la pieza'}
+    },
+    en: {
+      fotografia: {client: 'Provided by the client', laboratori: 'Printed by the lab'},
+      puzzle: {sobre_base: 'Already mounted on a backing board', sense_base: 'A backing support must be added before framing'},
+      pintura_sense_bastidor: {'': 'Mounted with adhesive and optionally protected with glass'},
+      pintura_amb_bastidor: {'': 'Glass can be added if the piece needs protection'}
+    }
+  };
+  var langMap = maps[_lang] || maps.ca;
+  var typeMap = langMap[pieceType] || {};
+  return typeMap[detail] || typeMap[''] || '';
+}
+function getPieceDisplayLabel(){
+  var label = getPieceTypeLabel();
+  var detail = getPieceDetailText();
+  return detail ? (label + ' · ' + detail) : label;
+}
 function getPhotoOriginValue(){
   var el = document.getElementById('photo-origin');
   return el ? (el.value || 'client') : 'client';
@@ -1345,6 +1375,7 @@ function applyIncompatibilities(){
     encolat:           hasProeco||hasDoblVidre||hasPasspartu,
     protter:           hasProeco||hasDoblVidre||hasPasspartu||hasMarc,
     laminat:           hasProeco||hasDoblVidre||hasPasspartu,
+    'muntatge-cap':    false,
     vidre:             hasProeco,
     doble_vidre:       hasProeco,
     mirall:            hasProeco||hasPasspartu||hasDoblVidre,
@@ -1384,7 +1415,7 @@ function applyIncompatibilities(){
     }
   }
   if(pieceType === 'pintura_sense_bastidor'){
-    rules.encolat = true;
+    rules.encolat = false;
     rules.protter = true;
     rules.laminat = true;
     rules.doble_vidre = true;
@@ -1392,10 +1423,12 @@ function applyIncompatibilities(){
     rules['conservar-vidre'] = true;
     rules.passpartu = true;
     rules.doble_pas = true;
-    rules.proeco = false;
-    rules['interior-cap'] = true;
-    forcedSelections.interior = 'proeco';
-    note = 'Una pintura sense bastidor necessita suport. La calculadora força ProEco per no deixar-la sense base.';
+    rules.proeco = true;
+    rules['muntatge-cap'] = true;
+    rules['interior-cap'] = false;
+    forcedSelections.muntatge = 'encolat';
+    forcedSelections.interior = '';
+    note = 'Una pintura sense bastidor es resol amb encolat. Si cal protegir-la, pots afegir vidre.';
   }
   if(pieceType === 'pintura_amb_bastidor'){
     rules.encolat = true;
@@ -1408,7 +1441,7 @@ function applyIncompatibilities(){
     rules.doble_pas = true;
     rules.proeco = true;
     rules['proteccio-cap'] = false;
-    note = 'Amb bastidor, la peça es resol normalment amb marc i, si cal, vidre.';
+    note = 'Amb bastidor, la peça pot portar marc i també vidre si es vol protegir.';
   }
 
   Object.keys(rules).forEach(function(k){
@@ -1975,7 +2008,7 @@ function buildWAtext(){
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var num = window._numPressupost || '';
   var t = T[_lang] || T.ca;
-  var pieceLabel = getPieceTypeLabel();
+  var pieceLabel = getPieceDisplayLabel();
   var midaFinal = getFinalSizeText();
   var midaFoto = getPhotoSizeText();
   var lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
@@ -2027,7 +2060,7 @@ function buildWAtext_intern(){
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
 
   var t = T[_lang] || T.ca;
-  var pieceLabel = getPieceTypeLabel();
+  var pieceLabel = getPieceDisplayLabel();
   var midaFinal = getFinalSizeText();
   var midaFoto = getPhotoSizeText();
   var lines = [

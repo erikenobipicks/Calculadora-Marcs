@@ -430,13 +430,13 @@ nav{
   <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-right">
     <span class="nav-user">{{ session.nom }}</span>
-    <a href="/">Portal</a>
+    <a href="/">Inici</a>
     <a href="/calculadora">Calculadora</a>
     <a href="/historial">Historial</a>
+    <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
     {% if session.is_admin %}
     <a href="/admin">Admin</a>
-    <a href="/admin/cataleg">Cat&agrave;leg</a>
     {% endif %}
     <a href="/logout">Sortir</a>
   </div>

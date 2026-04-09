@@ -62,6 +62,35 @@ COMMERCIAL_MARGIN_DEFAULTS = {
     'albums': 60.0,
 }
 
+DEFAULT_BRAND_COLOR = '#1A6B45'
+
+
+def _normalize_hex_color(value, default=DEFAULT_BRAND_COLOR):
+    text = str(value or '').strip()
+    if not text:
+        return default
+    if not text.startswith('#'):
+        text = '#' + text
+    if len(text) != 7:
+        return default
+    try:
+        int(text[1:], 16)
+    except ValueError:
+        return default
+    return text.upper()
+
+
+def _mix_with_white(hex_color, ratio=0.88):
+    base = _normalize_hex_color(hex_color)
+    ratio = min(max(float(ratio), 0.0), 1.0)
+    r = int(base[1:3], 16)
+    g = int(base[3:5], 16)
+    b = int(base[5:7], 16)
+    nr = int(r + (255 - r) * ratio)
+    ng = int(g + (255 - g) * ratio)
+    nb = int(b + (255 - b) * ratio)
+    return f'#{nr:02X}{ng:02X}{nb:02X}'
+
 LAMINATE_ONLY_PRICES = {
     '20x30': 7.35,
     '24x30': 7.35,
@@ -916,11 +945,15 @@ def calculadora():
             return redirect(url_for('setup'))
     except:
         pass
+    user = query('SELECT brand_color FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
                            color_filters=MOLDURA_COLOR_FILTERS,
-                           gruix_filters=MOLDURA_GRUIX_FILTERS)
+                           gruix_filters=MOLDURA_GRUIX_FILTERS,
+                           brand_color=brand_color,
+                           brand_color_light=_mix_with_white(brand_color))
 
 @app.route('/api/lookup')
 @login_required
@@ -978,10 +1011,11 @@ def moldura_options():
 @app.route('/api/marge')
 @login_required
 def get_marge():
-    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
+    brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
     margins = _load_user_commercial_margins(u)
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
@@ -991,6 +1025,7 @@ def get_marge():
         'marge': marge,
         'marge_impressio': marge_imp,
         'margins': margins,
+        'brand_color': brand_color,
         'empresa_nom': nom_emp,
         'empresa_adreca': cfg.get('empresa_adreca',''),
         'empresa_tel': cfg.get('empresa_tel',''),
@@ -1054,14 +1089,15 @@ def desar_marge():
     m = float(d.get('marge', 60))
     mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
+    brand_color = _normalize_hex_color(d.get('brand_color', DEFAULT_BRAND_COLOR))
     margins = _normalize_commercial_margins(
         d.get('margins') if isinstance(d.get('margins'), dict) else d,
         frame_margin=m,
         print_margin=mi,
     )
     execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, margins_json=? WHERE id=?',
-        [margins['frames'], margins['prints'], ne, json.dumps(margins, ensure_ascii=True), session['user_id']]
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, margins_json=?, brand_color=? WHERE id=?',
+        [margins['frames'], margins['prints'], ne, json.dumps(margins, ensure_ascii=True), brand_color, session['user_id']]
     )
     if ne: session['empresa_nom'] = ne
     _sync_private_commercial_settings(margins['frames'], margins['prints'], margins=margins)
@@ -1920,16 +1956,18 @@ def crear_pdf(c):
 
     # ── Capçalera ────────────────────────────────────────────────────────
     # Get empresa info for this user
-    u_data = query('SELECT nom_empresa FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
+    u_data = query('SELECT nom_empresa, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
     nom_empresa = ''
     if u_data and _row_get(u_data, 'nom_empresa', ''):
         nom_empresa = _row_get(u_data, 'nom_empresa', '')
+    green_hex = _normalize_hex_color(_row_get(u_data, 'brand_color', DEFAULT_BRAND_COLOR))
     if not nom_empresa:
         _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
         nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
     r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
     adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
+    GREEN = colors.HexColor(green_hex)
     lang = (c.get('lang') or 'ca').lower()
     t = PDF_T.get(lang, PDF_T['ca'])
 
@@ -2170,6 +2208,7 @@ def ajustos():
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
                            margin_entries=[dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry for entry in margin_entries if entry['key'] not in ('foam', 'laminate_foam')],
                            nom_empresa=nom_emp,
+                           brand_color=brand_color,
                            empresa_adreca=cfg.get('empresa_adreca',''),
                            empresa_tel=cfg.get('empresa_tel',''))
 
@@ -2235,6 +2274,40 @@ def _display_piece_type(c, t):
         'puzzle': t['piece_puzzle'],
     }
     return labels.get(value, value.replace('_', ' ').title())
+
+
+def _display_piece_detail(c, lang='ca'):
+    lang = (lang or 'ca').lower()
+    piece_type = (c.get('tipus_peca') or '').strip().lower()
+    detail = (c.get('tipus_peca_detall') or '').strip().lower()
+    labels = {
+        'ca': {
+            ('fotografia', 'client'): 'La porta el client',
+            ('fotografia', 'laboratori'): 'La imprimeix el laboratori',
+            ('puzzle', 'sobre_base'): 'Ja va sobre una base',
+            ('puzzle', 'sense_base'): 'Cal afegir suport abans d’emmarcar-lo',
+            ('pintura_sense_bastidor', ''): 'Es resol amb encolat i es pot protegir amb vidre',
+            ('pintura_amb_bastidor', ''): 'Pot portar vidre si es vol protegir la peça',
+        },
+        'es': {
+            ('fotografia', 'client'): 'La trae el cliente',
+            ('fotografia', 'laboratori'): 'La imprime el laboratorio',
+            ('puzzle', 'sobre_base'): 'Ya va sobre una base',
+            ('puzzle', 'sense_base'): 'Hay que añadir soporte antes de enmarcarlo',
+            ('pintura_sense_bastidor', ''): 'Se trabaja con encolado y puede protegerse con vidrio',
+            ('pintura_amb_bastidor', ''): 'Puede llevar vidrio si se quiere proteger la pieza',
+        },
+        'en': {
+            ('fotografia', 'client'): 'Provided by the client',
+            ('fotografia', 'laboratori'): 'Printed by the lab',
+            ('puzzle', 'sobre_base'): 'Already mounted on a backing board',
+            ('puzzle', 'sense_base'): 'A backing support must be added before framing',
+            ('pintura_sense_bastidor', ''): 'Mounted with adhesive and optionally protected with glass',
+            ('pintura_amb_bastidor', ''): 'Glass can be added if the piece needs protection',
+        },
+    }
+    current = labels.get(lang, labels['ca'])
+    return current.get((piece_type, detail)) or current.get((piece_type, '')) or ''
 
 def _display_muntatge(c, t):
     ref = (c.get('encolat') or '').strip().upper()
@@ -2518,6 +2591,9 @@ def mailto_data():
     final_size = _final_size_text(c, sep=' x ', with_unit=True)
     photo_size = _photo_size_text(c, sep=' x ', with_unit=True)
     piece_type = _display_piece_type(c, tt)
+    piece_detail = _display_piece_detail(c, lang)
+    if piece_type and piece_detail:
+        piece_type = f"{piece_type} · {piece_detail}"
     proteccio_label = _display_proteccio(c, tt)
     interior_label = _display_interior(c, tt)
     muntatge_label = _display_muntatge(c, tt)
@@ -2587,6 +2663,9 @@ def enviar_email():
     final_size = _final_size_text(c, sep=' x ', with_unit=True) or '-'
     photo_size = _photo_size_text(c, sep=' x ', with_unit=True) or '-'
     piece_type = _display_piece_type(c, pdf_lang)
+    piece_detail = _display_piece_detail(c, (c.get('lang') or 'ca').lower())
+    if piece_type and piece_detail:
+        piece_type = f"{piece_type} · {piece_detail}"
     proteccio_label = _display_proteccio(c, pdf_lang) or '-'
     interior_label = _display_interior(c, pdf_lang) or '-'
     muntatge_label = _display_muntatge(c, pdf_lang) or '-'
@@ -2644,6 +2723,7 @@ def init_db():
                     password TEXT NOT NULL, nom TEXT NOT NULL,
                     is_admin INTEGER DEFAULT 0, marge REAL DEFAULT 60,
                     marge_impressio REAL DEFAULT 100, nom_empresa TEXT DEFAULT '',
+                    brand_color TEXT DEFAULT '#1A6B45',
                     margins_json TEXT DEFAULT '',
                     access_status TEXT DEFAULT 'active',
                     profile_type TEXT DEFAULT 'professional',
@@ -2694,6 +2774,7 @@ def init_db():
                 ('comandes','sessio_id','TEXT'),
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
+                ('usuaris','brand_color',"TEXT DEFAULT '#1A6B45'"),
                 ('usuaris','margins_json',"TEXT DEFAULT ''"),
                 ('usuaris','setup_done','INTEGER DEFAULT 0'),
                 ('usuaris','logo_b64','TEXT'),
@@ -2739,6 +2820,7 @@ def init_db():
                     marge REAL DEFAULT 60,
                     marge_impressio REAL DEFAULT 100,
                     nom_empresa TEXT DEFAULT '',
+                    brand_color TEXT DEFAULT '#1A6B45',
                     margins_json TEXT DEFAULT '',
                     access_status TEXT DEFAULT 'active',
                     profile_type TEXT DEFAULT 'professional',
@@ -2787,6 +2869,7 @@ def init_db():
             for sql in [
                 "ALTER TABLE usuaris ADD COLUMN setup_done INTEGER DEFAULT 0",
                 "ALTER TABLE usuaris ADD COLUMN logo_b64 TEXT",
+                "ALTER TABLE usuaris ADD COLUMN brand_color TEXT DEFAULT '#1A6B45'",
                 "ALTER TABLE usuaris ADD COLUMN margins_json TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN marge_impressio_setup INTEGER DEFAULT 0",
                 "ALTER TABLE usuaris ADD COLUMN access_status TEXT DEFAULT 'active'",
