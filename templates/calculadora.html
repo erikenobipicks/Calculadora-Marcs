@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="ca">
 <head>
+<meta name="theme-color" content="#1C1B18">
+<link rel="shortcut icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
+<link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
+<meta property="og:image" content="https://reusrevela.cat/static/img/logo-reusrevela.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reus Revela — Calculadora de marcs</title>
@@ -57,6 +62,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .chip-n{background:var(--bg);color:var(--hint)}
 .chip-r{background:var(--red-l);color:var(--red)}
 .desc{font-size:11px;color:var(--hint);margin-top:3px;font-style:italic}
+.piece-context-box{margin-top:.85rem;padding:.9rem 1rem;border:1px solid var(--border);border-radius:9px;background:#fcfbf8;display:grid;gap:.7rem}
+.piece-context-note{font-size:12px;color:var(--muted);line-height:1.6;padding:.7rem .85rem;border-radius:8px;background:#f4efe6;border:1px solid #e6d8c0}
 .foto-box{margin-top:.85rem;border:1px dashed #D4D0C8;border-radius:7px;background:var(--bg);height:130px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in}
 .foto-box img{max-width:100%;max-height:100%;object-fit:contain}
 .foto-box .no-foto{font-size:12px;color:var(--hint);text-align:center;line-height:1.6}
@@ -84,6 +91,8 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
 .opt-preu{font-size:11px;font-weight:600;color:var(--green);background:var(--green-l);padding:1px 6px;border-radius:4px;margin-left:2px}
 .opt-btn.selected .opt-preu{background:rgba(26,107,69,.15)}
 .opt-btn.disabled{opacity:.35;pointer-events:none}
+.opt-btn.locked{cursor:not-allowed;pointer-events:none}
+.opt-btn.locked .opt-text{opacity:.82}
 
 /* DARK CARD (marge) */
 .dcard{background:#1C1B18;border-color:#333;color:#fff;margin-bottom:1.1rem}
@@ -282,8 +291,23 @@ nav{background:#1C1B18;height:54px;display:flex;align-items:center;justify-conte
           <div class="f"><label>Amplada de la peça (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
           <div class="f"><label>Alçada de la peça (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
         </div>
-
-
+        <div id="piece-context-box" class="piece-context-box" style="display:none">
+          <div class="f" id="photo-origin-row" style="display:none;margin-bottom:0">
+            <label>Fotografia</label>
+            <select id="photo-origin" onchange="onPieceContextChange()">
+              <option value="client">La porta el client</option>
+              <option value="laboratori">La imprimeix el laboratori</option>
+            </select>
+          </div>
+          <div class="f" id="puzzle-support-row" style="display:none;margin-bottom:0">
+            <label>Puzzle</label>
+            <select id="puzzle-support" onchange="onPieceContextChange()">
+              <option value="sense_base">Cal base o suport</option>
+              <option value="sobre_base">Ja va encolat sobre una base</option>
+            </select>
+          </div>
+          <div id="piece-context-note" class="piece-context-note" style="display:none"></div>
+        </div>
         <div id="mida-total-simple" style="margin-top:.5rem;font-size:12px;color:var(--hint)"></div>
       </div>
     </div>
@@ -726,6 +750,43 @@ function getPieceTypeLabel(){
   var value = getPieceTypeValue();
   return labels[value] || value;
 }
+function getPhotoOriginValue(){
+  var el = document.getElementById('photo-origin');
+  return el ? (el.value || 'client') : 'client';
+}
+function getPuzzleSupportValue(){
+  var el = document.getElementById('puzzle-support');
+  return el ? (el.value || 'sense_base') : 'sense_base';
+}
+function getPieceDetailValue(){
+  var pieceType = getPieceTypeValue();
+  if(pieceType === 'fotografia') return getPhotoOriginValue();
+  if(pieceType === 'puzzle') return getPuzzleSupportValue();
+  return '';
+}
+function setPieceContextNote(text){
+  var note = document.getElementById('piece-context-note');
+  if(!note) return;
+  if(text){
+    note.textContent = text;
+    note.style.display = 'block';
+  } else {
+    note.textContent = '';
+    note.style.display = 'none';
+  }
+}
+function updatePieceContextVisibility(){
+  var pieceType = getPieceTypeValue();
+  var box = document.getElementById('piece-context-box');
+  var photoRow = document.getElementById('photo-origin-row');
+  var puzzleRow = document.getElementById('puzzle-support-row');
+  if(!box || !photoRow || !puzzleRow) return;
+  var showPhoto = pieceType === 'fotografia';
+  var showPuzzle = pieceType === 'puzzle';
+  photoRow.style.display = showPhoto ? 'block' : 'none';
+  puzzleRow.style.display = showPuzzle ? 'block' : 'none';
+  box.style.display = (showPhoto || showPuzzle) ? 'grid' : 'none';
+}
 function getFinalSizeText(){
   var w = parseFloat(document.getElementById('marc-w').value);
   var h = parseFloat(document.getElementById('marc-h').value);
@@ -743,6 +804,39 @@ function showAlert(msg,t){
   a.className='alert alert-'+t; a.textContent=msg;
   a.style.display='block';
   setTimeout(function(){a.style.display='none';},5000);
+}
+function syncSelectedGroupVisual(grup, val){
+  allKeys[grup].forEach(function(k){
+    var el=document.getElementById('opt-'+k); if(el) el.classList.remove('selected');
+  });
+  var targetId = val===''?('opt-'+grup+'-cap'):(val==='conservar'?'opt-conservar-vidre':('opt-'+(valToId[val]||val)));
+  var targetEl=document.getElementById(targetId); if(targetEl) targetEl.classList.add('selected');
+}
+function setGroupValue(grup, val){
+  var desired = document.querySelector('input[name="'+grup+'"][value="'+val+'"]') || document.querySelector('input[name="'+grup+'"][value=""]');
+  if(!desired) return;
+  desired.checked = true;
+  syncSelectedGroupVisual(grup, desired.value || '');
+  updateGrupPreu(grup, desired.value || '');
+}
+function setPrintState(checked, mode, title){
+  var printBtn = document.getElementById('opt-impressio');
+  var printChk = document.getElementById('chk-impressio');
+  if(!printBtn || !printChk) return;
+  var isDisabled = mode === 'disabled';
+  var isLocked = mode === 'locked';
+  printBtn.classList.toggle('disabled', isDisabled);
+  printBtn.classList.toggle('locked', isLocked && !isDisabled);
+  printBtn.dataset.locked = isLocked ? '1' : '0';
+  printBtn.title = title || '';
+  printChk.checked = !!checked;
+  printBtn.classList.toggle('selected', !!checked);
+  if(printChk.checked && !CLOSEST.impressio){
+    _lastFetchKey='';
+    fetchClosest();
+  } else {
+    updateImpressioPreu();
+  }
 }
 function canPrintSize(fw, fh){
   if(fw<=0 || fh<=0) return true;
@@ -1159,12 +1253,20 @@ function setProtterDisabled(dis){
 
 function applyIncompatibilities(){
   var pieceType = getPieceTypeValue();
+  var photoOrigin = getPhotoOriginValue();
+  var puzzleSupport = getPuzzleSupportValue();
   var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var hasPasspartu = interior==='passpartu'||interior==='doble_pas';
   var hasProeco    = interior==='proeco';
   var hasDoblVidre = proteccio==='doble_vidre';
   var hasMarc      = document.getElementById('marc_principal').value.trim()!=='';
+  var fw = parseFloat(document.getElementById('amplada').value)||0;
+  var fh = parseFloat(document.getElementById('alcada').value)||0;
+  var note = '';
+  var forcedSelections = {};
+
+  updatePieceContextVisibility();
 
   var rules = {
     encolat:           hasProeco||hasDoblVidre||hasPasspartu,
@@ -1177,32 +1279,49 @@ function applyIncompatibilities(){
     doble_pas:         hasProeco||hasDoblVidre,
     proeco:            hasPasspartu||hasDoblVidre,
     'proteccio-cap':   hasPasspartu,
+    'interior-cap':    false,
   };
 
   if(pieceType === 'lamina'){
     rules.protter = true;
+    note = 'Per a làmina treballem sense impressió i sense Protter.';
   }
   if(pieceType === 'puzzle'){
     rules.protter = true;
     rules.passpartu = true;
     rules.doble_pas = true;
-    rules.proeco = true;
+    rules.doble_vidre = true;
+    rules.mirall = true;
+    rules['conservar-vidre'] = true;
+    if(puzzleSupport === 'sobre_base'){
+      rules.encolat = true;
+      rules.proeco = true;
+      forcedSelections.proteccio = 'vidre';
+      note = 'Si el puzzle ja ve sobre base, treballem amb marc i vidre. El laminat sol el podem activar quan ens passis la tarifa.';
+    } else {
+      rules.encolat = true;
+      rules.proeco = false;
+      rules['interior-cap'] = true;
+      forcedSelections.interior = 'proeco';
+      note = 'Si el puzzle no porta base, cal afegir un suport tipus ProEco abans d’emmarcar-lo.';
+    }
   }
   if(pieceType === 'pintura_sense_bastidor'){
     rules.encolat = true;
     rules.protter = true;
-    rules.vidre = true;
     rules.doble_vidre = true;
     rules.mirall = true;
     rules['conservar-vidre'] = true;
     rules.passpartu = true;
     rules.doble_pas = true;
-    rules.proeco = true;
+    rules.proeco = false;
+    rules['interior-cap'] = true;
+    forcedSelections.interior = 'proeco';
+    note = 'Una pintura sense bastidor necessita suport. La calculadora força ProEco per no deixar-la sense base.';
   }
   if(pieceType === 'pintura_amb_bastidor'){
     rules.encolat = true;
     rules.protter = true;
-    rules.vidre = true;
     rules.doble_vidre = true;
     rules.mirall = true;
     rules['conservar-vidre'] = true;
@@ -1210,6 +1329,7 @@ function applyIncompatibilities(){
     rules.doble_pas = true;
     rules.proeco = true;
     rules['proteccio-cap'] = false;
+    note = 'Amb bastidor, la peça es resol normalment amb marc i, si cal, vidre.';
   }
 
   Object.keys(rules).forEach(function(k){
@@ -1220,43 +1340,63 @@ function applyIncompatibilities(){
       if(r&&r.checked){
         var grp=r.name;
         var empty=document.querySelector('input[name="'+grp+'"][value=""]');
-        if(empty){ empty.checked=true; onGrupChange(grp); }
+        if(empty){
+          empty.checked=true;
+          syncSelectedGroupVisual(grp, '');
+          updateGrupPreu(grp,'');
+        }
       }
     }
   });
 
-  var disablePrint = pieceType !== 'fotografia';
-  var printBtn = document.getElementById('opt-impressio');
-  var printChk = document.getElementById('chk-impressio');
-  if(printBtn){
-    printBtn.classList.toggle('disabled', disablePrint);
-    printBtn.title = disablePrint ? 'Disponible només quan la peça a emmarcar és una fotografia' : '';
-  }
-  if(disablePrint && printChk && printChk.checked){
-    printChk.checked = false;
-    printBtn.classList.remove('selected');
-    updateImpressioPreu();
+  Object.keys(forcedSelections).forEach(function(grup){
+    var value = forcedSelections[grup];
+    var optionId = value==='' ? ('opt-'+grup+'-cap') : ('opt-'+(valToId[value]||value));
+    var optionEl = document.getElementById(optionId);
+    if(optionEl && !optionEl.classList.contains('disabled')){
+      setGroupValue(grup, value);
+    }
+  });
+
+  if(pieceType === 'fotografia'){
+    if(photoOrigin === 'laboratori'){
+      if(canPrintSize(fw, fh)){
+        setPrintState(true, 'locked', 'La impressió queda inclosa automàticament perquè la fa el laboratori.');
+        note = 'Aquesta fotografia la imprimeix el laboratori i la impressió s’inclou automàticament al pressupost.';
+      } else {
+        setPrintState(false, 'locked', 'La mida supera l’ample màxim imprimible de 111 cm.');
+        note = 'Has marcat impressió de laboratori, però aquesta mida supera l’ample màxim imprimible de 111 cm.';
+      }
+    } else {
+      setPrintState(false, 'locked', 'Canvia aquesta opció a \"La imprimeix el laboratori\" si vols incloure la impressió.');
+      note = 'Si el client ja porta la fotografia, la impressió queda fora del pressupost.';
+    }
+  } else {
+    setPrintState(false, 'disabled', 'La impressió només està disponible quan la peça a emmarcar és una fotografia.');
   }
 
-  // Force vidre when passpartú
+  interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
+  proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  hasPasspartu = interior==='passpartu'||interior==='doble_pas';
+
   if(hasPasspartu){
     var pSel=document.querySelector('input[name="proteccio"]:checked');
     if(!pSel||!pSel.value||pSel.value===''||pSel.value==='mirall'||pSel.value==='conservar'){
-      var vr=document.querySelector('input[name="proteccio"][value="vidre"]');
-      if(vr){
-        vr.checked=true;
-        allKeys['proteccio'].forEach(function(k){var el=document.getElementById('opt-'+k);if(el)el.classList.remove('selected');});
-        var elv=document.getElementById('opt-vidre'); if(elv) elv.classList.add('selected');
-        updateGrupPreu('proteccio','vidre');
-      }
+      setGroupValue('proteccio','vidre');
     }
   }
 
   document.getElementById('bloc-passpartu').style.display=hasPasspartu?'block':'none';
   document.getElementById('vidre-obligatori').style.display=hasPasspartu?'inline':'none';
+  setPieceContextNote(note);
 }
 
 function onPieceTypeChange(){
+  applyIncompatibilities();
+  recalcMides();
+  calcular();
+}
+function onPieceContextChange(){
   applyIncompatibilities();
   recalcMides();
   calcular();
@@ -1282,7 +1422,8 @@ function onGrupChange(grup){
 
 function toggleImpressio(){
   var chk = document.getElementById('chk-impressio');
-  if(document.getElementById('opt-impressio').classList.contains('disabled')){
+  var printBtn = document.getElementById('opt-impressio');
+  if(printBtn.classList.contains('disabled') || printBtn.dataset.locked === '1'){
     showAlert('La impressió només està disponible quan la peça a emmarcar és una fotografia.', 'err');
     return;
   }
@@ -1447,6 +1588,7 @@ function guardar(){
     pre_marc:document.getElementById('pre_marc').value||'-',
     marc_principal:document.getElementById('marc_principal').value,
     tipus_peca:getPieceTypeValue(),
+    tipus_peca_detall:getPieceDetailValue(),
     amplada:parseFloat(document.getElementById('amplada').value)||0,
     alcada:parseFloat(document.getElementById('alcada').value)||0,
     final_amplada:parseFloat(document.getElementById('marc-w').value)||0,
@@ -1500,6 +1642,7 @@ function buildWebOrderPayload(){
     client_name: (document.getElementById('client_nom') || {}).value || '',
     client_phone: (document.getElementById('client_tel') || {}).value || '',
     piece_type: pieceType,
+    piece_detail: getPieceDetailValue(),
     piece_width: isNaN(photoW) ? '' : String(photoW),
     piece_height: isNaN(photoH) ? '' : String(photoH),
     final_size: (document.getElementById('mida_final') || {}).value || '',
@@ -1555,9 +1698,12 @@ function capturaEstat(){
     pre_marc:document.getElementById('pre_marc').value||'',
     marc_principal:document.getElementById('marc_principal').value||'',
     tipus_peca:getPieceTypeValue(),
+    tipus_peca_detall:getPieceDetailValue(),
     amplada:document.getElementById('amplada').value,
     alcada:document.getElementById('alcada').value,
     cm_passpartu:document.getElementById('cm-passpartu').value,
+    photo_origin:getPhotoOriginValue(),
+    puzzle_support:getPuzzleSupportValue(),
     muntatge:(document.querySelector('input[name="muntatge"]:checked')||{}).value||'',
     proteccio:(document.querySelector('input[name="proteccio"]:checked')||{}).value||'',
     interior:(document.querySelector('input[name="interior"]:checked')||{}).value||'',
@@ -1579,6 +1725,8 @@ function restauraEstat(e){
   document.getElementById('client_nom').value=e.client_nom||'';
   document.getElementById('client_tel').value=e.client_tel||'';
   document.getElementById('tipus-peca').value=e.tipus_peca||'fotografia';
+  document.getElementById('photo-origin').value=e.photo_origin||e.tipus_peca_detall||'client';
+  document.getElementById('puzzle-support').value=e.puzzle_support||e.tipus_peca_detall||'sense_base';
   document.getElementById('amplada').value=(e.amplada !== undefined && e.amplada !== null && e.amplada !== 0) ? e.amplada : '';
   document.getElementById('alcada').value=(e.alcada !== undefined && e.alcada !== null && e.alcada !== 0) ? e.alcada : '';
   document.getElementById('cm-passpartu').value=e.cm_passpartu||4;
@@ -1681,6 +1829,8 @@ function pdfComparativa(){
 function netejar(){
   ['client_nom','client_tel','pre_marc','marc_principal','observacions'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('tipus-peca').value='fotografia';
+  document.getElementById('photo-origin').value='client';
+  document.getElementById('puzzle-support').value='sense_base';
   document.getElementById('amplada').value='';
   document.getElementById('alcada').value='';
   ['descompte','entrega'].forEach(function(id){document.getElementById(id).value=0;});
@@ -1700,6 +1850,10 @@ function netejar(){
   });
   document.getElementById('chk-impressio').checked=false;
   document.getElementById('opt-impressio').classList.remove('selected');
+  document.getElementById('opt-impressio').classList.remove('disabled');
+  document.getElementById('opt-impressio').classList.remove('locked');
+  document.getElementById('opt-impressio').dataset.locked='0';
+  document.getElementById('opt-impressio').title='';
   PREUS.impressio=0;
   ['ref-muntatge','ref-proteccio','ref-interior','ref-impressio-val'].forEach(function(id){document.getElementById(id).value='';});
   ['pre','marc'].forEach(function(t){setChips(t,[]);});
@@ -1713,6 +1867,8 @@ function netejar(){
   document.getElementById('marc-w').value=0;
   document.getElementById('marc-h').value=0;
   document.getElementById('vidre-obligatori').style.display='none';
+  setPieceContextNote('');
+  applyIncompatibilities();
   calcular();
 }
 

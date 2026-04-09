@@ -1039,11 +1039,11 @@ def guardar():
         (user_id, data, client_nom, client_tel,
          pre_marc, marc_principal, amplada, alcada, copia,
          encolat, vidre, passpartout, impressio,
-         tipus_peca, final_amplada, final_alcada,
+         tipus_peca, tipus_peca_detall, final_amplada, final_alcada,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
@@ -1051,6 +1051,7 @@ def guardar():
         d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
         d.get('impressio',''),
         d.get('tipus_peca','fotografia'),
+        d.get('tipus_peca_detall',''),
         d.get('final_amplada',0), d.get('final_alcada',0),
         d.get('marge',60), d.get('descompte',0), d.get('quantitat',1),
         d.get('preu_net',0), d.get('preu_final',0),
@@ -2611,6 +2612,7 @@ def init_db():
                     marc_principal TEXT, amplada REAL, alcada REAL, copia REAL,
                     encolat TEXT, vidre TEXT, passpartout TEXT, impressio TEXT,
                     tipus_peca TEXT DEFAULT '',
+                    tipus_peca_detall TEXT DEFAULT '',
                     final_amplada REAL DEFAULT 0, final_alcada REAL DEFAULT 0,
                     marge REAL, descompte REAL, quantitat REAL,
                     preu_net REAL, preu_final REAL, entrega REAL, pendent REAL,
@@ -2628,6 +2630,7 @@ def init_db():
             for tbl, col, typ in [
                 ('comandes','impressio','TEXT'),
                 ('comandes','tipus_peca',"TEXT DEFAULT ''"),
+                ('comandes','tipus_peca_detall',"TEXT DEFAULT ''"),
                 ('comandes','final_amplada','REAL DEFAULT 0'),
                 ('comandes','final_alcada','REAL DEFAULT 0'),
                 ('comandes','sessio_id','TEXT'),
