@@ -927,6 +927,71 @@ def public_bridge_login():
     })
 
 
+@app.route('/api/public/professional-summary', methods=['POST'])
+def public_professional_summary():
+    try:
+        expected_token = _bridge_api_token()
+        provided_token = request.headers.get('X-Bridge-Token', '').strip()
+
+        if not expected_token or provided_token != expected_token:
+            return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
+        data = request.get_json(silent=True) or {}
+        username = (data.get('username') or '').strip().lower()
+        if not username:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+
+        user = query(
+            'SELECT id, nom, nom_empresa, profile_type, access_status FROM usuaris WHERE lower(username)=?',
+            [username],
+            one=True,
+        )
+        if not user:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+
+        recent_quotes_rows = query(
+            '''SELECT id, data, num_pressupost, client_nom, preu_final, pagat, entregat, pendent
+               FROM comandes
+               WHERE user_id = ?
+               ORDER BY data DESC
+               LIMIT 5''',
+            [user['id']],
+        ) or []
+
+        recent_quotes = []
+        for row in recent_quotes_rows:
+            recent_quotes.append({
+                'id': row['id'],
+                'date': row['data'] or '',
+                'num_pressupost': row['num_pressupost'] or '',
+                'client_nom': row['client_nom'] or '',
+                'preu_final': float(row['preu_final'] or 0),
+                'pagat': bool(row['pagat']),
+                'entregat': bool(row['entregat']),
+                'pendent': bool(row['pendent']),
+            })
+
+        return jsonify({
+            'ok': True,
+            'name': user['nom'] or '',
+            'business_name': user['nom_empresa'] or '',
+            'profile_type': _clean_profile_type(user['profile_type']),
+            'access_status': _user_access_status(user),
+            'recent_quotes': recent_quotes,
+        })
+    except Exception as exc:
+        print(f'professional-summary error: {exc}')
+        return jsonify({
+            'ok': False,
+            'error': 'internal_error',
+            'name': '',
+            'business_name': '',
+            'profile_type': 'professional',
+            'access_status': 'pending',
+            'recent_quotes': [],
+        }), 200
+
+
 @app.route('/api/public/commercial-settings-sync', methods=['POST'])
 def public_commercial_settings_sync():
     expected_token = _bridge_api_token()
