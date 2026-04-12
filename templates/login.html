@@ -26,6 +26,7 @@ button:hover{background:#0773c5}
 .back{display:inline-block;margin-bottom:1rem;color:#0984e3;text-decoration:none;font-size:13px;font-weight:600}
 .back:hover{text-decoration:underline}
 .helper{margin-top:1rem;font-size:12px;line-height:1.6;color:#636e72}
+.back.secondary{margin-top:1rem;margin-bottom:0;color:#636e72;font-weight:500}
 </style>
 </head>
 <body>
@@ -40,6 +41,9 @@ button:hover{background:#0773c5}
     {% for cat, msg in msgs %}<div class="alert">{{ msg }}</div>{% endfor %}
   {% endwith %}
   <form method="post">
+    {% if login_next %}<input type="hidden" name="next" value="{{ login_next }}">{% endif %}
+    {% if login_source %}<input type="hidden" name="source" value="{{ login_source }}">{% endif %}
+    {% if login_lang %}<input type="hidden" name="lang" value="{{ login_lang }}">{% endif %}
     <div class="field">
       <label>Usuari</label>
       <input type="text" name="username" autocomplete="username" required autofocus>
@@ -51,6 +55,9 @@ button:hover{background:#0773c5}
     <button type="submit">Entrar</button>
   </form>
   <div class="helper">Aquest espai continua sent la calculadora real de marcs. Si has arribat des de la web principal, despres podras tornar al teu entorn professional.</div>
+  <a class="back secondary" href="https://reusrevela.cat/professionals">
+    {% if login_lang == 'es' %}Volver al área privada de Reus Revela{% else %}Tornar a l'àrea privada de Reus Revela{% endif %}
+  </a>
 </div>
 </body>
 </html>

@@ -780,7 +780,18 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
-            return redirect(url_for('login'))
+            next_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
+            login_lang = (
+                (session.get('bridge_lang') or '').strip().lower()
+                or request.accept_languages.best_match(['ca', 'es', 'en'])
+                or 'ca'
+            )
+            return redirect(url_for(
+                'login',
+                next=_safe_next_path(next_path, '/'),
+                source='calc',
+                lang=login_lang,
+            ))
         return f(*args, **kwargs)
     return decorated
 
@@ -799,6 +810,13 @@ def admin_required(f):
 # â”€â”€ Routes: Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    next_path = _safe_next_path(request.values.get('next'), url_for('index'))
+    login_source = (request.values.get('source') or session.get('bridge_source') or 'calc').strip().lower() or 'calc'
+    login_lang = (
+        (request.values.get('lang') or session.get('bridge_lang') or '').strip().lower()
+        or request.accept_languages.best_match(['ca', 'es', 'en'])
+        or 'ca'
+    )
     web_return_url = _current_web_return_url()
     if request.method == 'POST':
         user = query('SELECT * FROM usuaris WHERE username=?',
@@ -810,15 +828,27 @@ def login():
                     flash("El teu accÃ©s encara estÃ  pendent de validaciÃ³.", 'error')
                 else:
                     flash("El teu accÃ©s estÃ  bloquejat. Contacta amb l'administrador.", 'error')
-                return render_template('login.html', web_return_url=web_return_url)
+                return render_template(
+                    'login.html',
+                    web_return_url=web_return_url,
+                    login_next=next_path,
+                    login_source=login_source,
+                    login_lang=login_lang,
+                )
             _start_user_session(user)
-            session['bridge_source'] = (request.args.get('source') or session.get('bridge_source') or '').strip().lower()
-            session['bridge_lang'] = (request.args.get('lang') or session.get('bridge_lang') or 'ca').strip().lower()
+            session['bridge_source'] = login_source
+            session['bridge_lang'] = login_lang
             if _needs_setup(user['id']):
                 return redirect(url_for('setup'))
-            return redirect(url_for('index'))
+            return redirect(next_path)
         flash('Usuari o contrasenya incorrectes.', 'error')
-    return render_template('login.html', web_return_url=web_return_url)
+    return render_template(
+        'login.html',
+        web_return_url=web_return_url,
+        login_next=next_path,
+        login_source=login_source,
+        login_lang=login_lang,
+    )
 
 @app.route('/logout')
 def logout():
