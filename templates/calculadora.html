@@ -314,6 +314,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
             <option value="pintura_sense_bastidor">Pintura sense bastidor</option>
             <option value="pintura_amb_bastidor">Pintura amb bastidor</option>
             <option value="puzzle">Puzzle</option>
+            <option value="punt_de_creu">Punt de creu</option>
           </select>
         </div>
         <div class="f2">
@@ -784,11 +785,21 @@ function getPieceTypeValue(){
 function getPieceTypeLabel(){
   var labels = PIECE_LABELS[_lang] || PIECE_LABELS.ca;
   var value = getPieceTypeValue();
+  if(value === 'punt_de_creu'){
+    return ({ca:'Punt de creu', es:'Punto de cruz', en:'Cross stitch'}[_lang] || 'Punt de creu');
+  }
   return labels[value] || value;
 }
 function getPieceDetailText(){
   var pieceType = getPieceTypeValue();
   var detail = getPieceDetailValue();
+  if(pieceType === 'punt_de_creu'){
+    return ({
+      ca: 'El punt de creu requereix encolat i vidre. No admet laminat, Protter, ProEco, doble vidre ni impressió fotogràfica.',
+      es: 'El punto de cruz requiere encolado y vidrio. No admite laminado, Protter, ProEco, doble vidrio ni impresión fotográfica.',
+      en: 'Cross stitch requires mounting and glass. It does not support laminate, Protter, ProEco, double glass or photo printing.'
+    }[_lang] || 'El punt de creu requereix encolat i vidre. No admet laminat, Protter, ProEco, doble vidre ni impressió fotogràfica.');
+  }
   var maps = {
     ca: {
       fotografia: {client: 'La porta el client', laboratori: 'La imprimeix el laboratori'},
@@ -1444,6 +1455,19 @@ function applyIncompatibilities(){
     rules.proeco = true;
     rules['proteccio-cap'] = false;
     note = 'Amb bastidor, la peça pot portar marc i també vidre si es vol protegir.';
+  }
+
+  if(pieceType === 'punt_de_creu'){
+    rules.protter = true;
+    rules.laminat = true;
+    rules.doble_vidre = true;
+    rules.mirall = true;
+    rules.proeco = true;
+    rules['muntatge-cap'] = true;
+    rules['proteccio-cap'] = true;
+    forcedSelections.muntatge = 'encolat';
+    forcedSelections.proteccio = 'vidre';
+    note = 'El punt de creu requereix encolat i vidre. No admet laminat, Protter, ProEco, doble vidre ni impressió fotogràfica.';
   }
 
   Object.keys(rules).forEach(function(k){
