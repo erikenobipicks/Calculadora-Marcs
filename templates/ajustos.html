@@ -185,7 +185,7 @@ function desarTot(){
     else showAlert('Error en desar.','err');
   });
   {% else %}
-  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})})
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,empresa_adreca:ea,empresa_tel:et,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok) showAlert('Canvis desats correctament.','ok');

@@ -1193,7 +1193,7 @@ def moldura_options():
 @app.route('/api/marge')
 @login_required
 def get_marge():
-    u = query('SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_impressio, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
@@ -1211,14 +1211,16 @@ def get_marge():
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', 'Objectiu Emmarcació')
+    user_adreca = _row_get(u, 'empresa_adreca', '') or ''
+    user_tel    = _row_get(u, 'empresa_tel', '') or ''
     return jsonify({
         'marge': marge,
         'marge_impressio': marge_imp,
         'margins': margins,
         'brand_color': brand_color,
         'empresa_nom': nom_emp,
-        'empresa_adreca': cfg.get('empresa_adreca',''),
-        'empresa_tel': cfg.get('empresa_tel',''),
+        'empresa_adreca': user_adreca if user_adreca else cfg.get('empresa_adreca',''),
+        'empresa_tel':    user_tel    if user_tel    else cfg.get('empresa_tel',''),
     })
 
 
@@ -1279,6 +1281,8 @@ def desar_marge():
     m = float(d.get('marge', 60))
     mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
+    ea = d.get('empresa_adreca', '')
+    et = d.get('empresa_tel', '')
     brand_color = _normalize_hex_color(d.get('brand_color', DEFAULT_BRAND_COLOR))
     brand_color_secondary = _normalize_hex_color(
         d.get('brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
@@ -1294,11 +1298,13 @@ def desar_marge():
         print_margin=mi,
     )
     execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, empresa_adreca=?, empresa_tel=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
         [
             margins['frames'],
             margins['prints'],
             ne,
+            ea,
+            et,
             json.dumps(margins, ensure_ascii=True),
             brand_color,
             brand_color_secondary,
@@ -2178,7 +2184,7 @@ def crear_pdf(c):
 
     # ── Capçalera ─────────────────────────────────────────────────────────
     # Get empresa info for this user
-    u_data = query('SELECT nom_empresa, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
+    u_data = query('SELECT nom_empresa, empresa_adreca, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
     nom_empresa = ''
     if u_data and _row_get(u_data, 'nom_empresa', ''):
         nom_empresa = _row_get(u_data, 'nom_empresa', '')
@@ -2186,8 +2192,10 @@ def crear_pdf(c):
     if not nom_empresa:
         _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
         nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
-    r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
-    adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
+    adreca = _row_get(u_data, 'empresa_adreca', '') or ''
+    if not adreca:
+        r_adr = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
+        adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
     GREEN = colors.HexColor(green_hex)
     lang = (c.get('lang') or 'ca').lower()
@@ -2411,7 +2419,7 @@ def crear_pdf(c):
 @login_required
 def ajustos():
     u = query(
-        'SELECT marge, marge_impressio, nom_empresa, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+        'SELECT marge, marge_impressio, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
         [session['user_id']],
         one=True,
     )
@@ -2446,6 +2454,8 @@ def ajustos():
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
+    user_adreca = _row_get(u, 'empresa_adreca', '') or ''
+    user_tel    = _row_get(u, 'empresa_tel', '') or ''
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
                            margin_entries=[
                                dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry
@@ -2455,8 +2465,8 @@ def ajustos():
                            brand_color=brand_color,
                            brand_color_secondary=brand_color_secondary,
                            brand_color_menu=brand_color_menu,
-                           empresa_adreca=cfg.get('empresa_adreca',''),
-                           empresa_tel=cfg.get('empresa_tel',''))
+                           empresa_adreca=user_adreca if user_adreca else cfg.get('empresa_adreca',''),
+                           empresa_tel=user_tel if user_tel else cfg.get('empresa_tel',''))
 
 
 import re as _re
@@ -3049,6 +3059,8 @@ def init_db():
                 ('comandes','sessio_id','TEXT'),
                 ('comandes','opcio_nom','TEXT'),
                 ('usuaris','nom_empresa',"TEXT DEFAULT ''"),
+                ('usuaris','empresa_adreca',"TEXT DEFAULT ''"),
+                ('usuaris','empresa_tel',"TEXT DEFAULT ''"),
                 ('usuaris','brand_color',"TEXT DEFAULT '#1A6B45'"),
                 ('usuaris','brand_color_secondary',"TEXT DEFAULT '#C8873A'"),
                 ('usuaris','brand_color_menu',"TEXT DEFAULT '#1A6B45'"),
