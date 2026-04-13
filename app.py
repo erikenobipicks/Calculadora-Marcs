@@ -1058,6 +1058,60 @@ def public_commercial_settings_sync():
     return jsonify({'ok': True, 'username': username, 'marge': marge, 'marge_impressio': marge_impressio, 'margins': margins})
 
 
+@app.route('/api/public/pricing', methods=['GET'])
+def public_pricing():
+    """Exposa les tarifes professionals (sense marge aplicat) perquè
+    la web les pugui consumir i aplicar-hi el marge propi de cada client.
+
+    Autenticació: capçalera X-Bridge-Token (mateix token que la resta
+    d'endpoints de bridge).
+
+    Retorna:
+      impressio     — taula completa de còpies fotogràfiques (ref, preu, descripcio)
+      laminate_only — preus de laminat sol per mida (ref, preu)
+      encolat_pro   — preus de muntatge encolat i protter per mida (ref, preu, tipus)
+    """
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    # Còpies fotogràfiques
+    impressio_rows = query('SELECT referencia, preu, descripcio FROM impressio ORDER BY preu') or []
+    impressio = [
+        {'ref': r['referencia'], 'preu': float(r['preu'] or 0), 'descripcio': r['descripcio'] or ''}
+        for r in impressio_rows
+    ]
+
+    # Laminat sol (hardcoded en constants, igual que a la calculadora)
+    laminate_only = [
+        {'ref': ref, 'preu': float(preu)}
+        for ref, preu in sorted(LAMINATE_ONLY_PRICES.items(),
+                                key=lambda x: float(x[1]))
+    ]
+
+    # Encolat professional i protter (taula encolat_pro, prefix ENC / PRO)
+    encolat_rows = query('SELECT referencia, preu FROM encolat_pro ORDER BY preu') or []
+    encolat_pro = []
+    for r in encolat_rows:
+        ref = r['referencia'] or ''
+        tipus = 'protter' if ref.upper().startswith('PRO') else 'encolat'
+        mida = ref[3:] if ref.upper().startswith('PRO') or ref.upper().startswith('ENC') else ref
+        encolat_pro.append({
+            'ref': ref,
+            'mida': mida,
+            'preu': float(r['preu'] or 0),
+            'tipus': tipus,
+        })
+
+    return jsonify({
+        'ok': True,
+        'impressio': impressio,
+        'laminate_only': laminate_only,
+        'encolat_pro': encolat_pro,
+    })
+
+
 @app.route('/auth/bridge')
 def bridge_auth():
     payload = _read_bridge_token(request.args.get('token'))
