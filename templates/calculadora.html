@@ -657,6 +657,7 @@ var T = {
     hola: "Hola! Us envio el pressupost d\'emmarcacio",
     ref: "Ref.",
     client: "Client",
+    phone: "Telefon",
     piece: "Peca a emmarcar",
     marc: "Marc",
     midaFinal: "Mida final",
@@ -665,6 +666,7 @@ var T = {
     muntatge: "Muntatge",
     proteccio: "Proteccio",
     interior: "Interior",
+    reversPeu: "Revers amb peu",
     impressio: "Impressio fotografica",
     total: "TOTAL",
     iva: "IVA inclos",
@@ -674,6 +676,9 @@ var T = {
     waInternTitol: "PRESSUPOST ACCEPTAT - Preparacio marc",
     numPres: "Num. pressupost",
     cost: "Cost materials",
+    clientPrice: "Preu client",
+    frameImage: "Imatge marc",
+    company: "Comerc",
     notes: "Notes",
     discountApplied: "Descompte aplicat",
     yes: "Sí",
@@ -683,6 +688,7 @@ var T = {
     hola: "Hola! Os enviamos el presupuesto de enmarcacion",
     ref: "Ref.",
     client: "Cliente",
+    phone: "Telefono",
     piece: "Pieza a enmarcar",
     marc: "Marco",
     midaFinal: "Medida final",
@@ -691,6 +697,7 @@ var T = {
     muntatge: "Montaje",
     proteccio: "Proteccion",
     interior: "Interior",
+    reversPeu: "Reverso con pie",
     impressio: "Impresion fotografica",
     total: "TOTAL",
     iva: "IVA incluido",
@@ -700,6 +707,9 @@ var T = {
     waInternTitol: "PRESUPUESTO ACEPTADO - Preparacion marco",
     numPres: "Num. presupuesto",
     cost: "Coste materiales",
+    clientPrice: "Precio cliente",
+    frameImage: "Imagen marco",
+    company: "Comercio",
     notes: "Notas",
     discountApplied: "Descuento aplicado",
     yes: "Sí",
@@ -709,6 +719,7 @@ var T = {
     hola: "Hello! Here is your framing quote",
     ref: "Ref.",
     client: "Client",
+    phone: "Phone",
     piece: "Item to frame",
     marc: "Frame",
     midaFinal: "Final size",
@@ -717,6 +728,7 @@ var T = {
     muntatge: "Mounting",
     proteccio: "Protection",
     interior: "Interior",
+    reversPeu: "Backing with stand",
     impressio: "Photo print",
     total: "TOTAL",
     iva: "VAT included",
@@ -726,6 +738,9 @@ var T = {
     waInternTitol: "QUOTE ACCEPTED - Frame preparation",
     numPres: "Quote no.",
     cost: "Material cost",
+    clientPrice: "Client price",
+    frameImage: "Frame image",
+    company: "Business",
     notes: "Notes",
     discountApplied: "Discount applied",
     yes: "Yes",
@@ -2237,17 +2252,23 @@ function whatsappClient(){
 function buildWAtext_intern(){
   // Internal message to Reus Revela: cost price, prep tone
   var client  = document.getElementById('client_nom').value||'—';
+  var tel     = document.getElementById('client_tel').value || '—';
   var num     = window._numPressupost || '—';
+  var obs     = (document.getElementById('observacions').value || '').trim();
   var interior  = (document.querySelector('input[name="interior"]:checked') ||{}).value||'';
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked') ||{}).value||'';
   var chkImp    = document.getElementById('chk-impressio').checked;
+  var chkRevers = document.getElementById('chk-revers-peu')?.checked || false;
+  var fotoUrl   = document.querySelector('#foto-box img')?.src || '';
+  var nomComercial = empresa_nom || 'Reus Revela';
   var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
 
   // Cost price (not client price)
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
+  var preuClient = window._c ? window._c.preu_final.toFixed(2) : '—';
 
   var t = T[_lang] || T.ca;
   var pieceLabel = getPieceDisplayLabel();
@@ -2256,7 +2277,9 @@ function buildWAtext_intern(){
   var lines = [
     '*'+t.waInternTitol+'*','',
     t.numPres+': *' + num + '*',
-    t.client+': ' + client,'',
+    t.client+': ' + client,
+    t.phone+': ' + tel,
+    '',
   ];
   if(pieceLabel) lines.push(t.piece+': ' + pieceLabel);
   if(midaFinal) lines.push(t.midaFinal+': ' + midaFinal);
@@ -2264,11 +2287,22 @@ function buildWAtext_intern(){
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
   if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
+  if(chkRevers)    lines.push(t.reversPeu+': '+t.yes);
   if(chkImp)       lines.push(t.impressio+': '+t.yes);
   if(chkImp)       lines.push(t.printIncluded);
   lines.push('');
   lines.push(t.cost+': *' + cTot + ' EUR*');
+  lines.push(t.clientPrice+': *' + preuClient + ' EUR (' + t.iva + ')*');
+  if(obs){
+    lines.push('');
+    lines.push(t.notes+': ' + obs);
+  }
+  if(fotoUrl){
+    lines.push('');
+    lines.push(t.frameImage+': ' + fotoUrl);
+  }
   lines.push('');
+  lines.push(t.company+': ' + nomComercial);
   return encodeURIComponent(lines.join('\n'));
 }
 

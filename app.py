@@ -682,9 +682,9 @@ def _build_web_return_url(source=None, lang=None):
 
 
 def _current_web_return_url():
-    source = session.get('bridge_source') or request.args.get('source') or 'web'
     lang = session.get('bridge_lang') or request.args.get('lang') or 'ca'
-    return _build_web_return_url(source, lang)
+    base = _main_site_url()
+    return f'{base}/area-privada?lang={lang}'
 
 
 def _current_web_order_url():
