@@ -2773,9 +2773,10 @@ def api_closest():
             return {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
         return None
 
-    # Encolat/Protter: min-contain (producte ha de cobrir físicament el marc)
-    # Vidre/Passpartú/ProEco: àrea propera (permet mides no estàndard)
-    # Impressió: àrea propera (format comercial més similar)
+    # Tots els productes físics (vidre, passpartú, encolat, protter) usen
+    # min-contain: la mida ha de cobrir físicament el marc. Això garanteix
+    # que una peça més gran no pot sortir mai més barata que una de més petita.
+    # Impressió: min-contain també (el paper ha de cobrir la foto).
     def cc(table, cw, ch, prefix=None, exclude_multi=None, preu_col='preu'):
         """Closest by min overshoot (must contain the size)"""
         rows = [dict(r) for r in query(f'SELECT * FROM {table}')]
@@ -2789,12 +2790,12 @@ def api_closest():
     result = {
         'encolat':      cc('encolat_pro', w, h, prefix='ENC'),
         'protter':      cc('encolat_pro', w, h, prefix='PRO'),
-        'vidre':        ca('vidres',      w, h, exclude_multi=['DV-','MIR-']),
-        'doble_vidre':  ca('vidres',      w, h, prefix='DV-'),
-        'mirall':       ca('vidres',      w, h, prefix='MIR-'),
-        'passpartu':    ca('passpartout', w, h, prefix='1PAS'),
-        'doble_pas':    ca('passpartout', w, h, prefix='DOBPAS'),
-        'proeco':       ca('passpartout', w, h, prefix='PROECO'),
+        'vidre':        cc('vidres',      w, h, exclude_multi=['DV-','MIR-']),
+        'doble_vidre':  cc('vidres',      w, h, prefix='DV-'),
+        'mirall':       cc('vidres',      w, h, prefix='MIR-'),
+        'passpartu':    cc('passpartout', w, h, prefix='1PAS'),
+        'doble_pas':    cc('passpartout', w, h, prefix='DOBPAS'),
+        'proeco':       cc('passpartout', w, h, prefix='PROECO'),
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
