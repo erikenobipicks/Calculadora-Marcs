@@ -1265,6 +1265,9 @@ def logo_preview():
 @app.route('/api/empresa', methods=['POST'])
 @admin_required
 def api_empresa():
+    # Nota: aquest endpoint és només per admins i actualitza el config global
+    # que actua de valors per defecte. Els clients no-admin guarden les seves
+    # dades pròpies a usuaris.empresa_adreca / empresa_tel via /api/desar-marge.
     d = request.json or {}
     nom    = d.get('nom','')
     adreca = d.get('adreca','')
@@ -2184,7 +2187,7 @@ def crear_pdf(c):
 
     # ── Capçalera ─────────────────────────────────────────────────────────
     # Get empresa info for this user
-    u_data = query('SELECT nom_empresa, empresa_adreca, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
+    u_data = query('SELECT nom_empresa, empresa_adreca, empresa_tel, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
     nom_empresa = ''
     if u_data and _row_get(u_data, 'nom_empresa', ''):
         nom_empresa = _row_get(u_data, 'nom_empresa', '')
