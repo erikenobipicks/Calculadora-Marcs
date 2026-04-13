@@ -36,7 +36,7 @@ MOLDURA_COLOR_KEYWORDS = {
     'plata': ('plata', 'argent', 'silver'),
     'negre': ('negre', 'negra', 'negro', 'mate'),
     'blanc': ('blanc', 'blanca', 'blanco', 'blanca'),
-    'marro': ('marron', 'marrÃ³', 'caoba', 'wengÃ©', 'wenge', 'noguera'),
+    'marro': ('marron', 'marró', 'caoba', 'wengé', 'wenge', 'noguera'),
     'fusta': ('fusta', 'natural', 'pi', 'pino', 'roure', 'roble', 'bambu', 'canya', 'fresno'),
     'gris': ('gris', 'antracita'),
     'blau': ('blau', 'azul', 'marino'),
@@ -802,7 +802,7 @@ def admin_required(f):
             return redirect(url_for('login'))
         user = query('SELECT * FROM usuaris WHERE id=?', [session['user_id']], one=True)
         if not user or not user['is_admin']:
-            flash('AccÃ©s restringit a administradors.', 'error')
+            flash('Accés restringit a administradors.', 'error')
             return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated
@@ -825,9 +825,9 @@ def login():
             if not _user_is_allowed(user):
                 status = _user_access_status(user)
                 if status == 'pending':
-                    flash("El teu accÃ©s encara estÃ  pendent de validaciÃ³.", 'error')
+                    flash("El teu accés encara està pendent de validació.", 'error')
                 else:
-                    flash("El teu accÃ©s estÃ  bloquejat. Contacta amb l'administrador.", 'error')
+                    flash("El teu accés està bloquejat. Contacta amb l'administrador.", 'error')
                 return render_template(
                     'login.html',
                     web_return_url=web_return_url,
@@ -886,7 +886,7 @@ def public_professional_signup():
         f"Alta des de la web principal el {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         f"Nom: {name}",
         f"Email: {email}",
-        f"TelÃ¨fon: {phone or '-'}",
+        f"Telèfon: {phone or '-'}",
         f"Assumpte: {subject or '-'}",
         f"Perfil: {profile_type}",
         f"Empresa: {business_name or '-'}",
@@ -1056,12 +1056,12 @@ def public_commercial_settings_sync():
 def bridge_auth():
     payload = _read_bridge_token(request.args.get('token'))
     if not payload:
-        flash("L'accÃƒÂ©s unificat ha caducat o no ÃƒÂ©s vÃƒÂ lid. Torna a iniciar sessiÃƒÂ³.", 'error')
+        flash("L'accés unificat ha caducat o no és vàlid. Torna a iniciar sessió.", 'error')
         return redirect(url_for('login'))
 
     user = query('SELECT * FROM usuaris WHERE id=?', [payload.get('uid')], one=True)
     if not _user_is_allowed(user):
-        flash("No hem pogut validar aquest accÃƒÂ©s. Contacta amb administraciÃƒÂ³ si cal.", 'error')
+        flash("No hem pogut validar aquest accés. Contacta amb administració si cal.", 'error')
         return redirect(url_for('login'))
 
     _start_user_session(user)
@@ -1204,7 +1204,7 @@ def get_marge():
     cfg_rows = query("SELECT clau, valor FROM config WHERE clau LIKE 'empresa_%'")
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
-        nom_emp = cfg.get('empresa_nom', 'Objectiu EmmarcaciÃ³')
+        nom_emp = cfg.get('empresa_nom', 'Objectiu Emmarcació')
     return jsonify({
         'marge': marge,
         'marge_impressio': marge_imp,
@@ -1339,7 +1339,7 @@ def guardar():
         d.get('preu_net',0), d.get('preu_final',0),
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''),
-        sessio_id, d.get('opcio_nom','OpciÃ³ A'), num_pressupost, d.get('lang','ca')
+        sessio_id, d.get('opcio_nom','Opció A'), num_pressupost, d.get('lang','ca')
     ])
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
@@ -1408,7 +1408,7 @@ def acceptar_comanda(cid):
     return jsonify({'ok': True})
 
 
-# â”€â”€ CatÃ leg de motllures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Catàleg de motllures ──────────────────────────────────────────────────
 @app.route('/cataleg')
 @login_required
 def cataleg():
@@ -1475,7 +1475,7 @@ def admin_moldura_nova():
         d = request.form
         existing = query('SELECT referencia FROM moldures WHERE referencia=?', [d['referencia']], one=True)
         if existing:
-            return render_template('admin_moldura_form.html', error='Ja existeix una motllura amb aquesta referÃ¨ncia.', moldura=d, nova=True)
+            return render_template('admin_moldura_form.html', error='Ja existeix una motllura amb aquesta referència.', moldura=d, nova=True)
         foto = d.get('foto', '').strip()
         try:
             uploaded_photo = _save_moldura_photo(request.files.get('foto_fitxer'), d['referencia'])
@@ -1664,7 +1664,7 @@ def admin_config():
             execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_user", ?)', [gu])
         if gp:
             execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
-    flash('ConfiguraciÃ³ desada.', 'ok')
+    flash('Configuració desada.', 'ok')
     return redirect(url_for('admin'))
 
 @app.route('/admin/impressio', methods=['POST'])
@@ -1699,7 +1699,7 @@ def admin_foto():
 # â”€â”€ PDF generator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def generar_num_pressupost():
-    """Genera nÃºmero tipus RR-2503-001"""
+    """Genera número tipus RR-2503-001"""
     from datetime import datetime
     # Get initials from empresa_nom in config
     r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
@@ -1758,7 +1758,7 @@ def crear_pdf_comparativa(comandes):
     c0 = comandes[0]
     header = Table([[
         p(f"{t['comparativa']}", bold=True, size=14, color=colors.white),
-        p(f"Objectiu Â· Reus", size=9, color=colors.HexColor("#B2BEC3"), align='RIGHT')
+        p(f"Objectiu · Reus", size=9, color=colors.HexColor("#B2BEC3"), align='RIGHT')
     ]], colWidths=[W*0.65, W*0.35])
     header.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), DARK),
@@ -1769,7 +1769,7 @@ def crear_pdf_comparativa(comandes):
     story.append(header)
 
     client_info = Table([[
-        p(f"{t['client']}: {c0['client_nom'] or 'â€”'}", bold=True, size=11),
+        p(f"{t['client']}: {c0['client_nom'] or '—'}", bold=True, size=11),
         p(f"{t['data']}: {c0['data']}", size=10, align='RIGHT')
     ]], colWidths=[W*0.6, W*0.4])
     client_info.setStyle(TableStyle([
@@ -1783,7 +1783,7 @@ def crear_pdf_comparativa(comandes):
     story.append(Sp(1,4*mm))
 
     # Column headers (with label column)
-    hdr = [p('', bold=True, size=10, color=WHITE)] +           [p(c.get('opcio_nom','OpciÃ³'), bold=True, size=11, color=WHITE, align='CENTER') for c in comandes]
+    hdr = [p('', bold=True, size=10, color=WHITE)] +           [p(c.get('opcio_nom','Opció'), bold=True, size=11, color=WHITE, align='CENTER') for c in comandes]
     hdr_row = Table([hdr], colWidths=[col_lbl]+[col_w]*n)
     hdr_row.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), DARK),
@@ -1797,7 +1797,7 @@ def crear_pdf_comparativa(comandes):
     # Build comparison rows
     def val_clean(c, key):
         v = c.get(key,'') or ''
-        return 'â€”' if v in ['','-','None'] else str(v)
+        return '—' if v in ['','-','None'] else str(v)
 
     fields = [
         (t['tipus_peca'],     'piece_type',       False),
@@ -1839,10 +1839,10 @@ def crear_pdf_comparativa(comandes):
                 val = _display_impressio(c, t)
             elif key == 'iva':
                 pn = float(c.get('preu_net',0) or 0)
-                val = f"{pn*0.21:.2f} â‚¬"
+                val = f"{pn*0.21:.2f} €"
             elif is_price:
                 v = float(c.get(key,0) or 0)
-                val = f"{v:.2f} â‚¬"
+                val = f"{v:.2f} €"
             else:
                 val = val_clean(c, key)
             bold_cell = is_price and key in ('preu_final','pendent')
@@ -1985,18 +1985,18 @@ PDF_T = {
     'ca': {
         'pressupost': 'PRESSUPOST',
         'client': 'Client',
-        'telefon': 'TelÃ¨fon',
+        'telefon': 'Telèfon',
         'data': 'Data',
         'marc': 'Marc',
         'premarc': 'Pre-Marc',
         'mides': 'Mides',
         'mida_final': 'Mida final',
-        'tipus_peca': 'PeÃ§a a emmarcar',
+        'tipus_peca': 'Peça a emmarcar',
         'muntatge': 'Muntatge',
-        'proteccio': 'ProtecciÃ³',
+        'proteccio': 'Protecció',
         'interior': 'Interior',
         'revers_peu': 'Revers amb peu',
-        'impressio': 'ImpressiÃ³',
+        'impressio': 'Impressió',
         'observacions': 'Observacions',
         'preu_net': 'Preu net (sense IVA)',
         'iva': 'IVA 21%',
@@ -2006,7 +2006,7 @@ PDF_T = {
         'num': 'Num. Pressupost',
         'comparativa': 'COMPARATIVA DE PRESSUPOSTOS',
         'marc_principal': 'Marc principal',
-        'mides_foto': 'Mides peÃ§a (cm)',
+        'mides_foto': 'Mides peça (cm)',
         'vidre_mirall': 'Vidre / Mirall',
         'preu_net_label': 'Preu net',
         'total_iva': 'TOTAL amb IVA',
@@ -2018,12 +2018,12 @@ PDF_T = {
         'vidre_label': 'Vidre',
         'doble_vidre': 'Doble vidre',
         'mirall': 'Mirall',
-        'passpartu_label': 'PasspartÃº',
-        'doble_passpartu': 'Doble passpartÃº',
+        'passpartu_label': 'Passpartú',
+        'doble_passpartu': 'Doble passpartú',
         'proeco_label': 'ProEco',
         'inclosa': 'Inclosa',
         'piece_photo': 'Fotografia',
-        'piece_lamina': 'LÃ mina',
+        'piece_lamina': 'Làmina',
         'piece_painting_unstretched': 'Pintura sense bastidor',
         'piece_painting_stretched': 'Pintura amb bastidor',
         'piece_puzzle': 'Puzzle',
@@ -2037,7 +2037,7 @@ PDF_T = {
     'es': {
         'pressupost': 'PRESUPUESTO',
         'client': 'Cliente',
-        'telefon': 'TelÃ©fono',
+        'telefon': 'Teléfono',
         'data': 'Fecha',
         'marc': 'Marco',
         'premarc': 'Pre-Marco',
@@ -2045,10 +2045,10 @@ PDF_T = {
         'mida_final': 'Medida final',
         'tipus_peca': 'Pieza a enmarcar',
         'muntatge': 'Montaje',
-        'proteccio': 'ProtecciÃ³n',
+        'proteccio': 'Protección',
         'interior': 'Interior',
         'revers_peu': 'Reverso con pie',
-        'impressio': 'ImpresiÃ³n',
+        'impressio': 'Impresión',
         'observacions': 'Observaciones',
         'preu_net': 'Precio neto (sin IVA)',
         'iva': 'IVA 21%',
@@ -2070,12 +2070,12 @@ PDF_T = {
         'vidre_label': 'Vidrio',
         'doble_vidre': 'Doble vidrio',
         'mirall': 'Espejo',
-        'passpartu_label': 'PasspartÃº',
-        'doble_passpartu': 'Doble passpartÃº',
+        'passpartu_label': 'Passpartú',
+        'doble_passpartu': 'Doble passpartú',
         'proeco_label': 'ProEco',
         'inclosa': 'Incluida',
-        'piece_photo': 'FotografÃ­a',
-        'piece_lamina': 'LÃ¡mina',
+        'piece_photo': 'Fotografía',
+        'piece_lamina': 'Lámina',
         'piece_painting_unstretched': 'Pintura sin bastidor',
         'piece_painting_stretched': 'Pintura con bastidor',
         'piece_puzzle': 'Puzzle',
@@ -2161,16 +2161,16 @@ def crear_pdf(c):
                             fontSize=size, textColor=color,
                             alignment={'LEFT':0,'CENTER':1,'RIGHT':2}[align],
                             leading=size*1.4)
-        return Paragraph(str(txt) if txt else 'â€”', st)
+        return Paragraph(str(txt) if txt else '—', st)
 
     def fila(lbl, val, color_val=None):
         return [p(lbl, bold=True, size=9, color=colors.HexColor("#6B6860")),
-                p(str(val) if val and val not in ['-',''] else 'â€”', size=10,
+                p(str(val) if val and val not in ['-',''] else '—', size=10,
                   color=color_val or DARK)]
 
     story = []
 
-    # â”€â”€ CapÃ§alera â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Capçalera ─────────────────────────────────────────────────────────
     # Get empresa info for this user
     u_data = query('SELECT nom_empresa, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
     nom_empresa = ''
@@ -2181,7 +2181,7 @@ def crear_pdf(c):
         _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
         nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
     r_adr  = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
-    adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 Â· Reus'
+    adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
     GREEN = colors.HexColor(green_hex)
     lang = (c.get('lang') or 'ca').lower()
@@ -2234,13 +2234,13 @@ def crear_pdf(c):
     num_pres = c.get('num_pressupost','') or ''
     t1_rows = [
         fila(t['num']+':', num_pres, color_val=colors.HexColor('#1A6B45')) if num_pres else None,
-        fila(t['client']+':', c['client_nom'] or 'â€”'),
-        fila(t['telefon']+':', c['client_tel'] or 'â€”'),
+        fila(t['client']+':', c['client_nom'] or '—'),
+        fila(t['telefon']+':', c['client_tel'] or '—'),
         fila(t['data']+':', c['data']),
     ]
     t1_rows = [r for r in t1_rows if r is not None]
-    if opcio_txt and opcio_txt != 'OpciÃ³ A':
-        t1_rows.append(fila('OpciÃ³:', opcio_txt))
+    if opcio_txt and opcio_txt != 'Opció A':
+        t1_rows.append(fila('Opció:', opcio_txt))
 
     t1 = Table(t1_rows, colWidths=[W*0.32, W*0.68])
     t1.setStyle(TableStyle([
@@ -2300,7 +2300,7 @@ def crear_pdf(c):
         det_rows.append(fila(t['impressio']+':', impressio_label))
     det_rows.append(fila(t['marc_principal']+':',
                          c['marc_principal'] if c.get('marc_principal') else t['sense_marc']))
-    det_rows.append(fila(t['mides_foto']+':', f"{int(c['amplada'])} Ã— {int(c['alcada'])}"))
+    det_rows.append(fila(t['mides_foto']+':', f"{int(c['amplada'])} × {int(c['alcada'])}"))
     if c.get('encolat') and c['encolat'] not in ['-','']:
         det_rows.append(fila(t['muntatge']+':', c['encolat']))
     if c.get('vidre') and c['vidre'] not in ['-','CONSERVAR','']:
@@ -2345,7 +2345,7 @@ def crear_pdf(c):
         story.append(t2)
     story.append(Spacer(1, 5*mm))
 
-    # â”€â”€ Resum econÃ²mic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Resum econòmic ────────────────────────────────────────────────────
     desc_pct = float(c.get('descompte') or 0)
     pnet  = float(c.get('preu_net')   or 0)
     pfin  = float(c.get('preu_final') or 0)
@@ -2355,23 +2355,23 @@ def crear_pdf(c):
 
     t3_data = [
         [p(t['preu_net_pvp'], bold=True, size=9, color=colors.HexColor("#6B6860")),
-         p(f'{pnet:.2f} â‚¬', size=10, align='RIGHT')],
+         p(f'{pnet:.2f} €', size=10, align='RIGHT')],
     ]
     if desc_pct > 0:
         desc_eur = pnet * (desc_pct/100)
         t3_data.append([
             p(t['descompte_sobre_pvp'].format(pct=int(desc_pct)), bold=True, size=9, color=colors.HexColor("#C8873A")),
-            p(f'- {desc_eur:.2f} â‚¬', size=10, color=colors.HexColor("#C8873A"), align='RIGHT'),
+            p(f'- {desc_eur:.2f} €', size=10, color=colors.HexColor("#C8873A"), align='RIGHT'),
         ])
     t3_data += [
         [p(t['iva'], bold=True, size=9, color=colors.HexColor("#6B6860")),
-         p(f'{(pnet*(1-desc_pct/100))*0.21:.2f} â‚¬', size=10, align='RIGHT')],
+         p(f'{(pnet*(1-desc_pct/100))*0.21:.2f} €', size=10, align='RIGHT')],
         [p(t['total_pvp_iva'], bold=True, size=11, color=GREEN),
-         p(f'{pfin:.2f} â‚¬', bold=True, size=14, color=GREEN, align='RIGHT')],
+         p(f'{pfin:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
         [p(t['entrega'], bold=True, size=9, color=colors.HexColor("#6B6860")),
-         p(f'{pent:.2f} â‚¬', size=10, align='RIGHT')],
+         p(f'{pent:.2f} €', size=10, align='RIGHT')],
         [p(t['pendent_cobrar'], bold=True, size=11, color=RED),
-         p(f'{ppend:.2f} â‚¬', bold=True, size=14, color=RED, align='RIGHT')],
+         p(f'{ppend:.2f} €', bold=True, size=14, color=RED, align='RIGHT')],
     ]
     t3 = Table(t3_data, colWidths=[W*0.6, W*0.4])
     # Find total row index (index 2 or 3 depending on discount)
@@ -2392,7 +2392,7 @@ def crear_pdf(c):
     story.append(Spacer(1, 6*mm))
     story.append(HRFlowable(width=W, thickness=0.5, color=BRD))
     story.append(Spacer(1, 2*mm))
-    story.append(p('Objectiu EmmarcaciÃ³ Â· C/ Mare Molas, 26 Â· Reus', size=8,
+    story.append(p('Objectiu Emmarcació · C/ Mare Molas, 26 · Reus', size=8,
                    color=colors.HexColor("#636E72"), align='CENTER'))
 
     doc.build(story)
@@ -2419,12 +2419,12 @@ def ajustos():
     margin_entries = [
         {'key': 'general', 'label': 'General', 'description': 'Marge base per a productes generals i acabats que no tenen marge propi.', 'value': _format_margin_for_view(margins['general'])},
         {'key': 'frames', 'label': 'Marcs', 'description': 'Marge principal de la calculadora de marcs.', 'value': _format_margin_for_view(margins['frames'])},
-        {'key': 'canvas', 'label': 'LlenÃ§os', 'description': 'S\'utilitza al privat per a llenÃ§os i fine art si no es defineix un altre marge.', 'value': _format_margin_for_view(margins['canvas'])},
-        {'key': 'prints', 'label': 'ImpressiÃ³ fotogrÃ fica', 'description': 'S\'aplica a cÃ²pia fotogrÃ fica i serveix tambÃ© de base per a acabats d\'impressiÃ³.', 'value': _format_margin_for_view(margins['prints'])},
-        {'key': 'foam', 'label': 'Foam', 'description': 'Permet separar el marge de foam del de la impressiÃ³ si ho necessites.', 'value': _format_margin_for_view(margins['foam'])},
-        {'key': 'laminate_foam', 'label': 'Laminat + foam', 'description': 'Per si voleu treballar aquesta combinaciÃ³ amb un marge propi.', 'value': _format_margin_for_view(margins['laminate_foam'])},
-        {'key': 'fine_art', 'label': 'Fine art', 'description': 'Marge especÃ­fic per a papers fine art i treballs mÃ©s cuidats.', 'value': _format_margin_for_view(margins['fine_art'])},
-        {'key': 'albums', 'label': 'Ã€lbums', 'description': 'Preparat per quan l\'Ã rea privada tambÃ© gestioni Ã lbums amb el mateix compte.', 'value': _format_margin_for_view(margins['albums'])},
+        {'key': 'canvas', 'label': 'Llenços', 'description': 'S\'utilitza al privat per a llenços i fine art si no es defineix un altre marge.', 'value': _format_margin_for_view(margins['canvas'])},
+        {'key': 'prints', 'label': 'Impressió fotogràfica', 'description': 'S\'aplica a còpia fotogràfica i serveix també de base per a acabats d\'impressió.', 'value': _format_margin_for_view(margins['prints'])},
+        {'key': 'foam', 'label': 'Foam', 'description': 'Permet separar el marge de foam del de la impressió si ho necessites.', 'value': _format_margin_for_view(margins['foam'])},
+        {'key': 'laminate_foam', 'label': 'Laminat + foam', 'description': 'Per si voleu treballar aquesta combinació amb un marge propi.', 'value': _format_margin_for_view(margins['laminate_foam'])},
+        {'key': 'fine_art', 'label': 'Fine art', 'description': 'Marge específic per a papers fine art i treballs més cuidats.', 'value': _format_margin_for_view(margins['fine_art'])},
+        {'key': 'albums', 'label': 'Àlbums', 'description': 'Preparat per quan l\'àrea privada també gestioni àlbums amb el mateix compte.', 'value': _format_margin_for_view(margins['albums'])},
     ]
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
@@ -2474,7 +2474,7 @@ def _fmt_measure(value):
         return str(int(num))
     return f"{num:.1f}".rstrip('0').rstrip('.')
 
-def _format_size_text(w, h, sep=' Ã— ', with_unit=False):
+def _format_size_text(w, h, sep=' × ', with_unit=False):
     if w in (None, '') or h in (None, ''):
         return ''
     try:
@@ -2487,10 +2487,10 @@ def _format_size_text(w, h, sep=' Ã— ', with_unit=False):
     text = f"{_fmt_measure(wf)}{sep}{_fmt_measure(hf)}"
     return text + (' cm' if with_unit else '')
 
-def _photo_size_text(c, sep=' Ã— ', with_unit=False):
+def _photo_size_text(c, sep=' × ', with_unit=False):
     return _format_size_text(c.get('amplada'), c.get('alcada'), sep=sep, with_unit=with_unit)
 
-def _final_size_text(c, sep=' Ã— ', with_unit=False):
+def _final_size_text(c, sep=' × ', with_unit=False):
     text = _format_size_text(c.get('final_amplada'), c.get('final_alcada'), sep=sep, with_unit=with_unit)
     if text:
         return text
@@ -2526,15 +2526,15 @@ def _display_piece_detail(c, lang='ca'):
             ('fotografia', 'client'): 'La porta el client',
             ('fotografia', 'laboratori'): 'La imprimeix el laboratori',
             ('puzzle', 'sobre_base'): 'Ja va sobre una base',
-            ('puzzle', 'sense_base'): 'Cal afegir suport abans dâ€™emmarcar-lo',
+            ('puzzle', 'sense_base'): 'Cal afegir suport abans d’emmarcar-lo',
             ('pintura_sense_bastidor', ''): 'Es resol amb encolat i es pot protegir amb vidre',
-            ('pintura_amb_bastidor', ''): 'Pot portar vidre si es vol protegir la peÃ§a',
+            ('pintura_amb_bastidor', ''): 'Pot portar vidre si es vol protegir la peça',
         },
         'es': {
             ('fotografia', 'client'): 'La trae el cliente',
             ('fotografia', 'laboratori'): 'La imprime el laboratorio',
             ('puzzle', 'sobre_base'): 'Ya va sobre una base',
-            ('puzzle', 'sense_base'): 'Hay que aÃ±adir soporte antes de enmarcarlo',
+            ('puzzle', 'sense_base'): 'Hay que añadir soporte antes de enmarcarlo',
             ('pintura_sense_bastidor', ''): 'Se trabaja con encolado y puede protegerse con vidrio',
             ('pintura_amb_bastidor', ''): 'Puede llevar vidrio si se quiere proteger la pieza',
         },
@@ -2616,7 +2616,7 @@ def _find_closest(rows, w, h, prefix=None):
     return best
 
 def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
-    """Closest by surface area â€” works for all products"""
+    """Closest by surface area — works for all products"""
     target = w * h
     best, best_diff = None, float('inf')
     for row in rows:
@@ -2700,9 +2700,9 @@ def api_closest():
             return {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
         return None
 
-    # Encolat/Protter: min-contain (producte ha de cobrir fÃ­sicament el marc)
-    # Vidre/PasspartÃº/ProEco: Ã rea propera (permet mides no estÃ ndard)
-    # ImpressiÃ³: Ã rea propera (format comercial mÃ©s similar)
+    # Encolat/Protter: min-contain (producte ha de cobrir físicament el marc)
+    # Vidre/Passpartú/ProEco: àrea propera (permet mides no estàndard)
+    # Impressió: àrea propera (format comercial més similar)
     def cc(table, cw, ch, prefix=None, exclude_multi=None, preu_col='preu'):
         """Closest by min overshoot (must contain the size)"""
         rows = [dict(r) for r in query(f'SELECT * FROM {table}')]
@@ -2741,16 +2741,16 @@ def mailto_data():
     MAILTO_T = {
         'ca': {
             'greet': 'Bon dia,',
-            'intro': "Us faig arribar el pressupost d'emmarcaciÃ³ per al client {client}.",
+            'intro': "Us faig arribar el pressupost d'emmarcació per al client {client}.",
             'detail': 'DETALL DE LA COMANDA:',
-            'mides': 'Mides peÃ§a',
+            'mides': 'Mides peça',
             'mida_final': 'Mida final',
-            'tipus_peca': 'PeÃ§a a emmarcar',
+            'tipus_peca': 'Peça a emmarcar',
             'vidre': 'Vidre',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Encolat',
             'revers_peu': 'Revers amb peu',
-            'impressio': 'ImpressiÃ³',
+            'impressio': 'Impressió',
             'inclosa': 'Inclosa',
             'encolat_label': 'Encolat',
             'laminat_label': 'Laminat',
@@ -2758,25 +2758,25 @@ def mailto_data():
             'vidre_label': 'Vidre',
             'doble_vidre': 'Doble vidre',
             'mirall': 'Mirall',
-            'passpartu_label': 'PasspartÃº',
-            'doble_passpartu': 'Doble passpartÃº',
+            'passpartu_label': 'Passpartú',
+            'doble_passpartu': 'Doble passpartú',
             'proeco_label': 'ProEco',
             'piece_photo': 'Fotografia',
-            'piece_lamina': 'LÃ mina',
+            'piece_lamina': 'Làmina',
             'piece_painting_unstretched': 'Pintura sense bastidor',
             'piece_painting_stretched': 'Pintura amb bastidor',
             'piece_puzzle': 'Puzzle',
             'piece_cross_stitch': 'Punt de creu',
-            'preu': 'PREU FINAL: {price:.2f} EUR (IVA inclÃ²s)',
+            'preu': 'PREU FINAL: {price:.2f} EUR (IVA inclòs)',
             'pendent': 'Pendent de cobrar: {pend:.2f} EUR',
             'obs': 'Observacions: {obs}',
             'attach': 'Trobareu el pressupost en PDF adjunt.',
             'bye': 'Atentament,',
-            'subject': 'Pressupost emmarcaciÃ³ - {client}'
+            'subject': 'Pressupost emmarcació - {client}'
         },
         'es': {
-            'greet': 'Buenos dÃ­as,',
-            'intro': 'Os envÃ­o el presupuesto de enmarcaciÃ³n para el cliente {client}.',
+            'greet': 'Buenos días,',
+            'intro': 'Os envío el presupuesto de enmarcación para el cliente {client}.',
             'detail': 'DETALLE DEL PEDIDO:',
             'mides': 'Medidas pieza',
             'mida_final': 'Medida final',
@@ -2785,7 +2785,7 @@ def mailto_data():
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Montaje',
             'revers_peu': 'Reverso con pie',
-            'impressio': 'ImpresiÃ³n',
+            'impressio': 'Impresión',
             'inclosa': 'Incluida',
             'encolat_label': 'Encolado',
             'laminat_label': 'Laminado',
@@ -2793,11 +2793,11 @@ def mailto_data():
             'vidre_label': 'Vidrio',
             'doble_vidre': 'Doble vidrio',
             'mirall': 'Espejo',
-            'passpartu_label': 'PasspartÃº',
-            'doble_passpartu': 'Doble passpartÃº',
+            'passpartu_label': 'Passpartú',
+            'doble_passpartu': 'Doble passpartú',
             'proeco_label': 'ProEco',
-            'piece_photo': 'FotografÃ­a',
-            'piece_lamina': 'LÃ¡mina',
+            'piece_photo': 'Fotografía',
+            'piece_lamina': 'Lámina',
             'piece_painting_unstretched': 'Pintura sin bastidor',
             'piece_painting_stretched': 'Pintura con bastidor',
             'piece_puzzle': 'Puzzle',
@@ -2805,9 +2805,9 @@ def mailto_data():
             'preu': 'PRECIO FINAL: {price:.2f} EUR (IVA incluido)',
             'pendent': 'Pendiente de cobro: {pend:.2f} EUR',
             'obs': 'Observaciones: {obs}',
-            'attach': 'EncontrarÃ©is el presupuesto en PDF adjunto.',
+            'attach': 'Encontraréis el presupuesto en PDF adjunto.',
             'bye': 'Atentamente,',
-            'subject': 'Presupuesto enmarcaciÃ³n - {client}'
+            'subject': 'Presupuesto enmarcación - {client}'
         },
         'en': {
             'greet': 'Good morning,',
@@ -2851,7 +2851,7 @@ def mailto_data():
     piece_type = _display_piece_type(c, tt)
     piece_detail = _display_piece_detail(c, lang)
     if piece_type and piece_detail:
-        piece_type = f"{piece_type} Â· {piece_detail}"
+        piece_type = f"{piece_type} · {piece_detail}"
     proteccio_label = _display_proteccio(c, tt)
     interior_label = _display_interior(c, tt)
     revers_peu_label = _display_revers_peu(c, tt)
@@ -2926,7 +2926,7 @@ def enviar_email():
     piece_type = _display_piece_type(c, pdf_lang)
     piece_detail = _display_piece_detail(c, (c.get('lang') or 'ca').lower())
     if piece_type and piece_detail:
-        piece_type = f"{piece_type} Â· {piece_detail}"
+        piece_type = f"{piece_type} · {piece_detail}"
     proteccio_label = _display_proteccio(c, pdf_lang) or '-'
     interior_label = _display_interior(c, pdf_lang) or '-'
     revers_peu_label = _display_revers_peu(c, pdf_lang) or '-'
@@ -2937,7 +2937,7 @@ def enviar_email():
     <h2 style='color:#1A6B45;font-family:sans-serif;border-bottom:2px solid #1A6B45;padding-bottom:8px'>
         Nou pressupost d'emmarcacio</h2>
     <p style='font-family:sans-serif;font-size:15px'><b>Comers:</b> {nom_comerc}</p>
-    <p style='font-family:sans-serif;font-size:15px'><b>Client:</b> {c['client_nom']} &nbsp;Â·&nbsp; {c['client_tel'] or '-'}</p>
+    <p style='font-family:sans-serif;font-size:15px'><b>Client:</b> {c['client_nom']} &nbsp;·&nbsp; {c['client_tel'] or '-'}</p>
     <p style='font-family:sans-serif;font-size:15px'><b>Data:</b> {c['data']}</p>
     <hr style='border:1px solid #E5E2DB;margin:12px 0'>
     {"<p style='font-family:sans-serif;font-size:14px'><b>" + pdf_lang['tipus_peca'] + ":</b> " + piece_type + "</p>" if piece_type else ""}
@@ -3022,7 +3022,7 @@ def init_db():
                     marge REAL, descompte REAL, quantitat REAL,
                     preu_net REAL, preu_final REAL, entrega REAL, pendent REAL,
                     observacions TEXT, sessio_id TEXT,
-                    opcio_nom TEXT DEFAULT 'OpciÃ³ A')""",
+                    opcio_nom TEXT DEFAULT 'Opció A')""",
                 """CREATE TABLE IF NOT EXISTS config (
                     clau TEXT PRIMARY KEY, valor TEXT)""",
             ]
@@ -3134,7 +3134,7 @@ def init_db():
                     marge REAL, descompte REAL, quantitat REAL,
                     preu_net REAL, preu_final REAL,
                     entrega REAL, pendent REAL, observacions TEXT,
-                    sessio_id TEXT, opcio_nom TEXT DEFAULT 'OpciÃ³ A'
+                    sessio_id TEXT, opcio_nom TEXT DEFAULT 'Opció A'
                 );
                 CREATE TABLE IF NOT EXISTS config (
                     clau TEXT PRIMARY KEY, valor TEXT
