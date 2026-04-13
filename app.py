@@ -13,6 +13,12 @@ from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
                                  TableStyle, HRFlowable)
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import os as _os
+_FONT_DIR = _os.path.join(_os.path.dirname(__file__), 'static', 'fonts')
+pdfmetrics.registerFont(TTFont('DejaVu', _os.path.join(_FONT_DIR, 'DejaVuSans.ttf')))
+pdfmetrics.registerFont(TTFont('DejaVu-Bold', _os.path.join(_FONT_DIR, 'DejaVuSans-Bold.ttf')))
 import io
 
 app = Flask(__name__)
@@ -1744,7 +1750,7 @@ def crear_pdf_comparativa(comandes):
     WHITE = colors.white
 
     def p(txt, bold=False, size=10, color=DARK, align='LEFT'):
-        st = ParagraphStyle('x', fontName='Helvetica-Bold' if bold else 'Helvetica',
+        st = ParagraphStyle('x', fontName='DejaVu-Bold' if bold else 'DejaVu',
                             fontSize=size, textColor=color,
                             alignment={'LEFT':0,'CENTER':1,'RIGHT':2}[align])
         return Paragraph(str(txt), st)
@@ -1861,7 +1867,7 @@ def crear_pdf_comparativa(comandes):
         ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
         ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
         ('BACKGROUND',(0,0),(0,-1),colors.HexColor("#F2F0EC")),
-        ('FONTNAME',(0,0),(0,-1),'Helvetica-Bold'),
+        ('FONTNAME',(0,0),(0,-1),'DejaVu-Bold'),
         ('LINEABOVE',(0,price_start),(-1,price_start),1.5,ACC),
         ('BACKGROUND',(0,price_start+2),(-1,price_start+2),colors.HexColor("#E8F3EE")),
         ('BACKGROUND',(0,price_start+4),(-1,price_start+4),colors.HexColor("#FAEAEA")),
@@ -1901,7 +1907,7 @@ def crear_pdf_cataleg_admin(moldures, q='', proveidor=''):
             str(txt),
             ParagraphStyle(
                 name=f"cat-{size}-{int(bold)}-{align}",
-                fontName='Helvetica-Bold' if bold else 'Helvetica',
+                fontName='DejaVu-Bold' if bold else 'DejaVu',
                 fontSize=size,
                 leading=size + 2,
                 textColor=color,
@@ -2157,7 +2163,7 @@ def crear_pdf(c):
     WHITE = colors.white
 
     def p(txt, bold=False, size=10, color=DARK, align='LEFT'):
-        st = ParagraphStyle('x', fontName='Helvetica-Bold' if bold else 'Helvetica',
+        st = ParagraphStyle('x', fontName='DejaVu-Bold' if bold else 'DejaVu',
                             fontSize=size, textColor=color,
                             alignment={'LEFT':0,'CENTER':1,'RIGHT':2}[align],
                             leading=size*1.4)
