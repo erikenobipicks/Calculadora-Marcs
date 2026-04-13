@@ -1,4 +1,4 @@
-﻿import base64, hashlib, hmac, secrets, os, json, time, unicodedata
+﻿import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime
@@ -813,6 +813,45 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+# ── Passpartú: càlcul dinàmic de preu ────────────────────────────────────────
+_SHEET_W      = 80       # ample full en cm
+_SHEET_H      = 120      # alt full en cm
+_SHEET_PRICE  = 7.0      # preu full en €
+_COST_CM2     = 0.000729 # cost per cm²
+_MULT_PETITA  = 8.0      # multiplicador fins a _LIMIT_A cm²
+_MULT_MITJANA = 5.0      # multiplicador entre _LIMIT_A i _LIMIT_B cm²
+_MULT_GRAN    = 3.5      # multiplicador per sobre de _LIMIT_B cm²
+_LIMIT_A      = 900      # cm² (~30x30)
+_LIMIT_B      = 4800     # cm² (~60x80)
+_MIN_PRICE    = 5.50     # preu mínim per peça
+
+def _peces_per_full(ew, eh):
+    # Quantes peces caben en un full 80x120, provant les dues orientacions.
+    n1 = math.floor(_SHEET_W / ew) * math.floor(_SHEET_H / eh)
+    n2 = math.floor(_SHEET_W / eh) * math.floor(_SHEET_H / ew)
+    return max(1, n1, n2)
+
+def calcular_precio_passpartu(ew, eh):
+    # ew, eh: mesura exterior del passpartu en cm. Retorna preu arrodonit a 2 decimals.
+    area = ew * eh
+    n = _peces_per_full(ew, eh)
+    coste_cm2  = area * _COST_CM2
+    coste_hoja = _SHEET_PRICE / n
+    coste_base = max(coste_cm2, coste_hoja)
+    if area <= _LIMIT_A:
+        mult = _MULT_PETITA
+        t = (area - _LIMIT_A * 0.92) / (_LIMIT_A * 0.16)
+        if 0 < t < 1:
+            mult = _MULT_PETITA + t * (_MULT_MITJANA - _MULT_PETITA)
+    elif area <= _LIMIT_B:
+        mult = _MULT_MITJANA
+        t = (area - _LIMIT_B * 0.92) / (_LIMIT_B * 0.16)
+        if 0 < t < 1:
+            mult = _MULT_MITJANA + t * (_MULT_GRAN - _MULT_MITJANA)
+    else:
+        mult = _MULT_GRAN
+    return round(max(coste_base * mult, _MIN_PRICE), 2)
+
 # â”€â”€ Routes: Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1210,8 +1249,13 @@ def lookup():
         r = query('SELECT preu FROM vidres WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
         if r: return jsonify({'ok': True, 'preu': r['preu']})
     elif tipus == 'passpartout':
-        r = query('SELECT preu FROM passpartout WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
-        if r: return jsonify({'ok': True, 'preu': r['preu']})
+        # El preu es calcula dinàmicament. La ref té format "EWxEH" (ex: "30x40").
+        try:
+            parts = ref.lower().replace('pas-','').split('x')
+            ew, eh = float(parts[0]), float(parts[1])
+            return jsonify({'ok': True, 'preu': calcular_precio_passpartu(ew, eh)})
+        except Exception:
+            return jsonify({'ok': False})
     elif tipus == 'encolat':
         r = query('SELECT preu FROM encolat_pro WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
         if r: return jsonify({'ok': True, 'preu': r['preu']})
@@ -2793,9 +2837,9 @@ def api_closest():
         'vidre':        cc('vidres',      w, h, exclude_multi=['DV-','MIR-']),
         'doble_vidre':  cc('vidres',      w, h, prefix='DV-'),
         'mirall':       cc('vidres',      w, h, prefix='MIR-'),
-        'passpartu':    cc('passpartout', w, h, prefix='1PAS'),
-        'doble_pas':    cc('passpartout', w, h, prefix='DOBPAS'),
-        'proeco':       cc('passpartout', w, h, prefix='PROECO'),
+        'passpartu':    {'ref': f'pas-{w}x{h}', 'preu': calcular_precio_passpartu(w, h)},
+        'doble_pas':    {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 1.9, 2)},
+        'proeco':       {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 0.75, 2)},
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
