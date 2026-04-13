@@ -1318,17 +1318,20 @@ def guardar():
         (user_id, data, client_nom, client_tel,
          pre_marc, marc_principal, amplada, alcada, copia,
          encolat, vidre, passpartout, impressio,
+         revers_peu, revers_peu_preu,
          tipus_peca, tipus_peca_detall, final_amplada, final_alcada,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
         d.get('amplada',0), d.get('alcada',0), d.get('copia',0),
         d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
         d.get('impressio',''),
+        1 if d.get('revers_peu') else 0,
+        d.get('revers_peu_preu', 0),
         d.get('tipus_peca','fotografia'),
         d.get('tipus_peca_detall',''),
         d.get('final_amplada',0), d.get('final_alcada',0),
@@ -1803,6 +1806,7 @@ def crear_pdf_comparativa(comandes):
         (t['muntatge'],       'muntatge_label',  False),
         (t['vidre_mirall'],   'proteccio_label', False),
         (t['interior'],       'interior_label',  False),
+        (t['revers_peu'],     'revers_peu_label', False),
         (t['impressio'],      'impressio_label', False),
         (t['observacions'],   'observacions',    False),
         (t['preu_net_label'], 'preu_net',        True),
@@ -1829,6 +1833,8 @@ def crear_pdf_comparativa(comandes):
                 val = _display_proteccio(c, t)
             elif key == 'interior_label':
                 val = _display_interior(c, t)
+            elif key == 'revers_peu_label':
+                val = _display_revers_peu(c, t)
             elif key == 'impressio_label':
                 val = _display_impressio(c, t)
             elif key == 'iva':
@@ -1989,6 +1995,7 @@ PDF_T = {
         'muntatge': 'Muntatge',
         'proteccio': 'ProtecciÃ³',
         'interior': 'Interior',
+        'revers_peu': 'Revers amb peu',
         'impressio': 'ImpressiÃ³',
         'observacions': 'Observacions',
         'preu_net': 'Preu net (sense IVA)',
@@ -2040,6 +2047,7 @@ PDF_T = {
         'muntatge': 'Montaje',
         'proteccio': 'ProtecciÃ³n',
         'interior': 'Interior',
+        'revers_peu': 'Reverso con pie',
         'impressio': 'ImpresiÃ³n',
         'observacions': 'Observaciones',
         'preu_net': 'Precio neto (sin IVA)',
@@ -2091,6 +2099,7 @@ PDF_T = {
         'muntatge': 'Mounting',
         'proteccio': 'Protection',
         'interior': 'Interior',
+        'revers_peu': 'Backing with stand',
         'impressio': 'Print',
         'observacions': 'Notes',
         'preu_net': 'Net price (excl. VAT)',
@@ -2272,6 +2281,7 @@ def crear_pdf(c):
     muntatge_label = _display_muntatge(c, t)
     proteccio_label = _display_proteccio(c, t)
     interior_label = _display_interior(c, t)
+    revers_peu_label = _display_revers_peu(c, t)
     impressio_label = _display_impressio(c, t)
 
     if final_size:
@@ -2284,6 +2294,8 @@ def crear_pdf(c):
         det_rows.append(fila(t['vidre_mirall']+':', proteccio_label))
     if interior_label:
         det_rows.append(fila(t['interior']+':', interior_label))
+    if revers_peu_label:
+        det_rows.append(fila(t['revers_peu']+':', revers_peu_label))
     if impressio_label:
         det_rows.append(fila(t['impressio']+':', impressio_label))
     det_rows.append(fila(t['marc_principal']+':',
@@ -2315,6 +2327,8 @@ def crear_pdf(c):
         det_rows.append(fila(t['vidre_mirall']+':', proteccio_label))
     if interior_label:
         det_rows.append(fila(t['interior']+':', interior_label))
+    if revers_peu_label:
+        det_rows.append(fila(t['revers_peu']+':', revers_peu_label))
     if impressio_label:
         det_rows.append(fila(t['impressio']+':', impressio_label))
     if c.get('observacions'):
@@ -2568,6 +2582,17 @@ def _display_interior(c, t):
         return t['proeco_label']
     return t['passpartu_label']
 
+def _display_revers_peu(c, t):
+    raw = c.get('revers_peu')
+    if isinstance(raw, bool):
+        enabled = raw
+    else:
+        enabled = str(raw or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    if not enabled:
+        return ''
+    price = _safe_float(c.get('revers_peu_preu'), 0.0)
+    return f'{price:.2f} €'
+
 def _display_impressio(c, t):
     ref = (c.get('impressio') or '').strip()
     if not ref or ref == '-':
@@ -2724,6 +2749,7 @@ def mailto_data():
             'vidre': 'Vidre',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Encolat',
+            'revers_peu': 'Revers amb peu',
             'impressio': 'ImpressiÃ³',
             'inclosa': 'Inclosa',
             'encolat_label': 'Encolat',
@@ -2758,6 +2784,7 @@ def mailto_data():
             'vidre': 'Vidrio',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Montaje',
+            'revers_peu': 'Reverso con pie',
             'impressio': 'ImpresiÃ³n',
             'inclosa': 'Incluida',
             'encolat_label': 'Encolado',
@@ -2792,6 +2819,7 @@ def mailto_data():
             'vidre': 'Glass',
             'passpartout': 'Passpartout/ProEco',
             'encolat': 'Mounting',
+            'revers_peu': 'Backing with stand',
             'impressio': 'Print',
             'inclosa': 'Included',
             'encolat_label': 'Mounting',
@@ -2826,6 +2854,7 @@ def mailto_data():
         piece_type = f"{piece_type} Â· {piece_detail}"
     proteccio_label = _display_proteccio(c, tt)
     interior_label = _display_interior(c, tt)
+    revers_peu_label = _display_revers_peu(c, tt)
     muntatge_label = _display_muntatge(c, tt)
     impressio_label = _display_impressio(c, tt)
     lines = [
@@ -2845,6 +2874,8 @@ def mailto_data():
         lines.append(f"  {tt['vidre']}: {proteccio_label}")
     if interior_label:
         lines.append(f"  {tt['passpartout']}: {interior_label}")
+    if revers_peu_label:
+        lines.append(f"  {tt['revers_peu']}: {revers_peu_label}")
     if muntatge_label:
         lines.append(f"  {tt['encolat']}: {muntatge_label}")
     if impressio_label:
@@ -2898,6 +2929,7 @@ def enviar_email():
         piece_type = f"{piece_type} Â· {piece_detail}"
     proteccio_label = _display_proteccio(c, pdf_lang) or '-'
     interior_label = _display_interior(c, pdf_lang) or '-'
+    revers_peu_label = _display_revers_peu(c, pdf_lang) or '-'
     muntatge_label = _display_muntatge(c, pdf_lang) or '-'
     impressio_label = _display_impressio(c, pdf_lang) or '-'
     nota_html = f"<p style='font-family:sans-serif;color:#C8873A'><b>Nota:</b> {nota}</p>" if nota else ""
@@ -2914,6 +2946,7 @@ def enviar_email():
     <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['muntatge']}:</b> {muntatge_label}</p>
     <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['vidre_mirall']}:</b> {proteccio_label}</p>
     <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['interior']}:</b> {interior_label}</p>
+    <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['revers_peu']}:</b> {revers_peu_label}</p>
     <p style='font-family:sans-serif;font-size:14px'><b>{pdf_lang['impressio']}:</b> {impressio_label}</p>
     {"<p style='font-family:sans-serif;font-size:14px'><b>Obs:</b> " + obs + "</p>" if obs else ""}
     <hr style='border:1px solid #E5E2DB;margin:12px 0'>
@@ -2981,6 +3014,8 @@ def init_db():
                     client_nom TEXT, client_tel TEXT, pre_marc TEXT,
                     marc_principal TEXT, amplada REAL, alcada REAL, copia REAL,
                     encolat TEXT, vidre TEXT, passpartout TEXT, impressio TEXT,
+                    revers_peu INTEGER DEFAULT 0,
+                    revers_peu_preu REAL DEFAULT 0,
                     tipus_peca TEXT DEFAULT '',
                     tipus_peca_detall TEXT DEFAULT '',
                     final_amplada REAL DEFAULT 0, final_alcada REAL DEFAULT 0,
@@ -2999,6 +3034,8 @@ def init_db():
                     print("DDL err:", e)
             for tbl, col, typ in [
                 ('comandes','impressio','TEXT'),
+                ('comandes','revers_peu','INTEGER DEFAULT 0'),
+                ('comandes','revers_peu_preu','REAL DEFAULT 0'),
                 ('comandes','tipus_peca',"TEXT DEFAULT ''"),
                 ('comandes','tipus_peca_detall',"TEXT DEFAULT ''"),
                 ('comandes','final_amplada','REAL DEFAULT 0'),
@@ -3090,6 +3127,8 @@ def init_db():
                     pre_marc TEXT, marc_principal TEXT,
                     amplada REAL, alcada REAL, copia REAL,
                     encolat TEXT, vidre TEXT, passpartout TEXT, impressio TEXT,
+                    revers_peu INTEGER DEFAULT 0,
+                    revers_peu_preu REAL DEFAULT 0,
                     tipus_peca TEXT DEFAULT '',
                     final_amplada REAL DEFAULT 0, final_alcada REAL DEFAULT 0,
                     marge REAL, descompte REAL, quantitat REAL,
@@ -3117,6 +3156,8 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN fiscal_id TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN notes_validacio TEXT DEFAULT ''",
                 "ALTER TABLE comandes ADD COLUMN num_pressupost TEXT",
+                "ALTER TABLE comandes ADD COLUMN revers_peu INTEGER DEFAULT 0",
+                "ALTER TABLE comandes ADD COLUMN revers_peu_preu REAL DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN pagat INTEGER DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN entregat INTEGER DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN lang TEXT DEFAULT 'ca'",

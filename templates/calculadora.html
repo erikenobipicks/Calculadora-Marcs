@@ -210,7 +210,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
-    <a href="/">Inici</a>
+    <a href="https://reusrevela.cat/area-privada" target="_self">Inici</a>
     <a href="/historial">Historial</a>
     <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
@@ -479,6 +479,18 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         </div>
 
         <!-- Refs seleccionades (per al càlcul) -->
+        <div class="grup" id="grup-revers-peu">
+          <div class="grup-label">Revers amb peu</div>
+          <div class="grup-opcions">
+            <div class="opt-btn disabled" id="opt-revers-peu" onclick="toggleReversPeu()" style="cursor:pointer">
+              <input type="checkbox" id="chk-revers-peu" style="display:none" disabled>
+              <span class="opt-text">Revers amb peu</span>
+              <span class="opt-preu" id="preu-revers-peu">-</span>
+            </div>
+          </div>
+          <div id="revers-peu-avis" class="desc" style="display:none;color:var(--red);margin-top:.45rem"></div>
+        </div>
+
         <input type="hidden" id="ref-muntatge" value="">
         <input type="hidden" id="ref-proteccio" value="">
         <input type="hidden" id="ref-interior" value="">
@@ -637,6 +649,7 @@ function setLang(lang){
     b.style.color      = lang===k ? '#fff' : 'var(--muted)';
   });
   updateConstraintNotice();
+  updateReversPeu();
 }
 
 var T = {
@@ -776,6 +789,12 @@ var _tipusGrupMap = {
   proteccio: {vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar'},
   interior:  {passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'}
 };
+var REVERS_PREUS = {
+  '10x15': 1.25,
+  '13x18': 1.73,
+  '15x20': 1.95,
+  '20x25': 2.18
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function fmt(n){ return n.toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
@@ -886,6 +905,33 @@ function getFinalSizeText(){
     return getPhotoSizeText();
   }
   return fmtMesura(w)+' x '+fmtMesura(h)+' cm';
+}
+function getCurrentMarcDescription(){
+  var el = document.getElementById('desc-marc');
+  return el ? (el.textContent || '') : '';
+}
+function placeReversPeuGroup(){
+  var group = document.getElementById('grup-revers-peu');
+  var printOpt = document.getElementById('opt-impressio');
+  if(!group || !printOpt) return;
+  var printGroup = printOpt.closest('.grup');
+  if(printGroup && printGroup.parentNode && group !== printGroup.previousElementSibling){
+    printGroup.parentNode.insertBefore(group, printGroup);
+  }
+}
+function getReversPeuWarningText(){
+  return ({
+    ca: 'Mida no disponible per a revers amb peu en marc de fusta',
+    es: 'Medida no disponible para reverso con pie en marco de madera',
+    en: 'Size not available for backing with stand on wooden frame'
+  }[_lang] || 'Mida no disponible per a revers amb peu en marc de fusta');
+}
+function getReversPeuIncludedText(){
+  return ({
+    ca: 'Inclos',
+    es: 'Incluido',
+    en: 'Included'
+  }[_lang] || 'Inclos');
 }
 function preuDisplay(cost, isImp){
   if(rmode==='cost') return fmtCost(cost);
@@ -1242,7 +1288,7 @@ function lookupRef(t,ref){
   if(!ref||ref==='-'){
     PREUS[t]=0; GRUIX[t]=0; setChips(t,[]);
     if(t==='pre'){ document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
-    if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); setProtterDisabled(false); _lastFetchKey=''; recalcMides(); }
+    if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); setProtterDisabled(false); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
     calcular(); return;
   }
   fetch('/api/lookup?tipus=moldura&ref='+encodeURIComponent(ref))
@@ -1260,7 +1306,7 @@ function lookupRef(t,ref){
           document.getElementById('desc-marc').style.color='';
           document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
           setProtterDisabled(true);
-          _lastFetchKey=''; recalcMides(); return;
+          _lastFetchKey=''; recalcMides(); updateReversPeu(); return;
         }
       } else {
         PREUS[t]=0; GRUIX[t]=0;
@@ -1270,7 +1316,7 @@ function lookupRef(t,ref){
           document.getElementById('desc-marc').textContent = msg;
           document.getElementById('desc-marc').style.color = 'var(--red)';
           resetFoto();
-          _lastFetchKey=''; recalcMides();
+          _lastFetchKey=''; recalcMides(); updateReversPeu();
           showAlert(msg + ' — Comprova la referència o consulta el catàleg.', 'err');
         } else if(t==='pre'){
           document.getElementById('desc-pre').textContent = msg;
@@ -1300,6 +1346,7 @@ function recalcMides(){
     document.getElementById('mida-total').value='';
     document.getElementById('mida-total-simple').textContent=(w>0&&h>0)?'Mida: '+w+' x '+h+' cm':'';
   }
+  updateReversPeu();
   enforceMaterialLimits(true);
   _lastFetchKey='';
   fetchClosest();
@@ -1339,6 +1386,7 @@ function fetchClosest(){
         }
       });
       if(document.getElementById('chk-impressio').checked) updateImpressioPreu();
+      updateReversPeu();
       calcular();
     });
 }
@@ -1354,6 +1402,82 @@ function costGrup(grup){
 function costImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
   return CLOSEST.impressio?CLOSEST.impressio.preu:(PREUS.impressio||0);
+}
+function getReversPeuBasePrice(){
+  var chk = document.getElementById('chk-revers-peu');
+  if(!chk || !chk.checked) return 0;
+  var desc = getCurrentMarcDescription();
+  var esAlumini = desc.toLowerCase().includes('alumini');
+  if(esAlumini){
+    // TODO: aplicar tarifa d'alumini quan es defineixi
+    return 0;
+  }
+  var amp = parseInt(document.getElementById('amplada').value, 10);
+  var alc = parseInt(document.getElementById('alcada').value, 10);
+  if(!Number.isFinite(amp) || !Number.isFinite(alc) || amp <= 0 || alc <= 0) return 0;
+  var key = [amp, alc].sort(function(a, b){ return a-b; }).join('x');
+  return REVERS_PREUS[key] || 0;
+}
+function costReversPeu(){
+  return getReversPeuBasePrice();
+}
+function toggleReversPeu(){
+  var opt = document.getElementById('opt-revers-peu');
+  var chk = document.getElementById('chk-revers-peu');
+  if(!opt || !chk) return;
+  if(opt.classList.contains('disabled')) return;
+  chk.checked = !chk.checked;
+  opt.classList.toggle('selected', chk.checked);
+  calcular();
+}
+function updateReversPeu(){
+  var opt = document.getElementById('opt-revers-peu');
+  var chk = document.getElementById('chk-revers-peu');
+  var preu = document.getElementById('preu-revers-peu');
+  var avis = document.getElementById('revers-peu-avis');
+  if(!opt || !chk || !preu || !avis) return;
+
+  var refMarc = (document.getElementById('marc_principal').value || '').trim();
+  var hasMarc = !!refMarc && (((PREUS.marc||0) > 0) || ((GRUIX.marc||0) > 0));
+  var amp = parseInt(document.getElementById('amplada').value, 10);
+  var alc = parseInt(document.getElementById('alcada').value, 10);
+  var desc = getCurrentMarcDescription() || '';
+  var esAlumini = desc.toLowerCase().includes('alumini');
+
+  avis.style.display = 'none';
+  avis.textContent = '';
+
+  if(!hasMarc || !Number.isFinite(amp) || !Number.isFinite(alc) || amp <= 0 || alc <= 0){
+    chk.checked = false;
+    chk.disabled = true;
+    opt.classList.remove('selected');
+    opt.classList.add('disabled');
+    preu.textContent = '-';
+    return;
+  }
+
+  chk.disabled = false;
+  opt.classList.remove('disabled');
+
+  if(esAlumini){
+    preu.textContent = getReversPeuIncludedText();
+    return;
+  }
+
+  var key = [amp, alc].sort(function(a, b){ return a-b; }).join('x');
+  var base = REVERS_PREUS[key];
+  if(base){
+    preu.textContent = preuDisplay(base, false);
+    return;
+  }
+
+  chk.checked = false;
+  chk.disabled = true;
+  opt.classList.remove('selected');
+  opt.classList.add('disabled');
+  preu.textContent = '-';
+  avis.textContent = getReversPeuWarningText();
+  avis.style.display = 'block';
 }
 function updateImpressioPreu(){
   PREUS.impressio = document.getElementById('chk-impressio').checked&&CLOSEST.impressio?CLOSEST.impressio.preu:0;
@@ -1646,6 +1770,7 @@ function calcular(){
   var cMuntatge  = costGrup('muntatge');
   var cProteccio = costGrup('proteccio');
   var cInterior  = costGrup('interior');
+  var cRevers    = costReversPeu();
   // Extra windows cost (2€ each)
   var finestresExtra = 0;  // PVP final (marge NOT applied)
   var interior = document.querySelector('input[name="interior"]:checked');
@@ -1662,11 +1787,11 @@ function calcular(){
     cMol=(per+(GRUIX.marc||0)*8)*((PREUS.marc||0)/100)
         +(per+((GRUIX.pre||0)+(GRUIX.marc||0))*8)*((PREUS.pre||0)/100);
   }
-  var cTot=cMuntatge+cProteccio+cInterior+cImpressio+cMol+finestresExtra;
+  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra;
 
   // PVP net (amb marge, sense IVA, sense descompte)
   var pvpMarc = cMol*(1+marge/100);
-  var pvpExt  = (cMuntatge+cProteccio+cInterior+finestresExtra)*(1+marge/100);
+  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra)*(1+marge/100);
   var pvpImp  = cImpressio*(1+(marge_impressio||marge)/100);
   var pNet    = (pvpMarc+pvpExt+pvpImp)*qty;
 
@@ -1695,11 +1820,17 @@ function calcular(){
   }
   document.getElementById('r-lbl-final').textContent=isCost?'Cost total (amb IVA)':(desc>0?'Total amb IVA (desc. inclòs)':'Total amb IVA 21%');
   // Cost detail (only update if elements exist)
-  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior);
+  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers);
   var ecm=document.getElementById('ci-mol'); if(ecm) ecm.textContent=fmt(cMol);
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
 
-  window._c={preu_net:pNet, preu_final:pFin, pendent:pend, descEur:descEur};
+  window._c={
+    preu_net:pNet,
+    preu_final:pFin,
+    pendent:pend,
+    descEur:descEur,
+    revers_peu_preu: parseFloat(((((cRevers*(1+marge/100))*1.21)*qty) || 0).toFixed(2))
+  };
 }
 
 // ── Toggle cost/pvp ───────────────────────────────────────────────────────
@@ -1712,6 +1843,7 @@ function toggleCost(){
   btn.style.color=on?'#fff':'rgba(255,255,255,.4)';
   var cp=document.getElementById('cost-panel'); if(cp) cp.style.display=on?'block':'none';
   updateBtnPreus();
+  updateReversPeu();
   calcular();
 }
 
@@ -1750,6 +1882,8 @@ function guardar(){
     vidre:document.getElementById('ref-proteccio').value||'-',
     passpartout:document.getElementById('ref-interior').value||'-',
     impressio:document.getElementById('ref-impressio-val').value||'-',
+    revers_peu:document.getElementById('chk-revers-peu').checked,
+    revers_peu_preu: window._c ? parseFloat((window._c.revers_peu_preu||0).toFixed(2)) : 0,
     marge:marge,
     descompte:parseFloat(document.getElementById('descompte').value)||0,
     quantitat:parseFloat(document.getElementById('quantitat').value)||1,
@@ -1860,6 +1994,7 @@ function capturaEstat(){
     proteccio:(document.querySelector('input[name="proteccio"]:checked')||{}).value||'',
     interior:(document.querySelector('input[name="interior"]:checked')||{}).value||'',
     impressio:document.getElementById('chk-impressio').checked,
+    revers_peu:document.getElementById('chk-revers-peu').checked,
     descompte:document.getElementById('descompte').value,
     quantitat:document.getElementById('quantitat').value,
     entrega:document.getElementById('entrega').value,
@@ -1934,6 +2069,14 @@ function restauraEstat(e){
   Promise.all([marcProm, preProm]).then(function(){
     _lastFetchKey='';
     recalcMides();
+    var reversChecked = !!e.revers_peu;
+    var reversOpt = document.getElementById('opt-revers-peu');
+    var reversChk = document.getElementById('chk-revers-peu');
+    if(reversChk && reversOpt && !reversOpt.classList.contains('disabled') && reversChecked){
+      reversChk.checked = true;
+      reversOpt.classList.add('selected');
+    }
+    calcular();
   });
 }
 
@@ -2006,6 +2149,13 @@ function netejar(){
   document.getElementById('opt-impressio').classList.remove('locked');
   document.getElementById('opt-impressio').dataset.locked='0';
   document.getElementById('opt-impressio').title='';
+  document.getElementById('chk-revers-peu').checked=false;
+  document.getElementById('chk-revers-peu').disabled=true;
+  document.getElementById('opt-revers-peu').classList.remove('selected');
+  document.getElementById('opt-revers-peu').classList.add('disabled');
+  document.getElementById('preu-revers-peu').textContent='-';
+  document.getElementById('revers-peu-avis').style.display='none';
+  document.getElementById('revers-peu-avis').textContent='';
   PREUS.impressio=0;
   ['ref-muntatge','ref-proteccio','ref-interior','ref-impressio-val'].forEach(function(id){document.getElementById(id).value='';});
   ['pre','marc'].forEach(function(t){setChips(t,[]);});
@@ -2021,6 +2171,7 @@ function netejar(){
   document.getElementById('vidre-obligatori').style.display='none';
   setPieceContextNote('');
   applyIncompatibilities();
+  updateReversPeu();
   calcular();
 }
 
@@ -2131,6 +2282,7 @@ document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
 });
 setLang('ca');
 renderTabs();
+placeReversPeuGroup();
 applyIncompatibilities();
 recalcMides();
 
