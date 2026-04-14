@@ -2059,6 +2059,18 @@ function obrirMailComanda(){
   document.getElementById('mail-cos').value = buildMailText();
   var clientMail = '';  // podria venir d'un camp futur
   document.getElementById('mail-destinatari').value = clientMail;
+  // Activa/desactiva el botó d'albarà segons si hi ha nom de client
+  var nomClient = (document.getElementById('client_nom').value||'').trim();
+  var btnAlbara = document.getElementById('mail-btn-albara');
+  if(nomClient){
+    btnAlbara.disabled = false;
+    btnAlbara.style.opacity = '1';
+    btnAlbara.title = '';
+  } else {
+    btnAlbara.disabled = true;
+    btnAlbara.style.opacity = '0.45';
+    btnAlbara.title = 'Cal omplir el nom del client primer';
+  }
   var overlay = document.getElementById('mail-overlay');
   overlay.style.display = 'flex';
 }

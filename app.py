@@ -1923,7 +1923,7 @@ def api_crear_albara():
         return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
 
     d = request.get_json(force=True) or {}
-    client_nom   = (d.get('client_nom') or '').strip() or 'Client'
+    client_nom   = (d.get('client_nom') or '').strip()
     client_tel   = (d.get('client_tel') or '').strip()
     cost_prod    = float(d.get('cost_produccio') or 0)
     preu_net     = float(d.get('preu_net') or 0)
@@ -1939,6 +1939,9 @@ def api_crear_albara():
     is_admin = bool(_row_get(user, 'is_admin', 0))
     nif      = _row_get(user, 'fiscal_id', '').strip() if not is_admin else None
     nom_fd   = _row_get(user, 'nom_empresa', '') or _row_get(user, 'nom', '') if not is_admin else client_nom
+
+    if not nom_fd:
+        return jsonify({'ok': False, 'error': 'Cal omplir el nom del client abans de crear l\'albarà.'}), 400
 
     # Buscar o crear contacte
     contacte = _fd_cerca_contacte(nom=nom_fd, nif=nif if nif else None)
