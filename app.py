@@ -1879,17 +1879,13 @@ def _fd_cerca_contacte(nom=None, nif=None):
     """Cerca un contacte a FD per NIF o per nom."""
     if nif:
         res = _fd_get(f'contacts?fiscalId={urllib_quote(nif)}')
-        print(f'FD cerca per NIF resposta claus: {list(res.keys()) if isinstance(res, dict) else type(res)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
-            print(f'FD item[0] claus: {list(items[0].keys()) if isinstance(items[0], dict) else items[0]}')
             return items[0]
     if nom:
         res = _fd_get(f'contacts?search={urllib_quote(nom)}')
-        print(f'FD cerca per nom resposta claus: {list(res.keys()) if isinstance(res, dict) else type(res)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
-            print(f'FD item[0] claus: {list(items[0].keys()) if isinstance(items[0], dict) else items[0]}')
             return items[0]
     return None
 
@@ -1953,12 +1949,11 @@ def api_crear_albara():
 
     _c_content = contacte.get('content') or {}
     _c_main = _c_content.get('main') or {}
-    contact_id = (contacte.get('id') or contacte.get('contactId') or
-                  contacte.get('contactid') or contacte.get('_id') or
-                  contacte.get('uid') or contacte.get('documentId') or
-                  _c_content.get('id') or _c_content.get('contactId') or
-                  _c_main.get('id') or _c_main.get('contactId') or
-                  _c_main.get('_id') or _c_main.get('uid') or '')
+    contact_id = (contacte.get('id') or contacte.get('uuid') or
+                  contacte.get('contactId') or contacte.get('_id') or
+                  _c_content.get('uuid') or _c_content.get('id') or
+                  _c_content.get('contactId') or
+                  _c_main.get('id') or _c_main.get('uuid') or '')
     if not contact_id:
         print(f'FD contacte sense ID (resposta completa): {json.dumps(contacte, ensure_ascii=False)}')
         return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
