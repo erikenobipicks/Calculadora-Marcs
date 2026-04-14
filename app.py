@@ -1965,8 +1965,6 @@ def api_crear_albara():
     desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
     if opcions_text:
         desc_marc += f' · {opcions_text}'
-    if client_nom and is_admin:
-        desc_marc = f'[{client_nom}] ' + desc_marc
 
     linies = [{
         'text':      desc_marc,
@@ -1978,10 +1976,6 @@ def api_crear_albara():
     notes_parts = []
     if num_pressupost:
         notes_parts.append(f'Pressupost: {num_pressupost}')
-    if preu_net:
-        notes_parts.append(f'PVP sense IVA: {preu_net:.2f} EUR')
-    if preu_final:
-        notes_parts.append(f'PVP total (IVA inclòs): {preu_final:.2f} EUR')
     if observacions:
         notes_parts.append(f'Obs: {observacions}')
     notes = ' | '.join(notes_parts)
