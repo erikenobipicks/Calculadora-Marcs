@@ -554,7 +554,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <button class="btn btn-g" onclick="guardar()">Guardar</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp client</button>
-        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="obrirModalEnviarTaller()" disabled title="Enviar comanda al taller per WhatsApp">WhatsApp taller</button>
+        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
         <button class="btn btn-a" onclick="portarAComandaWeb()" title="Porta aquest resum al mòdul de comanda de Reus Revela">Portar a comanda</button>
         <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
       </div>
@@ -1920,8 +1920,7 @@ function guardar(){
         document.getElementById('btn-wa-objectiu').disabled=false;
         var numLabel = d.num ? ' · ' + d.num : ' #'+d.id;
         showAlert('Pressupost guardat ('+opcions[opcioActual].nom + numLabel + ')','ok');
-        window._numPressupost  = d.num || ('#'+d.id);
-        window._lastComandaId  = d.id || null;
+        window._numPressupost = d.num || ('#'+d.id);
         renderTabs();
       }
     });
@@ -2322,161 +2321,6 @@ applyIncompatibilities();
 recalcMides();
 
 </script>
-<!-- ── Modal: Enviar comanda al taller ──────────────────────────────────── -->
-<div id="modal-enviar-taller" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:14px;width:100%;max-width:420px;margin:1rem;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative">
-    <button onclick="tancarModalTaller()" style="position:absolute;top:.75rem;right:.9rem;background:none;border:none;font-size:20px;cursor:pointer;color:#636e72">×</button>
-    <h3 style="font-family:'DM Serif Display',serif;font-size:18px;font-weight:400;margin-bottom:.3rem">Enviar al taller</h3>
-    <p style="font-size:12px;color:#636e72;margin-bottom:1.1rem">S'enviarà la comanda per WhatsApp. Pots afegir una foto de la peça.</p>
-
-    <div style="margin-bottom:1rem">
-      <label style="display:block;font-size:12px;font-weight:600;color:#2f3640;margin-bottom:5px">Foto de la peça (opcional)</label>
-      <div id="foto-drop-zone" style="border:2px dashed #dfe6e9;border-radius:9px;padding:1.1rem;text-align:center;cursor:pointer;transition:border-color .2s;background:#fafafa" onclick="document.getElementById('foto-comanda-input').click()">
-        <div id="foto-preview-wrap" style="display:none;margin-bottom:.6rem">
-          <img id="foto-preview-img" src="" alt="preview" style="max-height:120px;border-radius:7px;max-width:100%;object-fit:contain">
-        </div>
-        <div id="foto-drop-label" style="font-size:13px;color:#636e72">
-          📷 Toca aquí per seleccionar una foto
-        </div>
-        <input type="file" id="foto-comanda-input" accept="image/*" style="display:none" onchange="onFotoComandaChange(this)">
-      </div>
-      <button id="btn-treure-foto" onclick="treureFotoComanda()" style="display:none;margin-top:.4rem;background:none;border:none;color:#e17055;font-size:12px;cursor:pointer">✕ Treure foto</button>
-    </div>
-
-    <div style="margin-bottom:1.2rem">
-      <label style="display:block;font-size:12px;font-weight:600;color:#2f3640;margin-bottom:5px">Nota addicional (opcional)</label>
-      <textarea id="nota-taller" rows="3" placeholder="Instruccions especials, dubtes, recordatoris…" style="width:100%;padding:9px 11px;border:1px solid #dfe6e9;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit"></textarea>
-    </div>
-
-    <div id="enviar-taller-error" style="display:none;background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:.9rem"></div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
-      <button onclick="tancarModalTaller()" style="padding:10px;border:1px solid #dfe6e9;border-radius:8px;background:#fff;font-size:14px;cursor:pointer;color:#636e72">Cancel·lar</button>
-      <button id="btn-confirmar-enviar-taller" onclick="confirmarEnviarTaller()" style="padding:10px;border:none;border-radius:8px;background:#25D366;color:#fff;font-size:14px;font-weight:600;cursor:pointer">Enviar per WhatsApp</button>
-    </div>
-  </div>
-</div>
-
-<script>
-// ── Modal enviar taller ────────────────────────────────────────────────────
-function obrirModalEnviarTaller(){
-  var portaImpressio = document.getElementById('chk-impressio').checked;
-  if(!portaImpressio){
-    // Sense impressió fotogràfica: enviar directament sense modal
-    whatsappObjectiu();
-    return;
-  }
-  // Amb impressió: obrir modal per poder adjuntar la foto
-  document.getElementById('nota-taller').value = '';
-  treureFotoComanda();
-  document.getElementById('enviar-taller-error').style.display = 'none';
-  var m = document.getElementById('modal-enviar-taller');
-  m.style.display = 'flex';
-}
-function tancarModalTaller(){
-  document.getElementById('modal-enviar-taller').style.display = 'none';
-}
-document.getElementById('modal-enviar-taller').addEventListener('click', function(e){
-  if(e.target === this) tancarModalTaller();
-});
-
-function onFotoComandaChange(input){
-  var file = input.files[0];
-  if(!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e){
-    document.getElementById('foto-preview-img').src = e.target.result;
-    document.getElementById('foto-preview-wrap').style.display = 'block';
-    document.getElementById('foto-drop-label').textContent = file.name;
-    document.getElementById('btn-treure-foto').style.display = 'inline-block';
-    document.getElementById('foto-drop-zone').style.borderColor = '#25D366';
-  };
-  reader.readAsDataURL(file);
-}
-function treureFotoComanda(){
-  document.getElementById('foto-comanda-input').value = '';
-  document.getElementById('foto-preview-wrap').style.display = 'none';
-  document.getElementById('foto-drop-label').textContent = '📷 Toca aquí per seleccionar una foto';
-  document.getElementById('btn-treure-foto').style.display = 'none';
-  document.getElementById('foto-drop-zone').style.borderColor = '#dfe6e9';
-}
-
-function _comprimirFoto(file, maxPx, qualitat, callback){
-  // Redimensiona i comprimeix la foto al navegador via Canvas abans de pujar
-  var reader = new FileReader();
-  reader.onload = function(e){
-    var img = new Image();
-    img.onload = function(){
-      var w = img.width, h = img.height;
-      var scale = Math.min(1, maxPx / Math.max(w, h));
-      var canvas = document.createElement('canvas');
-      canvas.width  = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(function(blob){ callback(blob); }, 'image/jpeg', qualitat);
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function confirmarEnviarTaller(){
-  var btn = document.getElementById('btn-confirmar-enviar-taller');
-  var errBox = document.getElementById('enviar-taller-error');
-  errBox.style.display = 'none';
-  var fileInput = document.getElementById('foto-comanda-input');
-  var nota = (document.getElementById('nota-taller').value || '').trim();
-  var comandaId = window._lastComandaId || '';  // id de la comanda guardada
-
-  function enviarWA(fotoUrl){
-    var text = buildWAtext_intern_amb_foto(fotoUrl, nota);
-    tancarModalTaller();
-    window.open('https://wa.me/34613346180?text=' + text, '_blank');
-  }
-
-  function pujarBlob(blob){
-    btn.disabled = true;
-    btn.textContent = 'Pujant foto…';
-    var fd = new FormData();
-    fd.append('foto', blob, 'foto.jpg');
-    if(comandaId) fd.append('comanda_id', String(comandaId));
-    fetch('/api/upload-foto-comanda', {method:'POST', body: fd})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        btn.disabled = false;
-        btn.textContent = 'Enviar per WhatsApp';
-        if(d.ok){
-          enviarWA(d.url || '');
-        } else {
-          errBox.textContent = 'Error pujant la foto. Prova un altre format o continua sense foto.';
-          errBox.style.display = 'block';
-        }
-      })
-      .catch(function(){
-        btn.disabled = false;
-        btn.textContent = 'Enviar per WhatsApp';
-        errBox.textContent = 'Error de connexió. Intenta-ho de nou.';
-        errBox.style.display = 'block';
-      });
-  }
-
-  var file = fileInput.files && fileInput.files[0];
-  if(!file){ enviarWA(''); return; }
-
-  // Comprimir a màx 1200px i JPEG 75% abans de pujar (~150-250 KB resultat)
-  _comprimirFoto(file, 1200, 0.75, pujarBlob);
-}
-
-function buildWAtext_intern_amb_foto(fotoUrl, notaExtra){
-  // Reutilitza buildWAtext_intern i afegeix la foto i la nota al final
-  var base = decodeURIComponent(buildWAtext_intern());
-  var extra = '';
-  if(notaExtra) extra += '\n📝 Nota: ' + notaExtra;
-  if(fotoUrl)   extra += '\n📎 Foto peça: ' + fotoUrl;
-  return encodeURIComponent(base + extra);
-}
-</script>
-
 {% include '_private_whatsapp_widget.html' %}
 <script src="{{ url_for('static', filename='private_whatsapp.js') }}"></script>
 </body>
