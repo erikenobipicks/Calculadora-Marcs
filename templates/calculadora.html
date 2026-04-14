@@ -304,7 +304,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           <label style="font-weight:700;color:var(--text)">Marc principal <span style="font-size:11px;font-weight:400;color:var(--hint)">(marc exterior/principal)</span></label>
           <div class="ss" id="ss-marc">
             <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off"
-                   oninput="onMarcInput();filterSS('marc');var bp=document.getElementById('btn-portar');if(bp)bp.disabled=!this.value.trim();" onfocus="openSS('marc')" onblur="closeSS('marc')">
+                   oninput="onMarcInput();filterSS('marc')" onfocus="openSS('marc')" onblur="closeSS('marc')">
             <div class="ss-list" id="list-marc"></div>
           </div>
           <div class="chip-row" id="chips-marc"></div>
@@ -563,7 +563,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
-        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" disabled title="Envia la comanda per correu electrònic">Enviar per mail</button>
+        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda per correu electrònic">Enviar per mail</button>
         <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
       </div>
       </div>
@@ -1569,9 +1569,6 @@ function applyIncompatibilities(){
   var note = '';
   var forcedSelections = {};
 
-  var btnPortar = document.getElementById('btn-portar');
-  if(btnPortar) btnPortar.disabled = !hasMarc;
-
   updatePieceContextVisibility();
 
   var rules = {
@@ -2059,13 +2056,6 @@ function buildMailText(){
 }
 
 function obrirMailComanda(){
-  var marc = (document.getElementById('marc_principal').value||'').trim();
-  if(!marc){
-    showAlert('Selecciona almenys una motllura abans d\'enviar per mail.','err');
-    var inp = document.getElementById('marc_principal');
-    if(inp){ inp.scrollIntoView({behavior:'smooth',block:'center'}); inp.focus(); }
-    return;
-  }
   document.getElementById('mail-cos').value = buildMailText();
   var clientMail = '';  // podria venir d'un camp futur
   document.getElementById('mail-destinatari').value = clientMail;
@@ -2366,7 +2356,6 @@ function novaComanda(){
   document.getElementById('btn-pdf').disabled=true;
   document.getElementById('btn-wa-client').disabled=true;
   document.getElementById('btn-wa-objectiu').disabled=true;
-  var btnPortar=document.getElementById('btn-portar'); if(btnPortar) btnPortar.disabled=true;
   netejar(); renderTabs();
 }
 
@@ -2493,21 +2482,6 @@ placeReversPeuGroup();
 applyIncompatibilities();
 recalcMides();
 
-// Vigila el camp marc_principal i activa/desactiva btn-portar en temps real
-(function(){
-  function _syncBtnPortar(){
-    var bp = document.getElementById('btn-portar');
-    var mp = document.getElementById('marc_principal');
-    if(bp && mp) bp.disabled = !mp.value.trim();
-  }
-  var mp = document.getElementById('marc_principal');
-  if(mp){
-    mp.addEventListener('input',  _syncBtnPortar);
-    mp.addEventListener('change', _syncBtnPortar);
-  }
-  // Check també quan s'actualitza programàticament (ex: carregarComanda)
-  setInterval(_syncBtnPortar, 800);
-})();
 
 </script>
 {% include '_private_whatsapp_widget.html' %}
