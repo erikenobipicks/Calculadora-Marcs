@@ -786,18 +786,13 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
-            next_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
             login_lang = (
                 (session.get('bridge_lang') or '').strip().lower()
                 or request.accept_languages.best_match(['ca', 'es', 'en'])
                 or 'ca'
             )
-            return redirect(url_for(
-                'login',
-                next=_safe_next_path(next_path, '/'),
-                source='calc',
-                lang=login_lang,
-            ))
+            main_url = _main_site_url()
+            return redirect(f'{main_url}/area-privada?lang={login_lang}')
         return f(*args, **kwargs)
     return decorated
 
