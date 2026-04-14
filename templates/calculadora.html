@@ -2359,6 +2359,13 @@ recalcMides();
 <script>
 // ── Modal enviar taller ────────────────────────────────────────────────────
 function obrirModalEnviarTaller(){
+  var portaImpressio = document.getElementById('chk-impressio').checked;
+  if(!portaImpressio){
+    // Sense impressió fotogràfica: enviar directament sense modal
+    whatsappObjectiu();
+    return;
+  }
+  // Amb impressió: obrir modal per poder adjuntar la foto
   document.getElementById('nota-taller').value = '';
   treureFotoComanda();
   document.getElementById('enviar-taller-error').style.display = 'none';
