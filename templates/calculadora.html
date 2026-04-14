@@ -563,7 +563,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
-        <button class="btn btn-a" onclick="portarAComandaWeb()" title="Porta aquest resum al mòdul de comanda de Reus Revela">Portar a comanda</button>
+        <button class="btn btn-a" id="btn-portar" onclick="portarAComandaWeb()" disabled title="Porta aquest resum al mòdul de comanda de Reus Revela">Portar a comanda</button>
         <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
       </div>
       </div>
@@ -966,6 +966,7 @@ function showAlert(msg,t){
   var a=document.getElementById('alert');
   a.className='alert alert-'+t; a.textContent=msg;
   a.style.display='block';
+  a.scrollIntoView({behavior:'smooth',block:'center'});
   setTimeout(function(){a.style.display='none';},5000);
 }
 function syncSelectedGroupVisual(grup, val){
@@ -1558,6 +1559,9 @@ function applyIncompatibilities(){
   var note = '';
   var forcedSelections = {};
 
+  var btnPortar = document.getElementById('btn-portar');
+  if(btnPortar) btnPortar.disabled = !hasMarc;
+
   updatePieceContextVisibility();
 
   var rules = {
@@ -1992,15 +1996,21 @@ function portarAComandaWeb(){
   }
   if(!payload.frame_main && !payload.frame_pre){
     showAlert('Selecciona almenys una motllura abans de portar el pressupost al portal.','err');
+    var inp = document.getElementById('marc_principal');
+    if(inp){ inp.scrollIntoView({behavior:'smooth',block:'center'}); inp.focus(); }
     return;
   }
-  var url = new URL(WEB_ORDER_URL);
-  Object.keys(payload).forEach(function(key){
-    var value = payload[key];
-    if(value === '' || value === null || value === undefined) return;
-    url.searchParams.set(key, value);
-  });
-  window.location.assign(url.toString());
+  try {
+    var url = new URL(WEB_ORDER_URL);
+    Object.keys(payload).forEach(function(key){
+      var value = payload[key];
+      if(value === '' || value === null || value === undefined) return;
+      url.searchParams.set(key, value);
+    });
+    window.location.assign(url.toString());
+  } catch(e){
+    showAlert('Error en construir l\'URL de la comanda: ' + e.message, 'err');
+  }
 }
 
 // ── Pestanyes ─────────────────────────────────────────────────────────────
@@ -2224,6 +2234,7 @@ function novaComanda(){
   document.getElementById('btn-pdf').disabled=true;
   document.getElementById('btn-wa-client').disabled=true;
   document.getElementById('btn-wa-objectiu').disabled=true;
+  var btnPortar=document.getElementById('btn-portar'); if(btnPortar) btnPortar.disabled=true;
   netejar(); renderTabs();
 }
 
