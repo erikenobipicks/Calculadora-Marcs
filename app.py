@@ -786,18 +786,13 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
-            next_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
             login_lang = (
                 (session.get('bridge_lang') or '').strip().lower()
                 or request.accept_languages.best_match(['ca', 'es', 'en'])
                 or 'ca'
             )
-            return redirect(url_for(
-                'login',
-                next=_safe_next_path(next_path, '/'),
-                source='calc',
-                lang=login_lang,
-            ))
+            main_url = _main_site_url()
+            return redirect(f'{main_url}/area-privada?lang={login_lang}')
         return f(*args, **kwargs)
     return decorated
 
@@ -1898,7 +1893,12 @@ def _fd_crear_contacte(nom, nif=None, telefon=None):
     main = {'name': nom, 'country': 'ES', 'currency': 'EUR'}
     if nif:     main['fiscalId'] = nif
     if telefon: main['phone']    = telefon
-    return _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
+    res = _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
+    if '_error' in (res or {}):
+        return res
+    # El POST no sempre retorna l'ID; busquem el contacte just després per obtenir-lo
+    trobat = _fd_cerca_contacte(nom=nom, nif=nif if nif else None)
+    return trobat if trobat else res
 
 def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
@@ -1947,11 +1947,16 @@ def api_crear_albara():
     if '_error' in (contacte or {}):
         return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    contact_id = (contacte.get('id') or contacte.get('contactId') or
-                  contacte.get('contactid') or contacte.get('_id') or '')
+    _c_content = contacte.get('content') or {}
+    _c_main = _c_content.get('main') or {}
+    contact_id = (contacte.get('id') or contacte.get('uuid') or
+                  contacte.get('contactId') or contacte.get('_id') or
+                  _c_content.get('uuid') or _c_content.get('id') or
+                  _c_content.get('contactId') or
+                  _c_main.get('id') or _c_main.get('uuid') or '')
     if not contact_id:
-        print(f'FD contacte sense ID: {contacte}')
-        return jsonify({'ok': False, 'error': f'Contacte FD creat però sense ID. Resposta: {str(contacte)[:200]}'}), 500
+        print(f'FD contacte sense ID (resposta completa): {json.dumps(contacte, ensure_ascii=False)}')
+        return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
 
     # Línies de l'albarà
     desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
