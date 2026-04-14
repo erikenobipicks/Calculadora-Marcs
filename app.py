@@ -1661,6 +1661,73 @@ def api_cerca_moldura():
                  [f'%{q.lower()}%', f'%{q.lower()}%'])
     return jsonify([dict(r) for r in rows])
 
+@app.route('/admin/taules-preus')
+@admin_required
+def admin_taules_preus():
+    """Mostra totes les taules de preus i simula lookups per mides personalitzades."""
+    w = request.args.get('w', 0, type=float)
+    h = request.args.get('h', 0, type=float)
+
+    vidres_rows   = [dict(r) for r in query('SELECT referencia, preu FROM vidres ORDER BY referencia')   or []]
+    encolat_rows  = [dict(r) for r in query('SELECT referencia, preu FROM encolat_pro ORDER BY referencia') or []]
+
+    lookup = {}
+    if w > 0 and h > 0:
+        def sim(rows, prefix=None):
+            r = _find_closest(rows, w, h, prefix=prefix)
+            return {'ref': r['referencia'], 'preu': r['preu']} if r else None
+        lookup = {
+            'vidre':       sim([r for r in vidres_rows if not r['referencia'].upper().startswith(('DV-','MIR-'))]),
+            'doble_vidre': sim(vidres_rows, prefix='DV-'),
+            'mirall':      sim(vidres_rows, prefix='MIR-'),
+            'encolat':     sim(encolat_rows, prefix='ENC'),
+            'protter':     sim(encolat_rows, prefix='PRO'),
+        }
+
+    def rows_html(rows, highlight_ref=None):
+        lines = ['<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-size:13px">',
+                 '<tr><th>Referència</th><th>Preu (€)</th></tr>']
+        for r in rows:
+            bg = ' style="background:#ffe082"' if highlight_ref and r['referencia'] == highlight_ref else ''
+            lines.append(f'<tr{bg}><td>{r["referencia"]}</td><td>{r["preu"]}</td></tr>')
+        lines.append('</table>')
+        return '\n'.join(lines)
+
+    vid_hl   = lookup.get('vidre',   {}).get('ref') if lookup else None
+    enc_hl   = lookup.get('encolat', {}).get('ref') if lookup else None
+    pro_hl   = lookup.get('protter', {}).get('ref') if lookup else None
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Taules de preus — Admin</title>
+<style>body{{font-family:Arial,sans-serif;padding:2rem;background:#f5f6fa}}
+h2{{margin-top:2rem}}
+.lookup{{background:#e8f5e9;border:1px solid #a5d6a7;padding:1rem;border-radius:8px;margin-bottom:1.5rem;font-size:14px}}
+.lookup b{{color:#1b5e20}}</style></head><body>
+<h1>Taules de preus</h1>
+<form method="get">
+  Mida marc: <input name="w" value="{w or ''}" placeholder="Amplada" style="width:70px"> ×
+             <input name="h" value="{h or ''}" placeholder="Alçada"  style="width:70px"> cm
+  <button type="submit">Simular lookup</button>
+</form>
+"""
+    if lookup:
+        def lrow(k, label):
+            v = lookup.get(k)
+            return f'<li><b>{label}:</b> {v["ref"]} → {v["preu"]}€</li>' if v else f'<li><b>{label}:</b> no trobat</li>'
+        html += f'<div class="lookup"><b>Lookup per {w}×{h} cm:</b><ul>'
+        html += lrow('vidre',       'Vidre')
+        html += lrow('doble_vidre', 'Doble vidre')
+        html += lrow('mirall',      'Mirall')
+        html += lrow('encolat',     'Encolat')
+        html += lrow('protter',     'Protter')
+        html += '</ul></div>'
+
+    html += f'<h2>Vidres ({len(vidres_rows)} files)</h2>' + rows_html(vidres_rows, vid_hl)
+    html += f'<h2>Encolat / Protter ({len(encolat_rows)} files)</h2>' + rows_html(encolat_rows, enc_hl or pro_hl)
+    html += '</body></html>'
+    return html
+
+
 @app.route('/historial')
 @login_required
 def historial():
