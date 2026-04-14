@@ -1430,18 +1430,19 @@ def guardar():
     cid = execute('''INSERT INTO comandes
         (user_id, data, client_nom, client_tel,
          pre_marc, marc_principal, amplada, alcada, copia,
-         encolat, vidre, passpartout, impressio,
+         encolat, vidre, passpartout, passpartu_ref, impressio,
          revers_peu, revers_peu_preu,
          tipus_peca, tipus_peca_detall, final_amplada, final_alcada,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
         d.get('amplada',0), d.get('alcada',0), d.get('copia',0),
         d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
+        d.get('passpartu_ref',''),
         d.get('impressio',''),
         1 if d.get('revers_peu') else 0,
         d.get('revers_peu_preu', 0),
@@ -1796,7 +1797,8 @@ def admin():
     usuaris = query('SELECT * FROM usuaris ORDER BY nom')
     config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
     impressio = query('SELECT * FROM impressio ORDER BY preu')
-    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio)
+    passpartous = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio, passpartous=passpartous)
 
 @app.route('/admin/usuari', methods=['POST'])
 @admin_required
@@ -1846,6 +1848,39 @@ def admin_config():
             execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
     flash('Configuració desada.', 'ok')
     return redirect(url_for('admin'))
+
+@app.route('/api/passpartous')
+@login_required
+def api_passpartous():
+    """Llista de referències de passpartú (color/textura) per al selector de la calculadora."""
+    rows = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    return jsonify([{
+        'ref': r['referencia'],
+        'color': r['color'] or '',
+        'textura': r['textura'] or '',
+        'descripcio': r['descripcio'] or '',
+    } for r in rows])
+
+
+@app.route('/admin/passpartous', methods=['POST'])
+@admin_required
+def admin_passpartous():
+    action = request.form.get('action')
+    if action == 'crear':
+        ref = request.form.get('referencia', '').strip().upper()
+        color = request.form.get('color', '').strip()
+        textura = request.form.get('textura', '').strip()
+        descripcio = request.form.get('descripcio', '').strip()
+        if ref:
+            execute('INSERT OR REPLACE INTO passpartout (referencia, color, textura, descripcio) VALUES (?,?,?,?)',
+                    [ref, color, textura, descripcio])
+            flash(f'Referència {ref} desada.', 'ok')
+    elif action == 'eliminar':
+        ref = request.form.get('ref', '').strip()
+        execute('DELETE FROM passpartout WHERE referencia=?', [ref])
+        flash('Referència eliminada.', 'ok')
+    return redirect(url_for('admin'))
+
 
 @app.route('/admin/impressio', methods=['POST'])
 @admin_required
@@ -3358,6 +3393,10 @@ def init_db():
                 "ALTER TABLE comandes ADD COLUMN lang TEXT DEFAULT 'ca'",
                 "ALTER TABLE comandes ADD COLUMN foto_comanda TEXT",
                 "ALTER TABLE comandes ADD COLUMN foto_ts REAL",
+                "ALTER TABLE comandes ADD COLUMN passpartu_ref TEXT DEFAULT ''",
+                "ALTER TABLE passpartout ADD COLUMN color TEXT DEFAULT ''",
+                "ALTER TABLE passpartout ADD COLUMN textura TEXT DEFAULT ''",
+                "ALTER TABLE passpartout ADD COLUMN descripcio TEXT DEFAULT ''",
             ]:
                 try:
                     db.execute(sql)

@@ -451,6 +451,13 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           </div>
           <!-- Bloc passpartú: apareix quan es selecciona passpartú -->
           <div id="bloc-passpartu" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
+            <div class="f" style="margin-bottom:.7rem">
+              <label>Referència del passpartú <span style="font-size:11px;color:var(--hint);font-weight:400">(color / textura)</span></label>
+              <select id="ref-passpartu-color" onchange="onPasspartuRefChange()" style="width:100%">
+                <option value="">— Sense referència específica —</option>
+              </select>
+              <div id="desc-passpartu-ref" style="font-size:11px;color:var(--hint);margin-top:4px;font-style:italic"></div>
+            </div>
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
                 <label>Marge passpartú (cm per banda)</label>
@@ -509,14 +516,14 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       <div class="card dcard">
         <div class="card-t">Preu i descompte</div>
         <div class="f2">
-          <div class="f"><label>Descompte client (%)</label><input type="number" id="descompte" value="0" min="0" max="100" oninput="calcular()"></div>
+          <div class="f"><label>Descompte al client (%)</label><input type="number" id="descompte" value="0" min="0" max="100" oninput="calcular()"></div>
           <div class="f"><label>Quantitat</label><input type="number" id="quantitat" value="1" min="1" oninput="calcular()"></div>
         </div>
         <input type="hidden" id="marge_val" value="60">
         <input type="hidden" id="copia" value="0">
         <div id="cost-panel" style="display:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:.85rem;margin-top:.7rem">
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost materials</span><strong id="ci-mat" style="color:#fff">—</strong></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost motllures</span><strong id="ci-mol" style="color:#fff">—</strong></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost dels materials</span><strong id="ci-mat" style="color:#fff">—</strong></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost de les motllures</span><strong id="ci-mol" style="color:#fff">—</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total</span><strong id="ci-tot" style="color:#fff">—</strong></div>
         </div>
         <input type="hidden" id="marc-w" value="0">
@@ -525,7 +532,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 
       <div class="card">
         <div class="card-t">Dades finals</div>
-        <div class="f"><label>Observacions</label><input type="text" id="observacions" placeholder="Termini d'entrega, observacions o indicacions..."></div>
+        <div class="f"><label>Observacions i termini</label><input type="text" id="observacions" placeholder="Termini d'entrega, indicacions especials..."></div>
         <div class="f" style="margin-top:.75rem">
           <label>Idioma del pressupost</label>
           <div style="display:flex;gap:.4rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px;width:max-content">
@@ -559,9 +566,9 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       </div>
 
       <div class="actions">
-        <button class="btn btn-g" onclick="guardar()">Guardar</button>
+        <button class="btn btn-g" onclick="guardar()">Desar</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
-        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp client</button>
+        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
         <button class="btn btn-a" onclick="portarAComandaWeb()" title="Porta aquest resum al mòdul de comanda de Reus Revela">Portar a comanda</button>
         <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
@@ -594,6 +601,7 @@ var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
 var GRUIX   = {pre:0, marc:0};
 var CLOSEST = {};
 var marge = 60, marge_impressio = 0, rmode = 'pvp', uid = null;
+var _PASSPARTOUS = [];  // llista de referències carregada de l'API
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
@@ -1920,6 +1928,7 @@ function guardar(){
     encolat:document.getElementById('ref-muntatge').value||'-',
     vidre:document.getElementById('ref-proteccio').value||'-',
     passpartout:document.getElementById('ref-interior').value||'-',
+    passpartu_ref:(document.getElementById('ref-passpartu-color')||{}).value||'',
     impressio:document.getElementById('ref-impressio-val').value||'-',
     revers_peu:document.getElementById('chk-revers-peu').checked,
     revers_peu_preu: window._c ? parseFloat((window._c.revers_peu_preu||0).toFixed(2)) : 0,
@@ -2342,6 +2351,39 @@ function whatsappObjectiu(){
 document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
   var c=document.getElementById('opt-'+r.name+'-cap'); if(c) c.classList.add('selected');
 });
+// ── Referències passpartú ─────────────────────────────────────────────────
+function _carregarPasspartous(){
+  fetch('/api/passpartous').then(function(r){return r.json();}).then(function(data){
+    _PASSPARTOUS = data;
+    var sel = document.getElementById('ref-passpartu-color');
+    sel.innerHTML = '<option value="">— Sense referència específica —</option>';
+    data.forEach(function(p){
+      var opt = document.createElement('option');
+      opt.value = p.ref;
+      var label = p.ref;
+      if(p.color)   label += ' · ' + p.color;
+      if(p.textura) label += ' (' + p.textura + ')';
+      opt.textContent = label;
+      sel.appendChild(opt);
+    });
+  }).catch(function(){});
+}
+function onPasspartuRefChange(){
+  var ref = document.getElementById('ref-passartu-color') ? document.getElementById('ref-passartu-color').value
+          : (document.getElementById('ref-passpartu-color') || {}).value || '';
+  var sel = document.getElementById('ref-passpartu-color');
+  ref = sel ? sel.value : '';
+  var p = _PASSPARTOUS.find(function(x){ return x.ref === ref; });
+  var desc = '';
+  if(p){
+    if(p.color)   desc += p.color;
+    if(p.textura) desc += (desc?' · ':'')+p.textura;
+    if(p.descripcio) desc += (desc?' — ':'')+p.descripcio;
+  }
+  document.getElementById('desc-passpartu-ref').textContent = desc;
+}
+_carregarPasspartous();
+
 setLang('ca');
 renderTabs();
 placeReversPeuGroup();
