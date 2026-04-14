@@ -1938,7 +1938,7 @@ def api_crear_albara():
                  [session['user_id']], one=True)
     is_admin = bool(_row_get(user, 'is_admin', 0))
     nif      = _row_get(user, 'fiscal_id', '').strip() if not is_admin else None
-    nom_fd   = _row_get(user, 'nom_empresa', '') or _row_get(user, 'nom', '') if not is_admin else client_nom
+    nom_fd   = client_nom if is_admin else (_row_get(user, 'nom_empresa', '') or _row_get(user, 'nom', ''))
 
     if not nom_fd:
         return jsonify({'ok': False, 'error': 'Cal omplir el nom del client abans de crear l\'albarà.'}), 400
