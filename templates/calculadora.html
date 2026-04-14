@@ -2493,6 +2493,22 @@ placeReversPeuGroup();
 applyIncompatibilities();
 recalcMides();
 
+// Vigila el camp marc_principal i activa/desactiva btn-portar en temps real
+(function(){
+  function _syncBtnPortar(){
+    var bp = document.getElementById('btn-portar');
+    var mp = document.getElementById('marc_principal');
+    if(bp && mp) bp.disabled = !mp.value.trim();
+  }
+  var mp = document.getElementById('marc_principal');
+  if(mp){
+    mp.addEventListener('input',  _syncBtnPortar);
+    mp.addEventListener('change', _syncBtnPortar);
+  }
+  // Check també quan s'actualitza programàticament (ex: carregarComanda)
+  setInterval(_syncBtnPortar, 800);
+})();
+
 </script>
 {% include '_private_whatsapp_widget.html' %}
 <script src="{{ url_for('static', filename='private_whatsapp.js') }}"></script>
