@@ -1895,15 +1895,15 @@ def _fd_cerca_contacte(nom=None, nif=None):
     return None
 
 def _fd_crear_contacte(nom, nif=None, telefon=None):
-    data = {'name': nom}
-    if nif:      data['taxId']  = nif
-    if telefon:  data['phone1'] = telefon
-    return _fd_post('contacts', data)
+    inner = {'name': nom}
+    if nif:     inner['taxId']  = nif
+    if telefon: inner['phone1'] = telefon
+    return _fd_post('contacts', {'content': inner})
 
 def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
         data_doc = datetime.now().strftime('%Y%m%d')
-    doc = {
+    inner = {
         'client': {'id': contact_id},
         'documentDate': data_doc,
         'currency': 'EUR',
@@ -1911,8 +1911,8 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
         'documentLines': linies,
     }
     if notes:
-        doc['notes'] = notes
-    return _fd_post('deliveryNotes', doc)
+        inner['notes'] = notes
+    return _fd_post('deliveryNotes', {'content': inner})
 
 @app.route('/api/crear-albara', methods=['POST'])
 @login_required
