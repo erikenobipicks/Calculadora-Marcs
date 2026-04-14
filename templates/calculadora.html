@@ -563,7 +563,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
-        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda per correu electrònic">Enviar per mail</button>
+        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
         <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
       </div>
       </div>
@@ -2000,9 +2000,9 @@ function buildWebOrderPayload(){
 function buildMailText(){
   var c     = window._c || {};
   var fmt2  = function(v){ return (Math.round((v||0)*100)/100).toFixed(2).replace('.',',') + ' €'; };
-  var client = document.getElementById('client_nom').value||'—';
-  var tel    = document.getElementById('client_tel').value||'';
-  var data   = document.getElementById('data_comanda').value||'';
+  // Nom de pila: primer mot del nom del client
+  var nomSencer = (document.getElementById('client_nom').value||'').trim();
+  var nomPila   = nomSencer ? nomSencer.split(/\s+/)[0] : '';
   var num    = (window._numPressupost||'');
   var marc   = (document.getElementById('marc_principal').value||'').trim();
   var premarc= (document.getElementById('pre_marc').value||'').trim();
@@ -2013,22 +2013,17 @@ function buildMailText(){
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
   var vidre  = (document.getElementById('vidre')||{}).value||'';
   var obs    = document.getElementById('observacions').value||'';
-  var entrega= document.getElementById('entrega')?document.getElementById('entrega').value:'';
-  var pNet   = c.preu_net   ? fmt2(c.preu_net)   : '—';
-  var pFin   = c.preu_final ? fmt2(c.preu_final) : '—';
-  var pIva   = (c.preu_net && c.preu_final) ? fmt2(c.preu_final - c.preu_net) : '—';
-  var pend   = c.pendent    ? fmt2(Math.max(0,c.pendent)) : pFin;
   var cProd  = c.cost_produccio ? fmt2(c.cost_produccio) : '—';
   var interiorMap = {passpartu:'Passpartú',doble_pas:'Doble passpartú',proeco:'ProEco','':'Cap'};
   var proteccioMap = {vidre_basic:'Vidre bàsic',vidre_premium:'Vidre premium',vidre_uv:'Vidre UV',vidre_museum:'Vidre museu',doble_vidre:'Doble vidre',mirall:'Mirall','':'Sense vidre'};
   var muntatgeMap  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat','':'Estàndard'};
 
   var lines = [];
-  lines.push('COMANDA DE MARC — REUS REVELA');
-  lines.push('══════════════════════════════');
+  lines.push('COMANDA DE MARC — OBJECTIU FOTOGRAFIA');
+  lines.push('══════════════════════════════════════');
   lines.push('');
-  lines.push('Client: ' + client + (tel?' · Tel: '+tel:''));
-  lines.push('Data: ' + data + (num?' · Pressupost: '+num:''));
+  if(num)     lines.push('Pressupost núm.: ' + num);
+  if(nomPila) lines.push('Client: ' + nomPila);
   lines.push('');
   lines.push('PEÇA I OPCIONS');
   lines.push('──────────────');
@@ -2041,17 +2036,9 @@ function buildMailText(){
   if(vidre && vidre !== proteccio) lines.push('Vidre ref: ' + vidre);
   if(obs) lines.push('Observacions: ' + obs);
   lines.push('');
-  lines.push('PREU AL CLIENT');
-  lines.push('──────────────');
-  lines.push('Base (sense IVA): ' + pNet);
-  lines.push('IVA 21%: ' + pIva);
-  lines.push('TOTAL: ' + pFin);
-  if(entrega && parseFloat(entrega)>0) lines.push('Bestreta: ' + fmt2(parseFloat(entrega)));
-  lines.push('Pendent: ' + pend);
-  lines.push('');
-  lines.push('ÚS INTERN — COST DE PRODUCCIÓ (sense IVA)');
-  lines.push('──────────────────────────────────────────');
-  lines.push('Cost base sense IVA: ' + cProd);
+  lines.push('COST DE PRODUCCIÓ (sense IVA)');
+  lines.push('─────────────────────────────');
+  lines.push('Cost base: ' + cProd);
   return lines.join('\n');
 }
 
@@ -2504,15 +2491,15 @@ recalcMides();
   <div style="background:#fff;border-radius:14px;width:100%;max-width:540px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18)">
     <div style="padding:1.2rem 1.4rem .8rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
       <div>
-        <strong style="font-size:15px">Enviar comanda per mail</strong>
-        <p style="font-size:12px;color:var(--muted);margin-top:2px">Revisa el text, afegeix el destinatari i obre el gestor de correu.</p>
+        <strong style="font-size:15px">Enviar comanda al Taller Reus Revela</strong>
+        <p style="font-size:12px;color:var(--muted);margin-top:2px">Revisa el text i obre el gestor de correu per enviar-lo al taller.</p>
       </div>
       <button type="button" onclick="tancarMailModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1">×</button>
     </div>
     <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
       <div style="margin-bottom:.9rem">
-        <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">DESTINATARI (correu del client o intern)</label>
-        <input type="email" id="mail-destinatari" placeholder="client@exemple.com o deixa buit" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif">
+        <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">DESTINATARI (correu del taller)</label>
+        <input type="email" id="mail-destinatari" placeholder="taller@reusrevela.cat" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif">
       </div>
       <div>
         <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">TEXT DE LA COMANDA <span style="font-weight:400">(editable)</span></label>
