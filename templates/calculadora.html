@@ -1920,7 +1920,8 @@ function guardar(){
         document.getElementById('btn-wa-objectiu').disabled=false;
         var numLabel = d.num ? ' · ' + d.num : ' #'+d.id;
         showAlert('Pressupost guardat ('+opcions[opcioActual].nom + numLabel + ')','ok');
-        window._numPressupost = d.num || ('#'+d.id);
+        window._numPressupost  = d.num || ('#'+d.id);
+        window._lastComandaId  = d.id || null;
         renderTabs();
       }
     });
@@ -2400,12 +2401,32 @@ function treureFotoComanda(){
   document.getElementById('foto-drop-zone').style.borderColor = '#dfe6e9';
 }
 
+function _comprimirFoto(file, maxPx, qualitat, callback){
+  // Redimensiona i comprimeix la foto al navegador via Canvas abans de pujar
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = new Image();
+    img.onload = function(){
+      var w = img.width, h = img.height;
+      var scale = Math.min(1, maxPx / Math.max(w, h));
+      var canvas = document.createElement('canvas');
+      canvas.width  = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(function(blob){ callback(blob); }, 'image/jpeg', qualitat);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function confirmarEnviarTaller(){
   var btn = document.getElementById('btn-confirmar-enviar-taller');
   var errBox = document.getElementById('enviar-taller-error');
   errBox.style.display = 'none';
   var fileInput = document.getElementById('foto-comanda-input');
   var nota = (document.getElementById('nota-taller').value || '').trim();
+  var comandaId = window._lastComandaId || '';  // id de la comanda guardada
 
   function enviarWA(fotoUrl){
     var text = buildWAtext_intern_amb_foto(fotoUrl, nota);
@@ -2413,34 +2434,37 @@ function confirmarEnviarTaller(){
     window.open('https://wa.me/34613346180?text=' + text, '_blank');
   }
 
-  var file = fileInput.files && fileInput.files[0];
-  if(!file){
-    enviarWA('');
-    return;
+  function pujarBlob(blob){
+    btn.disabled = true;
+    btn.textContent = 'Pujant foto…';
+    var fd = new FormData();
+    fd.append('foto', blob, 'foto.jpg');
+    if(comandaId) fd.append('comanda_id', String(comandaId));
+    fetch('/api/upload-foto-comanda', {method:'POST', body: fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        btn.disabled = false;
+        btn.textContent = 'Enviar per WhatsApp';
+        if(d.ok){
+          enviarWA(d.url || '');
+        } else {
+          errBox.textContent = 'Error pujant la foto. Prova un altre format o continua sense foto.';
+          errBox.style.display = 'block';
+        }
+      })
+      .catch(function(){
+        btn.disabled = false;
+        btn.textContent = 'Enviar per WhatsApp';
+        errBox.textContent = 'Error de connexió. Intenta-ho de nou.';
+        errBox.style.display = 'block';
+      });
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Pujant foto…';
-  var fd = new FormData();
-  fd.append('foto', file);
-  fetch('/api/upload-foto-comanda', {method:'POST', body: fd})
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      btn.disabled = false;
-      btn.textContent = 'Enviar per WhatsApp';
-      if(d.ok){
-        enviarWA(d.url);
-      } else {
-        errBox.textContent = 'Error pujant la foto. Prova un altre format o continua sense foto.';
-        errBox.style.display = 'block';
-      }
-    })
-    .catch(function(){
-      btn.disabled = false;
-      btn.textContent = 'Enviar per WhatsApp';
-      errBox.textContent = 'Error de connexió. Intenta-ho de nou.';
-      errBox.style.display = 'block';
-    });
+  var file = fileInput.files && fileInput.files[0];
+  if(!file){ enviarWA(''); return; }
+
+  // Comprimir a màx 1200px i JPEG 75% abans de pujar (~150-250 KB resultat)
+  _comprimirFoto(file, 1200, 0.75, pujarBlob);
 }
 
 function buildWAtext_intern_amb_foto(fotoUrl, notaExtra){

@@ -1322,24 +1322,53 @@ def get_marge():
     })
 
 
+_FOTO_COMANDA_MAX_BYTES = 5 * 1024 * 1024   # 5 MB límit d'entrada
+_FOTO_COMANDA_TTL_DAYS  = 14                 # dies fins a neteja automàtica
+
 @app.route('/api/upload-foto-comanda', methods=['POST'])
 @login_required
 def upload_foto_comanda():
-    """Puja una foto de la peça i retorna la URL pública per incloure al WA."""
+    """Rep la foto ja comprimida pel client (canvas), la guarda com base64 a la
+    comanda indicada i retorna la URL de visualització.
+    Neteja automàtica de fotos > 14 dies en cada crida."""
+    import base64 as _b64
+
+    # ── Neteja fotos antigues ────────────────────────────────────────────────
+    try:
+        cutoff = time.time() - _FOTO_COMANDA_TTL_DAYS * 86400
+        execute('UPDATE comandes SET foto_comanda=NULL, foto_ts=NULL WHERE foto_ts IS NOT NULL AND foto_ts < ?', [cutoff])
+    except Exception:
+        pass
+
+    # ── Validació ────────────────────────────────────────────────────────────
     f = request.files.get('foto')
+    comanda_id = request.form.get('comanda_id', type=int)
     if not f or not getattr(f, 'filename', ''):
         return jsonify({'ok': False, 'error': 'no_file'})
+
+    data = f.read(_FOTO_COMANDA_MAX_BYTES + 1)
+    if len(data) > _FOTO_COMANDA_MAX_BYTES:
+        return jsonify({'ok': False, 'error': 'massa_gran'})
+
     ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
-    allowed = {'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'}
+    allowed = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
     if ext not in allowed:
         return jsonify({'ok': False, 'error': 'format_invalid'})
-    uid = secrets.token_hex(12)
-    filename = f'{uid}.{ext}'
-    uploads_dir = os.path.join(app.root_path, 'static', 'uploads', 'comandes')
-    os.makedirs(uploads_dir, exist_ok=True)
-    f.save(os.path.join(uploads_dir, filename))
+
+    mime = 'image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}'
+    b64 = 'data:' + mime + ';base64,' + _b64.b64encode(data).decode()
+
+    # ── Guardar a la BD si tenim comanda_id ─────────────────────────────────
+    if comanda_id:
+        comanda = _get_comanda_for_session(comanda_id, fields='id, user_id')
+        if comanda:
+            execute('UPDATE comandes SET foto_comanda=?, foto_ts=? WHERE id=?',
+                    [b64, time.time(), comanda_id])
+
+    # ── Retornar URL de visualització ────────────────────────────────────────
     host = request.host_url.rstrip('/')
-    return jsonify({'ok': True, 'url': f'{host}/static/uploads/comandes/{filename}'})
+    view_url = f'{host}/api/foto-comanda/{comanda_id}' if comanda_id else None
+    return jsonify({'ok': True, 'url': view_url, 'b64': b64})
 
 
 @app.route('/api/logo', methods=['POST'])
@@ -1358,6 +1387,27 @@ def upload_logo():
     except:
         pass
     return jsonify({'ok': True})
+
+@app.route('/api/foto-comanda/<int:cid>')
+@login_required
+def foto_comanda_view(cid):
+    """Mostra la foto d'una comanda com a pàgina senzilla (el taller pot obrir l'URL)."""
+    comanda = _get_comanda_for_session(cid, fields='id, user_id, client_nom, num_pressupost, foto_comanda, foto_ts')
+    if not comanda:
+        return 'Foto no trobada o accés no autoritzat.', 404
+    b64 = comanda['foto_comanda'] if comanda else None
+    if not b64:
+        return 'Aquesta comanda no té cap foto adjunta.', 404
+    nom = comanda['client_nom'] or ''
+    num = comanda['num_pressupost'] or str(cid)
+    return f'''<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foto comanda {num}</title>
+<style>body{{margin:0;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}}
+img{{max-width:100%;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5)}}
+p{{color:#aaa;font-family:sans-serif;font-size:13px;margin-top:.8rem}}</style></head>
+<body><img src="{b64}" alt="Foto comanda {num}"><p>{nom} · #{num}</p></body></html>'''
+
 
 @app.route('/api/logo', methods=['GET'])
 @login_required
@@ -3376,6 +3426,8 @@ def init_db():
                 "ALTER TABLE comandes ADD COLUMN pagat INTEGER DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN entregat INTEGER DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN lang TEXT DEFAULT 'ca'",
+                "ALTER TABLE comandes ADD COLUMN foto_comanda TEXT",
+                "ALTER TABLE comandes ADD COLUMN foto_ts REAL",
             ]:
                 try:
                     db.execute(sql)
