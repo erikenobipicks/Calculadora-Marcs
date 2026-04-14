@@ -3,7 +3,7 @@ from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime
 from functools import wraps
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote as urllib_quote
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from reportlab.lib.pagesizes import A4
@@ -1883,12 +1883,12 @@ def _fd_post(path, data):
 def _fd_cerca_contacte(nom=None, nif=None):
     """Cerca un contacte a FD per NIF (exacte) o per nom (primer resultat)."""
     if nif:
-        res = _fd_get(f'contacts?taxId={urllib_request.quote(nif)}')
+        res = _fd_get(f'contacts?taxId={urllib_quote(nif)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
             return items[0]
     if nom:
-        res = _fd_get(f'contacts?name={urllib_request.quote(nom)}')
+        res = _fd_get(f'contacts?name={urllib_quote(nom)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
             return items[0]
@@ -1943,11 +1943,12 @@ def api_crear_albara():
     if not contacte:
         contacte = _fd_crear_contacte(nom_fd, nif=nif or None, telefon=client_tel or None)
     if '_error' in (contacte or {}):
-        return jsonify({'ok': False, 'error': f'Error creant contacte FD: {contacte}'}), 500
+        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    contact_id = contacte.get('id') or contacte.get('contactId')
+    contact_id = contacte.get('id') or contacte.get('contactId') or contacte.get('contactid')
     if not contact_id:
-        return jsonify({'ok': False, 'error': 'No s\'ha pogut obtenir ID del contacte FD'}), 500
+        print(f'FD contacte sense ID: {contacte}')
+        return jsonify({'ok': False, 'error': f'Contacte FD creat però sense ID. Resposta: {str(contacte)[:200]}'}), 500
 
     # Línies de l'albarà
     desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
@@ -1976,7 +1977,7 @@ def api_crear_albara():
 
     albara = _fd_crear_albara(contact_id, linies, notes=notes)
     if '_error' in (albara or {}):
-        return jsonify({'ok': False, 'error': f'Error creant albarà FD: {albara}'}), 500
+        return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
 
     num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
     return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
