@@ -2088,6 +2088,53 @@ function obrirMailClient(){
   window.location.href = mailto;
 }
 
+function crearAlbaraFD(){
+  var c = window._c || {};
+  var btn = document.getElementById('mail-btn-albara');
+  var orig = btn.textContent;
+  btn.textContent = 'Creant...'; btn.disabled = true;
+
+  var interior = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+  var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var muntatge  = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  var partsOpcions = [];
+  if(interior)  partsOpcions.push(interior);
+  if(proteccio) partsOpcions.push(proteccio);
+  if(muntatge)  partsOpcions.push(muntatge);
+
+  var payload = {
+    client_nom:    document.getElementById('client_nom').value||'',
+    client_tel:    document.getElementById('client_tel').value||'',
+    marc:          document.getElementById('marc_principal').value||'',
+    opcions:       partsOpcions.join(', '),
+    observacions:  document.getElementById('observacions').value||'',
+    num_pressupost: window._numPressupost||'',
+    cost_produccio: c.cost_produccio||0,
+    preu_net:       c.preu_net||0,
+    preu_final:     c.preu_final||0,
+  };
+
+  fetch('/api/crear-albara', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function(r){return r.json();}).then(function(d){
+    btn.textContent = orig; btn.disabled = false;
+    if(d.ok){
+      btn.textContent = '✓ Albarà ' + d.albara;
+      btn.style.background = 'var(--green-l)';
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color = 'var(--green)';
+      showAlert('Albarà ' + d.albara + ' creat a Factura Directa per ' + d.contact, 'ok');
+    } else {
+      showAlert('Error FD: ' + (d.error||'Error desconegut'), 'err');
+    }
+  }).catch(function(e){
+    btn.textContent = orig; btn.disabled = false;
+    showAlert('Error de connexió amb Factura Directa', 'err');
+  });
+}
+
 // ── Pestanyes ─────────────────────────────────────────────────────────────
 function renderTabs(){
   var list=document.getElementById('tabs-list'); list.innerHTML='';
@@ -2465,6 +2512,7 @@ recalcMides();
     </div>
     <div style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
       <button type="button" id="mail-btn-copiar" onclick="copiarMailText()" style="padding:8px 16px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">Copiar text</button>
+      <button type="button" id="mail-btn-albara" onclick="crearAlbaraFD()" style="padding:8px 16px;border:1px solid var(--amber);border-radius:7px;background:var(--amber-l);color:var(--amber);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Crear albarà FD</button>
       <button type="button" onclick="obrirMailClient()" style="padding:8px 18px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Obrir gestor de correu →</button>
     </div>
   </div>

@@ -1849,6 +1849,139 @@ def admin_config():
     flash('Configuració desada.', 'ok')
     return redirect(url_for('admin'))
 
+# ── Factura Directa ───────────────────────────────────────────────────────
+_FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
+_FD_COMPANY = os.environ.get('FACTURADIRECTA_COMPANY', '')
+_FD_BASE    = 'https://app.facturadirecta.com/api'
+
+def _fd_headers():
+    return {
+        'facturadirecta-api-key': _FD_TOKEN,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+
+def _fd_get(path):
+    url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
+    req = urllib_request.Request(url, headers=_fd_headers())
+    try:
+        with urllib_request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    except urllib_error.HTTPError as e:
+        return {'_error': e.code, '_msg': e.read().decode()}
+
+def _fd_post(path, data):
+    url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
+    body = json.dumps(data).encode()
+    req = urllib_request.Request(url, data=body, headers=_fd_headers(), method='POST')
+    try:
+        with urllib_request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    except urllib_error.HTTPError as e:
+        return {'_error': e.code, '_msg': e.read().decode()}
+
+def _fd_cerca_contacte(nom=None, nif=None):
+    """Cerca un contacte a FD per NIF (exacte) o per nom (primer resultat)."""
+    if nif:
+        res = _fd_get(f'contacts?taxId={urllib_request.quote(nif)}')
+        items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
+        if items:
+            return items[0]
+    if nom:
+        res = _fd_get(f'contacts?name={urllib_request.quote(nom)}')
+        items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
+        if items:
+            return items[0]
+    return None
+
+def _fd_crear_contacte(nom, nif=None, telefon=None):
+    data = {'name': nom}
+    if nif:      data['taxId']  = nif
+    if telefon:  data['phone1'] = telefon
+    return _fd_post('contacts', data)
+
+def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
+    if not data_doc:
+        data_doc = datetime.now().strftime('%Y%m%d')
+    doc = {
+        'client': {'id': contact_id},
+        'documentDate': data_doc,
+        'currency': 'EUR',
+        'linePricesIncludeTaxes': False,
+        'documentLines': linies,
+    }
+    if notes:
+        doc['notes'] = notes
+    return _fd_post('deliveryNotes', doc)
+
+@app.route('/api/crear-albara', methods=['POST'])
+@login_required
+def api_crear_albara():
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+
+    d = request.get_json(force=True) or {}
+    client_nom   = (d.get('client_nom') or '').strip() or 'Client'
+    client_tel   = (d.get('client_tel') or '').strip()
+    cost_prod    = float(d.get('cost_produccio') or 0)
+    preu_net     = float(d.get('preu_net') or 0)
+    preu_final   = float(d.get('preu_final') or 0)
+    marc         = (d.get('marc') or '').strip()
+    opcions_text = (d.get('opcions') or '').strip()
+    observacions = (d.get('observacions') or '').strip()
+    num_pressupost = (d.get('num_pressupost') or '').strip()
+
+    # Determinar contacte: usuari professional té fiscal_id, admin usa nom del client
+    user = query('SELECT nom, nom_empresa, fiscal_id, is_admin FROM usuaris WHERE id=?',
+                 [session['user_id']], one=True)
+    is_admin = bool(_row_get(user, 'is_admin', 0))
+    nif      = _row_get(user, 'fiscal_id', '').strip() if not is_admin else None
+    nom_fd   = _row_get(user, 'nom_empresa', '') or _row_get(user, 'nom', '') if not is_admin else client_nom
+
+    # Buscar o crear contacte
+    contacte = _fd_cerca_contacte(nom=nom_fd, nif=nif if nif else None)
+    if not contacte:
+        contacte = _fd_crear_contacte(nom_fd, nif=nif or None, telefon=client_tel or None)
+    if '_error' in (contacte or {}):
+        return jsonify({'ok': False, 'error': f'Error creant contacte FD: {contacte}'}), 500
+
+    contact_id = contacte.get('id') or contacte.get('contactId')
+    if not contact_id:
+        return jsonify({'ok': False, 'error': 'No s\'ha pogut obtenir ID del contacte FD'}), 500
+
+    # Línies de l'albarà
+    desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+    if opcions_text:
+        desc_marc += f' · {opcions_text}'
+    if client_nom and is_admin:
+        desc_marc = f'[{client_nom}] ' + desc_marc
+
+    linies = [{
+        'description': desc_marc,
+        'quantity': 1.0,
+        'unitPrice': round(cost_prod, 2),
+        'applyTax1': True,
+    }]
+
+    notes_parts = []
+    if num_pressupost:
+        notes_parts.append(f'Pressupost: {num_pressupost}')
+    if preu_net:
+        notes_parts.append(f'PVP sense IVA: {preu_net:.2f} EUR')
+    if preu_final:
+        notes_parts.append(f'PVP total (IVA inclòs): {preu_final:.2f} EUR')
+    if observacions:
+        notes_parts.append(f'Obs: {observacions}')
+    notes = ' | '.join(notes_parts)
+
+    albara = _fd_crear_albara(contact_id, linies, notes=notes)
+    if '_error' in (albara or {}):
+        return jsonify({'ok': False, 'error': f'Error creant albarà FD: {albara}'}), 500
+
+    num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+
 @app.route('/api/passpartous')
 @login_required
 def api_passpartous():
