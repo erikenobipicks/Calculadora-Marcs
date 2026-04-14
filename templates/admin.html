@@ -179,6 +179,42 @@ tr:last-child td{border-bottom:none}
       </div>
 
       <div class="section">
+        <div class="section-title">Referències de passpartú</div>
+        <p class="muted" style="margin-bottom:1rem">Gestiona les referències de passpartú (P001, P002...) amb color i textura. El preu es calcula automàticament per mida; aquí només es defineix l'estètica.</p>
+        <form method="post" action="/admin/passpartous" style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+          <input type="hidden" name="action" value="crear">
+          <div><label>Referència</label><input type="text" name="referencia" placeholder="P001" required></div>
+          <div><label>Color</label><input type="text" name="color" placeholder="Blanc trencat"></div>
+          <div><label>Textura</label><input type="text" name="textura" placeholder="Llis"></div>
+          <div><label>Descripció</label><input type="text" name="descripcio" placeholder="Blanc trencat llis estàndard"></div>
+          <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
+        </form>
+        <div class="table-wrap">
+        <table style="font-size:12px">
+          <thead><tr><th>Referència</th><th>Color</th><th>Textura</th><th>Descripció</th><th></th></tr></thead>
+          <tbody>
+          {% for p in passpartous %}
+          <tr>
+            <td style="font-weight:600;color:#0984e3">{{ p.referencia }}</td>
+            <td>{{ p.color }}</td>
+            <td>{{ p.textura }}</td>
+            <td>{{ p.descripcio }}</td>
+            <td>
+              <form method="post" action="/admin/passpartous" style="display:inline">
+                <input type="hidden" name="action" value="eliminar">
+                <input type="hidden" name="ref" value="{{ p.referencia }}">
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not passpartous %}<tr><td colspan="5" style="color:#aaa;text-align:center;padding:.75rem">Cap referència afegida encara.</td></tr>{% endif %}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="section">
         <div class="section-title">Tarifes d'impressió fotogràfica</div>
         <p class="muted" style="margin-bottom:1rem">Afegeix, revisa o elimina formats de cost d'impressió. Aquest bloc queda separat perquè sigui més fàcil mantenir-lo sense barrejar-lo amb usuaris.</p>
         <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">

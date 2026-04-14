@@ -1,4 +1,4 @@
-﻿import base64, hashlib, hmac, secrets, os, json, time, unicodedata
+﻿import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime
@@ -813,6 +813,45 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+# ── Passpartú: càlcul dinàmic de preu ────────────────────────────────────────
+_SHEET_W      = 80       # ample full en cm
+_SHEET_H      = 120      # alt full en cm
+_SHEET_PRICE  = 7.0      # preu full en €
+_COST_CM2     = 0.000729 # cost per cm²
+_MULT_PETITA  = 8.0      # multiplicador fins a _LIMIT_A cm²
+_MULT_MITJANA = 5.0      # multiplicador entre _LIMIT_A i _LIMIT_B cm²
+_MULT_GRAN    = 3.5      # multiplicador per sobre de _LIMIT_B cm²
+_LIMIT_A      = 900      # cm² (~30x30)
+_LIMIT_B      = 4800     # cm² (~60x80)
+_MIN_PRICE    = 5.50     # preu mínim per peça
+
+def _peces_per_full(ew, eh):
+    # Quantes peces caben en un full 80x120, provant les dues orientacions.
+    n1 = math.floor(_SHEET_W / ew) * math.floor(_SHEET_H / eh)
+    n2 = math.floor(_SHEET_W / eh) * math.floor(_SHEET_H / ew)
+    return max(1, n1, n2)
+
+def calcular_precio_passpartu(ew, eh):
+    # ew, eh: mesura exterior del passpartu en cm. Retorna preu arrodonit a 2 decimals.
+    area = ew * eh
+    n = _peces_per_full(ew, eh)
+    coste_cm2  = area * _COST_CM2
+    coste_hoja = _SHEET_PRICE / n
+    coste_base = max(coste_cm2, coste_hoja)
+    if area <= _LIMIT_A:
+        mult = _MULT_PETITA
+        t = (area - _LIMIT_A * 0.92) / (_LIMIT_A * 0.16)
+        if 0 < t < 1:
+            mult = _MULT_PETITA + t * (_MULT_MITJANA - _MULT_PETITA)
+    elif area <= _LIMIT_B:
+        mult = _MULT_MITJANA
+        t = (area - _LIMIT_B * 0.92) / (_LIMIT_B * 0.16)
+        if 0 < t < 1:
+            mult = _MULT_MITJANA + t * (_MULT_GRAN - _MULT_MITJANA)
+    else:
+        mult = _MULT_GRAN
+    return round(max(coste_base * mult, _MIN_PRICE), 2)
+
 # â”€â”€ Routes: Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1058,6 +1097,60 @@ def public_commercial_settings_sync():
     return jsonify({'ok': True, 'username': username, 'marge': marge, 'marge_impressio': marge_impressio, 'margins': margins})
 
 
+@app.route('/api/public/pricing', methods=['GET'])
+def public_pricing():
+    """Exposa les tarifes professionals (sense marge aplicat) perquè
+    la web les pugui consumir i aplicar-hi el marge propi de cada client.
+
+    Autenticació: capçalera X-Bridge-Token (mateix token que la resta
+    d'endpoints de bridge).
+
+    Retorna:
+      impressio     — taula completa de còpies fotogràfiques (ref, preu, descripcio)
+      laminate_only — preus de laminat sol per mida (ref, preu)
+      encolat_pro   — preus de muntatge encolat i protter per mida (ref, preu, tipus)
+    """
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    # Còpies fotogràfiques
+    impressio_rows = query('SELECT referencia, preu, descripcio FROM impressio ORDER BY preu') or []
+    impressio = [
+        {'ref': r['referencia'], 'preu': float(r['preu'] or 0), 'descripcio': r['descripcio'] or ''}
+        for r in impressio_rows
+    ]
+
+    # Laminat sol (hardcoded en constants, igual que a la calculadora)
+    laminate_only = [
+        {'ref': ref, 'preu': float(preu)}
+        for ref, preu in sorted(LAMINATE_ONLY_PRICES.items(),
+                                key=lambda x: float(x[1]))
+    ]
+
+    # Encolat professional i protter (taula encolat_pro, prefix ENC / PRO)
+    encolat_rows = query('SELECT referencia, preu FROM encolat_pro ORDER BY preu') or []
+    encolat_pro = []
+    for r in encolat_rows:
+        ref = r['referencia'] or ''
+        tipus = 'protter' if ref.upper().startswith('PRO') else 'encolat'
+        mida = ref[3:] if ref.upper().startswith('PRO') or ref.upper().startswith('ENC') else ref
+        encolat_pro.append({
+            'ref': ref,
+            'mida': mida,
+            'preu': float(r['preu'] or 0),
+            'tipus': tipus,
+        })
+
+    return jsonify({
+        'ok': True,
+        'impressio': impressio,
+        'laminate_only': laminate_only,
+        'encolat_pro': encolat_pro,
+    })
+
+
 @app.route('/auth/bridge')
 def bridge_auth():
     payload = _read_bridge_token(request.args.get('token'))
@@ -1156,8 +1249,13 @@ def lookup():
         r = query('SELECT preu FROM vidres WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
         if r: return jsonify({'ok': True, 'preu': r['preu']})
     elif tipus == 'passpartout':
-        r = query('SELECT preu FROM passpartout WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
-        if r: return jsonify({'ok': True, 'preu': r['preu']})
+        # El preu es calcula dinàmicament. La ref té format "EWxEH" (ex: "30x40").
+        try:
+            parts = ref.lower().replace('pas-','').split('x')
+            ew, eh = float(parts[0]), float(parts[1])
+            return jsonify({'ok': True, 'preu': calcular_precio_passpartu(ew, eh)})
+        except Exception:
+            return jsonify({'ok': False})
     elif tipus == 'encolat':
         r = query('SELECT preu FROM encolat_pro WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
         if r: return jsonify({'ok': True, 'preu': r['preu']})
@@ -1265,6 +1363,9 @@ def logo_preview():
 @app.route('/api/empresa', methods=['POST'])
 @admin_required
 def api_empresa():
+    # Nota: aquest endpoint és només per admins i actualitza el config global
+    # que actua de valors per defecte. Els clients no-admin guarden les seves
+    # dades pròpies a usuaris.empresa_adreca / empresa_tel via /api/desar-marge.
     d = request.json or {}
     nom    = d.get('nom','')
     adreca = d.get('adreca','')
@@ -1329,18 +1430,19 @@ def guardar():
     cid = execute('''INSERT INTO comandes
         (user_id, data, client_nom, client_tel,
          pre_marc, marc_principal, amplada, alcada, copia,
-         encolat, vidre, passpartout, impressio,
+         encolat, vidre, passpartout, passpartu_ref, impressio,
          revers_peu, revers_peu_preu,
          tipus_peca, tipus_peca_detall, final_amplada, final_alcada,
          marge, descompte, quantitat,
          preu_net, preu_final, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
         d.get('amplada',0), d.get('alcada',0), d.get('copia',0),
         d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
+        d.get('passpartu_ref',''),
         d.get('impressio',''),
         1 if d.get('revers_peu') else 0,
         d.get('revers_peu_preu', 0),
@@ -1560,6 +1662,73 @@ def api_cerca_moldura():
                  [f'%{q.lower()}%', f'%{q.lower()}%'])
     return jsonify([dict(r) for r in rows])
 
+@app.route('/admin/taules-preus')
+@admin_required
+def admin_taules_preus():
+    """Mostra totes les taules de preus i simula lookups per mides personalitzades."""
+    w = request.args.get('w', 0, type=float)
+    h = request.args.get('h', 0, type=float)
+
+    vidres_rows   = [dict(r) for r in query('SELECT referencia, preu FROM vidres ORDER BY referencia')   or []]
+    encolat_rows  = [dict(r) for r in query('SELECT referencia, preu FROM encolat_pro ORDER BY referencia') or []]
+
+    lookup = {}
+    if w > 0 and h > 0:
+        def sim(rows, prefix=None):
+            r = _find_closest(rows, w, h, prefix=prefix)
+            return {'ref': r['referencia'], 'preu': r['preu']} if r else None
+        lookup = {
+            'vidre':       sim([r for r in vidres_rows if not r['referencia'].upper().startswith(('DV-','MIR-'))]),
+            'doble_vidre': sim(vidres_rows, prefix='DV-'),
+            'mirall':      sim(vidres_rows, prefix='MIR-'),
+            'encolat':     sim(encolat_rows, prefix='ENC'),
+            'protter':     sim(encolat_rows, prefix='PRO'),
+        }
+
+    def rows_html(rows, highlight_ref=None):
+        lines = ['<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-size:13px">',
+                 '<tr><th>Referència</th><th>Preu (€)</th></tr>']
+        for r in rows:
+            bg = ' style="background:#ffe082"' if highlight_ref and r['referencia'] == highlight_ref else ''
+            lines.append(f'<tr{bg}><td>{r["referencia"]}</td><td>{r["preu"]}</td></tr>')
+        lines.append('</table>')
+        return '\n'.join(lines)
+
+    vid_hl   = lookup.get('vidre',   {}).get('ref') if lookup else None
+    enc_hl   = lookup.get('encolat', {}).get('ref') if lookup else None
+    pro_hl   = lookup.get('protter', {}).get('ref') if lookup else None
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Taules de preus — Admin</title>
+<style>body{{font-family:Arial,sans-serif;padding:2rem;background:#f5f6fa}}
+h2{{margin-top:2rem}}
+.lookup{{background:#e8f5e9;border:1px solid #a5d6a7;padding:1rem;border-radius:8px;margin-bottom:1.5rem;font-size:14px}}
+.lookup b{{color:#1b5e20}}</style></head><body>
+<h1>Taules de preus</h1>
+<form method="get">
+  Mida marc: <input name="w" value="{w or ''}" placeholder="Amplada" style="width:70px"> ×
+             <input name="h" value="{h or ''}" placeholder="Alçada"  style="width:70px"> cm
+  <button type="submit">Simular lookup</button>
+</form>
+"""
+    if lookup:
+        def lrow(k, label):
+            v = lookup.get(k)
+            return f'<li><b>{label}:</b> {v["ref"]} → {v["preu"]}€</li>' if v else f'<li><b>{label}:</b> no trobat</li>'
+        html += f'<div class="lookup"><b>Lookup per {w}×{h} cm:</b><ul>'
+        html += lrow('vidre',       'Vidre')
+        html += lrow('doble_vidre', 'Doble vidre')
+        html += lrow('mirall',      'Mirall')
+        html += lrow('encolat',     'Encolat')
+        html += lrow('protter',     'Protter')
+        html += '</ul></div>'
+
+    html += f'<h2>Vidres ({len(vidres_rows)} files)</h2>' + rows_html(vidres_rows, vid_hl)
+    html += f'<h2>Encolat / Protter ({len(encolat_rows)} files)</h2>' + rows_html(encolat_rows, enc_hl or pro_hl)
+    html += '</body></html>'
+    return html
+
+
 @app.route('/historial')
 @login_required
 def historial():
@@ -1628,7 +1797,8 @@ def admin():
     usuaris = query('SELECT * FROM usuaris ORDER BY nom')
     config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
     impressio = query('SELECT * FROM impressio ORDER BY preu')
-    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio)
+    passpartous = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio, passpartous=passpartous)
 
 @app.route('/admin/usuari', methods=['POST'])
 @admin_required
@@ -1678,6 +1848,39 @@ def admin_config():
             execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
     flash('Configuració desada.', 'ok')
     return redirect(url_for('admin'))
+
+@app.route('/api/passpartous')
+@login_required
+def api_passpartous():
+    """Llista de referències de passpartú (color/textura) per al selector de la calculadora."""
+    rows = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    return jsonify([{
+        'ref': r['referencia'],
+        'color': r['color'] or '',
+        'textura': r['textura'] or '',
+        'descripcio': r['descripcio'] or '',
+    } for r in rows])
+
+
+@app.route('/admin/passpartous', methods=['POST'])
+@admin_required
+def admin_passpartous():
+    action = request.form.get('action')
+    if action == 'crear':
+        ref = request.form.get('referencia', '').strip().upper()
+        color = request.form.get('color', '').strip()
+        textura = request.form.get('textura', '').strip()
+        descripcio = request.form.get('descripcio', '').strip()
+        if ref:
+            execute('INSERT OR REPLACE INTO passpartout (referencia, color, textura, descripcio) VALUES (?,?,?,?)',
+                    [ref, color, textura, descripcio])
+            flash(f'Referència {ref} desada.', 'ok')
+    elif action == 'eliminar':
+        ref = request.form.get('ref', '').strip()
+        execute('DELETE FROM passpartout WHERE referencia=?', [ref])
+        flash('Referència eliminada.', 'ok')
+    return redirect(url_for('admin'))
+
 
 @app.route('/admin/impressio', methods=['POST'])
 @admin_required
@@ -2184,7 +2387,7 @@ def crear_pdf(c):
 
     # ── Capçalera ─────────────────────────────────────────────────────────
     # Get empresa info for this user
-    u_data = query('SELECT nom_empresa, empresa_adreca, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
+    u_data = query('SELECT nom_empresa, empresa_adreca, empresa_tel, brand_color FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
     nom_empresa = ''
     if u_data and _row_get(u_data, 'nom_empresa', ''):
         nom_empresa = _row_get(u_data, 'nom_empresa', '')
@@ -2616,20 +2819,30 @@ def _display_impressio(c, t):
     return t['inclosa']
 
 def _find_closest(rows, w, h, prefix=None):
-    best, best_score = None, float('inf')
+    """Among all sizes that contain (w, h), return the cheapest one.
+    Ties broken by smallest perimeter overshoot to avoid unnecessary waste.
+    This guarantees a larger frame never costs more than a smaller one due to
+    non-monotonic price tables."""
+    candidates = []
     for row in rows:
         ref = row['referencia']
         if prefix and not ref.upper().startswith(prefix.upper()):
             continue
         rw, rh = _parse_dims(ref)
         if rw is None: continue
+        best_ov = None
         for fw, fh in [(rw,rh),(rh,rw)]:
             if fw >= w and fh >= h:
-                score = (fw-w)+(fh-h)
-                if score < best_score:
-                    best_score = score
-                    best = dict(row)
-    return best
+                ov = (fw-w)+(fh-h)
+                if best_ov is None or ov < best_ov:
+                    best_ov = ov
+        if best_ov is not None:
+            candidates.append((float(row.get('preu', 0) or 0), best_ov, dict(row)))
+    if not candidates:
+        return None
+    # Sort by price first, then by overshoot to minimise waste among equally-priced options
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    return candidates[0][2]
 
 def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
     """Closest by surface area — works for all products"""
@@ -2648,25 +2861,23 @@ def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
     return best
 
 def _find_min_contain(rows, w, h, prefix=None):
-    """Smallest format that physically contains the dimensions (can rotate).
-    Used for impressio: the paper must be >= the photo in both dimensions."""
-    best, best_area = None, float('inf')
+    """Among all formats that physically contain (w, h), return the cheapest.
+    Ties broken by smallest area to minimise waste.
+    Fallback: largest available if nothing fits."""
+    candidates = []
     for row in rows:
         ref = row['referencia']
         if prefix and not ref.upper().startswith(prefix.upper()): continue
         rw, rh = _parse_dims(ref)
         if rw is None: continue
-        # Try both orientations
         fits = (rw >= w and rh >= h) or (rh >= w and rw >= h)
         if fits:
-            area = rw * rh
-            if area < best_area:
-                best_area = area
-                best = row
+            candidates.append((float(row.get('preu', 0) or 0), rw * rh, row))
+    if candidates:
+        candidates.sort(key=lambda x: (x[0], x[1]))
+        return candidates[0][2]
     # Fallback: if nothing contains it, take the largest available
-    if best is None:
-        best = max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
-    return best
+    return max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
 
 def _imp_closest(fw, fh):
     rows = [dict(r) for r in query('SELECT * FROM impressio')]
@@ -2716,9 +2927,10 @@ def api_closest():
             return {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
         return None
 
-    # Encolat/Protter: min-contain (producte ha de cobrir físicament el marc)
-    # Vidre/Passpartú/ProEco: àrea propera (permet mides no estàndard)
-    # Impressió: àrea propera (format comercial més similar)
+    # Tots els productes físics (vidre, passpartú, encolat, protter) usen
+    # min-contain: la mida ha de cobrir físicament el marc. Això garanteix
+    # que una peça més gran no pot sortir mai més barata que una de més petita.
+    # Impressió: min-contain també (el paper ha de cobrir la foto).
     def cc(table, cw, ch, prefix=None, exclude_multi=None, preu_col='preu'):
         """Closest by min overshoot (must contain the size)"""
         rows = [dict(r) for r in query(f'SELECT * FROM {table}')]
@@ -2732,12 +2944,12 @@ def api_closest():
     result = {
         'encolat':      cc('encolat_pro', w, h, prefix='ENC'),
         'protter':      cc('encolat_pro', w, h, prefix='PRO'),
-        'vidre':        ca('vidres',      w, h, exclude_multi=['DV-','MIR-']),
-        'doble_vidre':  ca('vidres',      w, h, prefix='DV-'),
-        'mirall':       ca('vidres',      w, h, prefix='MIR-'),
-        'passpartu':    ca('passpartout', w, h, prefix='1PAS'),
-        'doble_pas':    ca('passpartout', w, h, prefix='DOBPAS'),
-        'proeco':       ca('passpartout', w, h, prefix='PROECO'),
+        'vidre':        cc('vidres',      w, h, exclude_multi=['DV-','MIR-']),
+        'doble_vidre':  cc('vidres',      w, h, prefix='DV-'),
+        'mirall':       cc('vidres',      w, h, prefix='MIR-'),
+        'passpartu':    {'ref': f'pas-{w}x{h}', 'preu': calcular_precio_passpartu(w, h)},
+        'doble_pas':    {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 1.9, 2)},
+        'proeco':       {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 0.75, 2)},
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
@@ -3179,6 +3391,12 @@ def init_db():
                 "ALTER TABLE comandes ADD COLUMN pagat INTEGER DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN entregat INTEGER DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN lang TEXT DEFAULT 'ca'",
+                "ALTER TABLE comandes ADD COLUMN foto_comanda TEXT",
+                "ALTER TABLE comandes ADD COLUMN foto_ts REAL",
+                "ALTER TABLE comandes ADD COLUMN passpartu_ref TEXT DEFAULT ''",
+                "ALTER TABLE passpartout ADD COLUMN color TEXT DEFAULT ''",
+                "ALTER TABLE passpartout ADD COLUMN textura TEXT DEFAULT ''",
+                "ALTER TABLE passpartout ADD COLUMN descripcio TEXT DEFAULT ''",
             ]:
                 try:
                     db.execute(sql)
