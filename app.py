@@ -1898,7 +1898,7 @@ def _fd_crear_contacte(nom, nif=None, telefon=None):
     main = {'name': nom}
     if nif:     main['taxId']  = nif
     if telefon: main['phone1'] = telefon
-    return _fd_post('contacts', {'content': {'type': 'client', 'main': main}})
+    return _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
 
 def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
