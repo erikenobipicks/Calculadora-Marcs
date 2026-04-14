@@ -963,11 +963,21 @@ function preuDisplay(cost, isImp){
   return fmt(net*1.21);
 }
 function showAlert(msg,t){
-  var a=document.getElementById('alert');
-  a.className='alert alert-'+t; a.textContent=msg;
-  a.style.display='block';
-  a.scrollIntoView({behavior:'smooth',block:'center'});
-  setTimeout(function(){a.style.display='none';},5000);
+  // Toast fix a baix de la pantalla — no fa scroll
+  var toast = document.getElementById('toast-alert');
+  if(!toast){
+    toast = document.createElement('div');
+    toast.id = 'toast-alert';
+    toast.style.cssText = 'position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);z-index:9999;max-width:90vw;padding:10px 20px;border-radius:9px;font-size:14px;font-weight:600;font-family:"DM Sans",sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.18);transition:opacity .3s;pointer-events:none;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.background = t==='ok' ? '#1A6B45' : t==='err' ? '#B84040' : '#2f3640';
+  toast.style.color = '#fff';
+  toast.style.opacity = '1';
+  toast.style.display = 'block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ toast.style.opacity='0'; setTimeout(function(){ toast.style.display='none'; },300); }, 4000);
 }
 function syncSelectedGroupVisual(grup, val){
   allKeys[grup].forEach(function(k){
