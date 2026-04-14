@@ -1322,6 +1322,26 @@ def get_marge():
     })
 
 
+@app.route('/api/upload-foto-comanda', methods=['POST'])
+@login_required
+def upload_foto_comanda():
+    """Puja una foto de la peça i retorna la URL pública per incloure al WA."""
+    f = request.files.get('foto')
+    if not f or not getattr(f, 'filename', ''):
+        return jsonify({'ok': False, 'error': 'no_file'})
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    allowed = {'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'}
+    if ext not in allowed:
+        return jsonify({'ok': False, 'error': 'format_invalid'})
+    uid = secrets.token_hex(12)
+    filename = f'{uid}.{ext}'
+    uploads_dir = os.path.join(app.root_path, 'static', 'uploads', 'comandes')
+    os.makedirs(uploads_dir, exist_ok=True)
+    f.save(os.path.join(uploads_dir, filename))
+    host = request.host_url.rstrip('/')
+    return jsonify({'ok': True, 'url': f'{host}/static/uploads/comandes/{filename}'})
+
+
 @app.route('/api/logo', methods=['POST'])
 @login_required
 def upload_logo():
