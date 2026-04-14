@@ -1942,8 +1942,11 @@ def api_crear_albara():
     if '_error' in (contacte or {}):
         return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
+    _c_main = (contacte.get('content') or {}).get('main') or {}
     contact_id = (contacte.get('id') or contacte.get('contactId') or
-                  contacte.get('contactid') or contacte.get('_id') or '')
+                  contacte.get('contactid') or contacte.get('_id') or
+                  _c_main.get('id') or _c_main.get('contactId') or
+                  _c_main.get('_id') or '')
     if not contact_id:
         print(f'FD contacte sense ID: {contacte}')
         return jsonify({'ok': False, 'error': f'Contacte FD creat però sense ID. Resposta: {str(contacte)[:200]}'}), 500
