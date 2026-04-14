@@ -1879,13 +1879,17 @@ def _fd_cerca_contacte(nom=None, nif=None):
     """Cerca un contacte a FD per NIF o per nom."""
     if nif:
         res = _fd_get(f'contacts?fiscalId={urllib_quote(nif)}')
+        print(f'FD cerca per NIF resposta claus: {list(res.keys()) if isinstance(res, dict) else type(res)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
+            print(f'FD item[0] claus: {list(items[0].keys()) if isinstance(items[0], dict) else items[0]}')
             return items[0]
     if nom:
         res = _fd_get(f'contacts?search={urllib_quote(nom)}')
+        print(f'FD cerca per nom resposta claus: {list(res.keys()) if isinstance(res, dict) else type(res)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
+            print(f'FD item[0] claus: {list(items[0].keys()) if isinstance(items[0], dict) else items[0]}')
             return items[0]
     return None
 
@@ -1893,7 +1897,12 @@ def _fd_crear_contacte(nom, nif=None, telefon=None):
     main = {'name': nom, 'country': 'ES', 'currency': 'EUR'}
     if nif:     main['fiscalId'] = nif
     if telefon: main['phone']    = telefon
-    return _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
+    res = _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
+    if '_error' in (res or {}):
+        return res
+    # El POST no sempre retorna l'ID; busquem el contacte just després per obtenir-lo
+    trobat = _fd_cerca_contacte(nom=nom, nif=nif if nif else None)
+    return trobat if trobat else res
 
 def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
