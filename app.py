@@ -1881,38 +1881,40 @@ def _fd_post(path, data):
         return {'_error': e.code, '_msg': e.read().decode()}
 
 def _fd_cerca_contacte(nom=None, nif=None):
-    """Cerca un contacte a FD per NIF (exacte) o per nom (primer resultat)."""
+    """Cerca un contacte a FD per NIF o per nom."""
     if nif:
-        res = _fd_get(f'contacts?taxId={urllib_quote(nif)}')
+        res = _fd_get(f'contacts?fiscalId={urllib_quote(nif)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
             return items[0]
     if nom:
-        res = _fd_get(f'contacts?name={urllib_quote(nom)}')
+        res = _fd_get(f'contacts?search={urllib_quote(nom)}')
         items = res.get('items') or res.get('data') or (res if isinstance(res, list) else [])
         if items:
             return items[0]
     return None
 
 def _fd_crear_contacte(nom, nif=None, telefon=None):
-    main = {'name': nom}
-    if nif:     main['taxId']  = nif
-    if telefon: main['phone1'] = telefon
+    main = {'name': nom, 'country': 'ES', 'currency': 'EUR'}
+    if nif:     main['fiscalId'] = nif
+    if telefon: main['phone']    = telefon
     return _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
 
 def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
-        data_doc = datetime.now().strftime('%Y%m%d')
+        data_doc = datetime.now().strftime('%Y-%m-%d')
     main = {
-        'client': {'id': contact_id},
-        'documentDate': data_doc,
-        'currency': 'EUR',
-        'linePricesIncludeTaxes': False,
-        'documentLines': linies,
+        'contact':   contact_id,
+        'currency':  'EUR',
+        'baseState': 'pending',
+        'docNumber': {'series': 'AL'},
+        'lines':     linies,
     }
+    if data_doc:
+        main['date'] = data_doc
     if notes:
         main['notes'] = notes
-    return _fd_post('deliveryNotes', {'content': {'main': main}})
+    return _fd_post('deliveryNotes', {'content': {'type': 'deliveryNote', 'main': main}})
 
 @app.route('/api/crear-albara', methods=['POST'])
 @login_required
@@ -1945,7 +1947,8 @@ def api_crear_albara():
     if '_error' in (contacte or {}):
         return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    contact_id = contacte.get('id') or contacte.get('contactId') or contacte.get('contactid')
+    contact_id = (contacte.get('id') or contacte.get('contactId') or
+                  contacte.get('contactid') or contacte.get('_id') or '')
     if not contact_id:
         print(f'FD contacte sense ID: {contacte}')
         return jsonify({'ok': False, 'error': f'Contacte FD creat però sense ID. Resposta: {str(contacte)[:200]}'}), 500
@@ -1958,10 +1961,10 @@ def api_crear_albara():
         desc_marc = f'[{client_nom}] ' + desc_marc
 
     linies = [{
-        'description': desc_marc,
-        'quantity': 1.0,
+        'text':      desc_marc,
+        'quantity':  1.0,
         'unitPrice': round(cost_prod, 2),
-        'applyTax1': True,
+        'tax':       ['S_IVA_21'],
     }]
 
     notes_parts = []
