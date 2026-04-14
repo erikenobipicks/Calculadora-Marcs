@@ -451,13 +451,6 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           </div>
           <!-- Bloc passpartú: apareix quan es selecciona passpartú -->
           <div id="bloc-passpartu" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
-            <div class="f" style="margin-bottom:.7rem">
-              <label>Referència del passpartú <span style="font-size:11px;color:var(--hint);font-weight:400">(color / textura)</span></label>
-              <select id="ref-passpartu-color" onchange="onPasspartuRefChange()" style="width:100%">
-                <option value="">— Sense referència específica —</option>
-              </select>
-              <div id="desc-passpartu-ref" style="font-size:11px;color:var(--hint);margin-top:4px;font-style:italic"></div>
-            </div>
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
                 <label>Marge passpartú (cm per banda)</label>
@@ -601,7 +594,6 @@ var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
 var GRUIX   = {pre:0, marc:0};
 var CLOSEST = {};
 var marge = 60, marge_impressio = 0, rmode = 'pvp', uid = null;
-var _PASSPARTOUS = [];  // llista de referències carregada de l'API
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
@@ -2351,38 +2343,6 @@ function whatsappObjectiu(){
 document.querySelectorAll('input[type=radio][value=""]').forEach(function(r){
   var c=document.getElementById('opt-'+r.name+'-cap'); if(c) c.classList.add('selected');
 });
-// ── Referències passpartú ─────────────────────────────────────────────────
-function _carregarPasspartous(){
-  fetch('/api/passpartous').then(function(r){return r.json();}).then(function(data){
-    _PASSPARTOUS = data;
-    var sel = document.getElementById('ref-passpartu-color');
-    sel.innerHTML = '<option value="">— Sense referència específica —</option>';
-    data.forEach(function(p){
-      var opt = document.createElement('option');
-      opt.value = p.ref;
-      var label = p.ref;
-      if(p.color)   label += ' · ' + p.color;
-      if(p.textura) label += ' (' + p.textura + ')';
-      opt.textContent = label;
-      sel.appendChild(opt);
-    });
-  }).catch(function(){});
-}
-function onPasspartuRefChange(){
-  var ref = document.getElementById('ref-passartu-color') ? document.getElementById('ref-passartu-color').value
-          : (document.getElementById('ref-passpartu-color') || {}).value || '';
-  var sel = document.getElementById('ref-passpartu-color');
-  ref = sel ? sel.value : '';
-  var p = _PASSPARTOUS.find(function(x){ return x.ref === ref; });
-  var desc = '';
-  if(p){
-    if(p.color)   desc += p.color;
-    if(p.textura) desc += (desc?' · ':'')+p.textura;
-    if(p.descripcio) desc += (desc?' — ':'')+p.descripcio;
-  }
-  document.getElementById('desc-passpartu-ref').textContent = desc;
-}
-_carregarPasspartous();
 
 setLang('ca');
 renderTabs();
