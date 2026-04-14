@@ -2717,20 +2717,30 @@ def _display_impressio(c, t):
     return t['inclosa']
 
 def _find_closest(rows, w, h, prefix=None):
-    best, best_score = None, float('inf')
+    """Among all sizes that contain (w, h), return the cheapest one.
+    Ties broken by smallest perimeter overshoot to avoid unnecessary waste.
+    This guarantees a larger frame never costs more than a smaller one due to
+    non-monotonic price tables."""
+    candidates = []
     for row in rows:
         ref = row['referencia']
         if prefix and not ref.upper().startswith(prefix.upper()):
             continue
         rw, rh = _parse_dims(ref)
         if rw is None: continue
+        best_ov = None
         for fw, fh in [(rw,rh),(rh,rw)]:
             if fw >= w and fh >= h:
-                score = (fw-w)+(fh-h)
-                if score < best_score:
-                    best_score = score
-                    best = dict(row)
-    return best
+                ov = (fw-w)+(fh-h)
+                if best_ov is None or ov < best_ov:
+                    best_ov = ov
+        if best_ov is not None:
+            candidates.append((float(row.get('preu', 0) or 0), best_ov, dict(row)))
+    if not candidates:
+        return None
+    # Sort by price first, then by overshoot to minimise waste among equally-priced options
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    return candidates[0][2]
 
 def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
     """Closest by surface area — works for all products"""
@@ -2749,25 +2759,23 @@ def _find_closest_area(rows, w, h, prefix=None, exclude_multi=None):
     return best
 
 def _find_min_contain(rows, w, h, prefix=None):
-    """Smallest format that physically contains the dimensions (can rotate).
-    Used for impressio: the paper must be >= the photo in both dimensions."""
-    best, best_area = None, float('inf')
+    """Among all formats that physically contain (w, h), return the cheapest.
+    Ties broken by smallest area to minimise waste.
+    Fallback: largest available if nothing fits."""
+    candidates = []
     for row in rows:
         ref = row['referencia']
         if prefix and not ref.upper().startswith(prefix.upper()): continue
         rw, rh = _parse_dims(ref)
         if rw is None: continue
-        # Try both orientations
         fits = (rw >= w and rh >= h) or (rh >= w and rw >= h)
         if fits:
-            area = rw * rh
-            if area < best_area:
-                best_area = area
-                best = row
+            candidates.append((float(row.get('preu', 0) or 0), rw * rh, row))
+    if candidates:
+        candidates.sort(key=lambda x: (x[0], x[1]))
+        return candidates[0][2]
     # Fallback: if nothing contains it, take the largest available
-    if best is None:
-        best = max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
-    return best
+    return max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
 
 def _imp_closest(fw, fh):
     rows = [dict(r) for r in query('SELECT * FROM impressio')]
