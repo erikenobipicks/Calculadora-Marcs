@@ -1940,11 +1940,14 @@ def api_crear_albara():
     nif      = _row_get(user, 'fiscal_id', '').strip() if not is_admin else None
     nom_fd   = client_nom if is_admin else (_row_get(user, 'nom_empresa', '') or _row_get(user, 'nom', ''))
 
+    print(f'FD DEBUG: is_admin={is_admin} client_nom={repr(client_nom)} nom_fd={repr(nom_fd)}')
+
     if not nom_fd:
         return jsonify({'ok': False, 'error': 'Cal omplir el nom del client abans de crear l\'albarà.'}), 400
 
     # Buscar o crear contacte
     contacte = _fd_cerca_contacte(nom=nom_fd, nif=nif if nif else None)
+    print(f'FD DEBUG: cerca contacte nom={repr(nom_fd)} -> {repr((contacte or {}).get("content", {}).get("main", {}).get("name","?")) if contacte else "no trobat"}')
     if not contacte:
         contacte = _fd_crear_contacte(nom_fd, nif=nif or None, telefon=client_tel or None)
     if '_error' in (contacte or {}):
