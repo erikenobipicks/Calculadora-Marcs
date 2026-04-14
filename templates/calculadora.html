@@ -563,7 +563,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
-        <button class="btn btn-a" id="btn-portar" onclick="portarAComandaWeb()" disabled title="Porta aquest resum al mòdul de comanda de Reus Revela">Portar a comanda</button>
+        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" disabled title="Envia la comanda per correu electrònic">Enviar per mail</button>
         <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
       </div>
       </div>
@@ -1872,6 +1872,7 @@ function calcular(){
     preu_final:pFin,
     pendent:pend,
     descEur:descEur,
+    cost_produccio: cTot*qty,
     revers_peu_preu: parseFloat(((((cRevers*(1+marge/100))*1.21)*qty) || 0).toFixed(2))
   };
 }
@@ -1988,29 +1989,103 @@ function buildWebOrderPayload(){
   };
 }
 
-function portarAComandaWeb(){
-  var payload = buildWebOrderPayload();
-  if(!WEB_ORDER_URL){
-    showAlert('La connexió amb la comanda online no està disponible ara mateix.','err');
-    return;
-  }
-  if(!payload.frame_main && !payload.frame_pre){
-    showAlert('Selecciona almenys una motllura abans de portar el pressupost al portal.','err');
+// ── Mail comanda ──────────────────────────────────────────────────────────
+function buildMailText(){
+  var c     = window._c || {};
+  var fmt2  = function(v){ return (Math.round((v||0)*100)/100).toFixed(2).replace('.',',') + ' €'; };
+  var client = document.getElementById('client_nom').value||'—';
+  var tel    = document.getElementById('client_tel').value||'';
+  var data   = document.getElementById('data_comanda').value||'';
+  var num    = (window._numPressupost||'');
+  var marc   = (document.getElementById('marc_principal').value||'').trim();
+  var premarc= (document.getElementById('pre_marc').value||'').trim();
+  var ample  = document.getElementById('amplada').value||'';
+  var alcada = document.getElementById('alcada').value||'';
+  var interior  = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+  var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var muntatge  = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  var vidre  = (document.getElementById('vidre')||{}).value||'';
+  var obs    = document.getElementById('observacions').value||'';
+  var entrega= document.getElementById('entrega')?document.getElementById('entrega').value:'';
+  var pNet   = c.preu_net   ? fmt2(c.preu_net)   : '—';
+  var pFin   = c.preu_final ? fmt2(c.preu_final) : '—';
+  var pIva   = (c.preu_net && c.preu_final) ? fmt2(c.preu_final - c.preu_net) : '—';
+  var pend   = c.pendent    ? fmt2(Math.max(0,c.pendent)) : pFin;
+  var cProd  = c.cost_produccio ? fmt2(c.cost_produccio) : '—';
+  var interiorMap = {passpartu:'Passpartú',doble_pas:'Doble passpartú',proeco:'ProEco','':'Cap'};
+  var proteccioMap = {vidre_basic:'Vidre bàsic',vidre_premium:'Vidre premium',vidre_uv:'Vidre UV',vidre_museum:'Vidre museu',doble_vidre:'Doble vidre',mirall:'Mirall','':'Sense vidre'};
+  var muntatgeMap  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat','':'Estàndard'};
+
+  var lines = [];
+  lines.push('COMANDA DE MARC — REUS REVELA');
+  lines.push('══════════════════════════════');
+  lines.push('');
+  lines.push('Client: ' + client + (tel?' · Tel: '+tel:''));
+  lines.push('Data: ' + data + (num?' · Pressupost: '+num:''));
+  lines.push('');
+  lines.push('PEÇA I OPCIONS');
+  lines.push('──────────────');
+  lines.push('Mides: ' + ample + ' × ' + alcada + ' cm');
+  if(marc)    lines.push('Marc principal: ' + marc);
+  if(premarc) lines.push('Pre-marc: ' + premarc);
+  lines.push('Interior: '  + (interiorMap[interior]||interior||'Cap'));
+  lines.push('Protecció: ' + (proteccioMap[proteccio]||proteccio||'Sense vidre'));
+  lines.push('Muntatge: '  + (muntatgeMap[muntatge]||muntatge||'Estàndard'));
+  if(vidre && vidre !== proteccio) lines.push('Vidre ref: ' + vidre);
+  if(obs) lines.push('Observacions: ' + obs);
+  lines.push('');
+  lines.push('PREU AL CLIENT');
+  lines.push('──────────────');
+  lines.push('Base (sense IVA): ' + pNet);
+  lines.push('IVA 21%: ' + pIva);
+  lines.push('TOTAL: ' + pFin);
+  if(entrega && parseFloat(entrega)>0) lines.push('Bestreta: ' + fmt2(parseFloat(entrega)));
+  lines.push('Pendent: ' + pend);
+  lines.push('');
+  lines.push('ÚS INTERN — COST DE PRODUCCIÓ (sense IVA)');
+  lines.push('──────────────────────────────────────────');
+  lines.push('Cost base sense IVA: ' + cProd);
+  return lines.join('\n');
+}
+
+function obrirMailComanda(){
+  var marc = (document.getElementById('marc_principal').value||'').trim();
+  if(!marc){
+    showAlert('Selecciona almenys una motllura abans d\'enviar per mail.','err');
     var inp = document.getElementById('marc_principal');
     if(inp){ inp.scrollIntoView({behavior:'smooth',block:'center'}); inp.focus(); }
     return;
   }
-  try {
-    var url = new URL(WEB_ORDER_URL);
-    Object.keys(payload).forEach(function(key){
-      var value = payload[key];
-      if(value === '' || value === null || value === undefined) return;
-      url.searchParams.set(key, value);
-    });
-    window.location.assign(url.toString());
-  } catch(e){
-    showAlert('Error en construir l\'URL de la comanda: ' + e.message, 'err');
-  }
+  document.getElementById('mail-cos').value = buildMailText();
+  var clientMail = '';  // podria venir d'un camp futur
+  document.getElementById('mail-destinatari').value = clientMail;
+  var overlay = document.getElementById('mail-overlay');
+  overlay.style.display = 'flex';
+}
+
+function tancarMailModal(){
+  document.getElementById('mail-overlay').style.display = 'none';
+}
+
+function copiarMailText(){
+  var ta = document.getElementById('mail-cos');
+  ta.select();
+  document.execCommand('copy');
+  var btn = document.getElementById('mail-btn-copiar');
+  btn.textContent = '✓ Copiat!';
+  setTimeout(function(){ btn.textContent = 'Copiar text'; }, 2000);
+}
+
+function obrirMailClient(){
+  var dest = document.getElementById('mail-destinatari').value.trim();
+  var cos  = document.getElementById('mail-cos').value;
+  var client = document.getElementById('client_nom').value||'';
+  var num    = window._numPressupost||'';
+  var subj   = 'Comanda marc' + (client?' — '+client:'') + (num?' ('+num+')':'');
+  var mailto = 'mailto:' + encodeURIComponent(dest)
+             + '?subject=' + encodeURIComponent(subj)
+             + '&body='    + encodeURIComponent(cos);
+  window.location.href = mailto;
 }
 
 // ── Pestanyes ─────────────────────────────────────────────────────────────
@@ -2364,5 +2439,36 @@ recalcMides();
 </script>
 {% include '_private_whatsapp_widget.html' %}
 <script src="{{ url_for('static', filename='private_whatsapp.js') }}"></script>
+
+<!-- ── Modal mail comanda ──────────────────────────────────────────────── -->
+<div id="mail-overlay" onclick="if(event.target===this)tancarMailModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:540px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+    <div style="padding:1.2rem 1.4rem .8rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <strong style="font-size:15px">Enviar comanda per mail</strong>
+        <p style="font-size:12px;color:var(--muted);margin-top:2px">Revisa el text, afegeix el destinatari i obre el gestor de correu.</p>
+      </div>
+      <button type="button" onclick="tancarMailModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1">×</button>
+    </div>
+    <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
+      <div style="margin-bottom:.9rem">
+        <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">DESTINATARI (correu del client o intern)</label>
+        <input type="email" id="mail-destinatari" placeholder="client@exemple.com o deixa buit" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">TEXT DE LA COMANDA <span style="font-weight:400">(editable)</span></label>
+        <textarea id="mail-cos" rows="18" style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:7px;font-size:13px;font-family:monospace;line-height:1.55;resize:vertical"></textarea>
+      </div>
+      <div style="margin-top:.6rem;padding:.6rem .8rem;background:#FFF8EC;border:1px solid #F5DFA0;border-radius:7px;font-size:11px;color:#7A5C00">
+        ℹ️ El preu de cost intern és només visible per al taller. Podeu adjuntar la imatge directament al gestor de correu abans d'enviar.
+      </div>
+    </div>
+    <div style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
+      <button type="button" id="mail-btn-copiar" onclick="copiarMailText()" style="padding:8px 16px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">Copiar text</button>
+      <button type="button" onclick="obrirMailClient()" style="padding:8px 18px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Obrir gestor de correu →</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
