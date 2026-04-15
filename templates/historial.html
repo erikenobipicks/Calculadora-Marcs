@@ -209,7 +209,7 @@ tr:hover td{background:#FAFAF8}
             class="btn-sm {% if c0.entregat %}btn-entregat-on{% else %}btn-entregat{% endif %}">
             {% if c0.entregat %}📦 Entregat{% else %}Marcar entregat{% endif %}
           </button>
-          {% if session.is_admin and c0.user_id != session.user_id %}
+          {% if session.is_admin %}
           <button onclick="crearAlbaraComanda('{{ sessio_id }}', this)"
             class="btn-sm btn-albara"
             {% if c0.fd_albara %}title="Albarà ja creat: {{ c0.fd_albara }}"{% endif %}>
