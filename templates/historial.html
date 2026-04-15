@@ -68,6 +68,7 @@ tr:hover td{background:#FAFAF8}
 .btn-liq{background:var(--amber-l);color:var(--amber);border:1px solid color-mix(in srgb, var(--amber) 34%, white)}.btn-liq:hover{background:color-mix(in srgb, var(--amber-l) 74%, white)}
 .btn-entregat{background:#EEF2FF;color:#4F46E5;border:1px solid #C7D2FE}.btn-entregat:hover{background:#E0E7FF}
 .btn-entregat-on{background:#4F46E5;color:#fff;border:1px solid #3730A3}
+.btn-albara{background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA}.btn-albara:hover{background:#FFEDD5}
 .pagat-badge{display:inline-block;background:#1A6B45;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
 @media(max-width:920px){
   nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
@@ -208,6 +209,13 @@ tr:hover td{background:#FAFAF8}
             class="btn-sm {% if c0.entregat %}btn-entregat-on{% else %}btn-entregat{% endif %}">
             {% if c0.entregat %}📦 Entregat{% else %}Marcar entregat{% endif %}
           </button>
+          {% if session.is_admin and c0.user_id != session.user_id %}
+          <button onclick="crearAlbaraComanda('{{ sessio_id }}', this)"
+            class="btn-sm btn-albara"
+            {% if c0.fd_albara %}title="Albarà ja creat: {{ c0.fd_albara }}"{% endif %}>
+            {% if c0.fd_albara %}✓ Albarà {{ c0.fd_albara }}{% else %}Crear albarà FD{% endif %}
+          </button>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -273,6 +281,36 @@ function marcarEntregat(sessioId, btn) {
         btn.textContent='Marcar entregat';
       }
     }
+  });
+}
+
+function crearAlbaraComanda(sessioId, btn) {
+  if(btn.classList.contains('btn-albara') && btn.textContent.trim().startsWith('✓')) {
+    alert('Aquest pressupost ja té un albarà creat a Factura Directa: ' + btn.textContent.trim());
+    return;
+  }
+  if(!confirm('Crear albarà a Factura Directa per aquesta comanda del client professional?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Creant...';
+  fetch('/api/albara-de-comanda', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({sessio_id: sessioId})
+  }).then(r=>r.json()).then(function(d){
+    if(d.ok){
+      btn.classList.remove('btn-albara');
+      btn.style.background='#D1FAE5';btn.style.color='#065F46';btn.style.border='1px solid #6EE7B7';
+      btn.textContent = '✓ Albarà ' + (d.albara||'creat');
+      btn.disabled = false;
+    } else {
+      alert('Error: ' + (d.error||'Error desconegut'));
+      btn.disabled = false;
+      btn.textContent = 'Crear albarà FD';
+    }
+  }).catch(function(e){
+    alert('Error de connexió: ' + e);
+    btn.disabled = false;
+    btn.textContent = 'Crear albarà FD';
   });
 }
 

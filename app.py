@@ -1433,9 +1433,9 @@ def guardar():
          revers_peu, revers_peu_preu,
          tipus_peca, tipus_peca_detall, final_amplada, final_alcada,
          marge, descompte, quantitat,
-         preu_net, preu_final, entrega, pendent, observacions,
+         preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
         session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
@@ -1450,6 +1450,7 @@ def guardar():
         d.get('final_amplada',0), d.get('final_alcada',0),
         d.get('marge',60), d.get('descompte',0), d.get('quantitat',1),
         d.get('preu_net',0), d.get('preu_final',0),
+        float(d.get('cost_produccio') or 0),
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''),
         sessio_id, d.get('opcio_nom','Opció A'), num_pressupost, d.get('lang','ca')
@@ -1997,6 +1998,110 @@ def api_crear_albara():
         return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
 
     num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+
+@app.route('/api/albara-de-comanda', methods=['POST'])
+@admin_required
+def api_albara_de_comanda():
+    """Crea un albarà FD a partir d'una sessió de comanda d'un client professional."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+
+    d = request.get_json(force=True) or {}
+    sessio_id = (d.get('sessio_id') or '').strip()
+    if not sessio_id:
+        return jsonify({'ok': False, 'error': 'Falta sessio_id'}), 400
+
+    # Read all lines of this session
+    comandes = query(
+        '''SELECT c.*, u.nom as usuari_nom, u.nom_empresa, u.nom_fiscal, u.fiscal_id, u.empresa_tel
+           FROM comandes c JOIN usuaris u ON c.user_id=u.id
+           WHERE c.sessio_id=? ORDER BY c.id''', [sessio_id])
+    if not comandes:
+        return jsonify({'ok': False, 'error': 'Sessió no trobada'}), 404
+
+    c0 = comandes[0]
+
+    # The FD contact is the professional client (the user who owns the session)
+    # Use their nom_fiscal > nom_empresa > nom
+    nom_fiscal   = (_row_get(c0, 'nom_fiscal', '') or '').strip()
+    nom_empresa  = (_row_get(c0, 'nom_empresa', '') or '').strip()
+    usuari_nom   = (_row_get(c0, 'usuari_nom', '') or '').strip()
+    fiscal_id    = (_row_get(c0, 'fiscal_id', '') or '').strip()
+    empresa_tel  = (_row_get(c0, 'empresa_tel', '') or '').strip()
+
+    nom_fd = nom_fiscal or nom_empresa or usuari_nom
+    if not nom_fd:
+        return jsonify({'ok': False, 'error': 'El client no té nom fiscal ni nom d\'empresa configurat.'}), 400
+
+    # Lookup by NIF only (exact), never by name
+    contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
+    if not contacte:
+        contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=empresa_tel or None)
+    if '_error' in (contacte or {}):
+        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+
+    _c_content = contacte.get('content') or {}
+    _c_main    = _c_content.get('main') or {}
+    contact_id = (contacte.get('id') or contacte.get('uuid') or
+                  contacte.get('contactId') or contacte.get('_id') or
+                  _c_content.get('uuid') or _c_content.get('id') or
+                  _c_content.get('contactId') or
+                  _c_main.get('id') or _c_main.get('uuid') or '')
+    if not contact_id:
+        print(f'FD contacte sense ID (resposta): {json.dumps(contacte, ensure_ascii=False)}')
+        return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+
+    # Build albaran lines — one per comanda row
+    linies = []
+    notes_parts = []
+    for com in comandes:
+        marc         = (_row_get(com, 'marc_principal', '') or '').strip()
+        pre_marc     = (_row_get(com, 'pre_marc', '') or '').strip()
+        passpartout  = (_row_get(com, 'passpartout', '') or '').strip()
+        vidre        = (_row_get(com, 'vidre', '') or '').strip()
+        opcio_nom    = (_row_get(com, 'opcio_nom', '') or '').strip()
+        num_pres     = (_row_get(com, 'num_pressupost', '') or '').strip()
+        observacions = (_row_get(com, 'observacions', '') or '').strip()
+        quantitat    = int(_row_get(com, 'quantitat', 1) or 1)
+        cost_prod    = float(_row_get(com, 'cost_produccio', 0) or 0)
+        client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
+
+        parts_opc = []
+        if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
+        if vidre:                                parts_opc.append(vidre)
+        if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
+        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+        if parts_opc:
+            desc_marc += f' · {", ".join(parts_opc)}'
+        if opcio_nom and opcio_nom != 'Opció A':
+            desc_marc += f' ({opcio_nom})'
+        if client_nom:
+            desc_marc = f'[{client_nom}] ' + desc_marc
+
+        linies.append({
+            'text':      desc_marc,
+            'quantity':  float(quantitat),
+            'unitPrice': round(cost_prod, 2),
+            'tax':       ['S_IVA_21'],
+        })
+        if num_pres and num_pres not in notes_parts:
+            notes_parts.append(f'Pressupost: {num_pres}')
+        if observacions:
+            notes_parts.append(f'Obs: {observacions}')
+
+    notes = ' | '.join(notes_parts)
+
+    albara = _fd_crear_albara(contact_id, linies, notes=notes)
+    if '_error' in (albara or {}):
+        return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
+
+    num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+
+    # Store albaran number on the session rows
+    execute("UPDATE comandes SET fd_albara=? WHERE sessio_id=?", [str(num_albara), sessio_id])
+
     return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
 
 
@@ -3550,6 +3655,8 @@ def init_db():
                 "ALTER TABLE comandes ADD COLUMN foto_comanda TEXT",
                 "ALTER TABLE comandes ADD COLUMN foto_ts REAL",
                 "ALTER TABLE comandes ADD COLUMN passpartu_ref TEXT DEFAULT ''",
+                "ALTER TABLE comandes ADD COLUMN cost_produccio REAL DEFAULT 0",
+                "ALTER TABLE comandes ADD COLUMN fd_albara TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN color TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN textura TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN descripcio TEXT DEFAULT ''",
