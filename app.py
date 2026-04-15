@@ -1377,6 +1377,8 @@ def desar_marge():
     m = float(d.get('marge', 60))
     mi = float(d.get('marge_impressio', 100))
     ne = d.get('nom_empresa', '')
+    nf = d.get('nom_fiscal', '')
+    fi = d.get('fiscal_id', '')
     ea = d.get('empresa_adreca', '')
     et = d.get('empresa_tel', '')
     brand_color = _normalize_hex_color(d.get('brand_color', DEFAULT_BRAND_COLOR))
@@ -1394,11 +1396,13 @@ def desar_marge():
         print_margin=mi,
     )
     execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, empresa_adreca=?, empresa_tel=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, nom_fiscal=?, fiscal_id=?, empresa_adreca=?, empresa_tel=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
         [
             margins['frames'],
             margins['prints'],
             ne,
+            nf,
+            fi,
             ea,
             et,
             json.dumps(margins, ensure_ascii=True),
@@ -1940,11 +1944,12 @@ def api_crear_albara():
     user = query('SELECT nom, nom_empresa, fiscal_id, is_admin FROM usuaris WHERE id=?',
                  [session['user_id']], one=True)
     is_admin = bool(_row_get(user, 'is_admin', 0))
-    # El contacte FD és sempre l'empresa que encomana la feina a Reus Revela:
-    # - admin o professional → el seu nom_empresa / nom del perfil
-    # - client_nom és el client INTERN (referència a la descripció, no al contacte FD)
-    nif   = _row_get(user, 'fiscal_id', '').strip()
-    nom_fd = _row_get(user, 'nom_empresa', '').strip() or _row_get(user, 'nom', '').strip()
+    # El contacte FD és sempre l'empresa que encomana la feina a Reus Revela.
+    # Prioritat: nom_fiscal (raó social) > nom_empresa (comercial) > nom
+    nif    = _row_get(user, 'fiscal_id', '').strip()
+    nom_fd = (_row_get(user, 'nom_fiscal', '').strip()
+              or _row_get(user, 'nom_empresa', '').strip()
+              or _row_get(user, 'nom', '').strip())
 
     if not nom_fd:
         return jsonify({'ok': False, 'error': 'El teu perfil no té nom d\'empresa configurat. Afegeix-lo a Ajustos.'}), 400
@@ -2769,7 +2774,7 @@ def crear_pdf(c):
 @login_required
 def ajustos():
     u = query(
-        'SELECT marge, marge_impressio, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+        'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
         [session['user_id']],
         one=True,
     )
@@ -2804,14 +2809,18 @@ def ajustos():
     cfg = {r['clau']: r['valor'] for r in (cfg_rows or [])}
     if not nom_emp:
         nom_emp = cfg.get('empresa_nom', '')
-    user_adreca = _row_get(u, 'empresa_adreca', '') or ''
-    user_tel    = _row_get(u, 'empresa_tel', '') or ''
+    user_adreca  = _row_get(u, 'empresa_adreca', '') or ''
+    user_tel     = _row_get(u, 'empresa_tel', '') or ''
+    nom_fiscal   = _row_get(u, 'nom_fiscal', '') or ''
+    fiscal_id    = _row_get(u, 'fiscal_id', '') or ''
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
                            margin_entries=[
                                dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry
                                for entry in margin_entries if entry['key'] not in ('foam', 'laminate_foam')
                            ],
                            nom_empresa=nom_emp,
+                           nom_fiscal=nom_fiscal,
+                           fiscal_id=fiscal_id,
                            brand_color=brand_color,
                            brand_color_secondary=brand_color_secondary,
                            brand_color_menu=brand_color_menu,
@@ -3531,6 +3540,7 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN web_url TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN instagram TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN fiscal_id TEXT DEFAULT ''",
+                "ALTER TABLE usuaris ADD COLUMN nom_fiscal TEXT DEFAULT ''",
                 "ALTER TABLE usuaris ADD COLUMN notes_validacio TEXT DEFAULT ''",
                 "ALTER TABLE comandes ADD COLUMN num_pressupost TEXT",
                 "ALTER TABLE comandes ADD COLUMN revers_peu INTEGER DEFAULT 0",
