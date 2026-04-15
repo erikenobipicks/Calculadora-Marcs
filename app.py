@@ -828,33 +828,72 @@ def _seed_proeco_preus(db, use_pg=False):
 
 
 def _seed_intermol_moldures(db, use_pg=False):
-    """Inserta les motllures Intermol si no existeixen (ref2 = família, proveidor = Intermol)."""
-    ok = 0
+    """Vincula les fotos Intermol als registres existents via ref2.
+    També neteja els registres erronis inserits anteriorment (sense preu ni dades).
+    NO crea registres nous — les motllures s'han d'entrar manualment amb codi intern.
+    """
+    refs = [r for r, _ in _INTERMOL_REFS]
+    deleted = linked = 0
+
     if use_pg:
-        # psycopg2: cal usar cursor, no db.execute()
         cur = db.cursor()
-        for ref, familia in _INTERMOL_REFS:
+        # 1) Eliminar registres creats per error (ref = codi Intermol, sense dades)
+        for ref in refs:
             try:
                 cur.execute(
-                    "INSERT INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto) "
-                    "VALUES (%s,0,0,0,'Intermol',%s,'','','') ON CONFLICT (referencia) DO NOTHING",
-                    [ref, familia]
+                    "DELETE FROM moldures WHERE referencia=%s "
+                    "AND preu_taller=0 AND cost=0 AND COALESCE(descripcio,'')='' "
+                    "AND COALESCE(ref2,'') != referencia",
+                    [ref]
                 )
-                ok += 1
+                deleted += cur.rowcount
             except Exception as e:
-                print(f'Intermol seed PG skip {ref}: {e}')
+                print(f'Intermol cleanup PG {ref}: {e}')
+        # 2) Vincular foto als registres existents on ref2 = codi Intermol
+        for ref, _ in _INTERMOL_REFS:
+            foto_path = f'/static/fotos/{ref}.jpg'
+            try:
+                cur.execute(
+                    "UPDATE moldures SET foto=%s "
+                    "WHERE ref2=%s AND (foto IS NULL OR foto='')",
+                    [foto_path, ref]
+                )
+                linked += cur.rowcount
+            except Exception as e:
+                print(f'Intermol link PG {ref}: {e}')
+        try:
+            db.commit()
+        except Exception:
+            pass
     else:
-        for ref, familia in _INTERMOL_REFS:
+        # 1) Eliminar registres creats per error
+        for ref in refs:
             try:
                 db.execute(
-                    "INSERT OR IGNORE INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto) "
-                    "VALUES (?,0,0,0,'Intermol',?,'','','')",
-                    [ref, familia]
+                    "DELETE FROM moldures WHERE referencia=? "
+                    "AND preu_taller=0 AND cost=0 AND COALESCE(descripcio,'')='' "
+                    "AND COALESCE(ref2,'') != referencia",
+                    [ref]
                 )
-                ok += 1
+                deleted += db.total_changes
             except Exception as e:
-                print(f'Intermol seed SQLite skip {ref}: {e}')
-    print(f'Intermol seed: {ok}/{len(_INTERMOL_REFS)} motllures inserides')
+                print(f'Intermol cleanup SQLite {ref}: {e}')
+        # 2) Vincular foto als registres existents on ref2 = codi Intermol
+        for ref, _ in _INTERMOL_REFS:
+            foto_path = f'/static/fotos/{ref}.jpg'
+            try:
+                db.execute(
+                    "UPDATE moldures SET foto=? WHERE ref2=? AND (foto IS NULL OR foto='')",
+                    [foto_path, ref]
+                )
+                linked += 1
+            except Exception as e:
+                print(f'Intermol link SQLite {ref}: {e}')
+        try:
+            db.commit()
+        except Exception:
+            pass
+    print(f'Intermol fotos: {deleted} registres erronis eliminats, {linked} fotos vinculades via ref2')
 
 
 def _seed_admin_if_configured(db):
