@@ -2578,6 +2578,14 @@ function buildWAtext_intern(){
 
 function whatsappObjectiu(){
   window.open('https://wa.me/34613346180?text='+buildWAtext_intern(),'_blank');
+  // Marca la comanda com a acceptada automàticament si està guardada
+  if(uid){
+    fetch('/comanda/'+uid+'/acceptar', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({estat:'acceptat'})
+    }).catch(function(){});
+  }
 }
 
 // ── Init UI ───────────────────────────────────────────────────────────────
