@@ -1968,8 +1968,15 @@ def historial():
     filtre_uid_raw = request.args.get('user_id', '').strip()
     filtre_uid = int(filtre_uid_raw) if filtre_uid_raw.isdigit() else None
     filtre_all  = filtre_uid_raw == 'all'
+    filtre_albara = request.args.get('albara') == 'pendent'
     if session.get('is_admin'):
-        if filtre_all:
+        if filtre_albara:
+            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                               JOIN usuaris u ON c.user_id=u.id
+                               WHERE c.observacions LIKE '%[ACCEPTAT]%'
+                                 AND (c.fd_albara IS NULL OR c.fd_albara='')
+                               ORDER BY c.id DESC''')
+        elif filtre_all:
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
                                ORDER BY c.id DESC''')
@@ -1984,6 +1991,10 @@ def historial():
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         usuaris_list = query('SELECT id, nom, username FROM usuaris WHERE is_admin=0 ORDER BY nom')
+        n_pendents_albara = query('''SELECT COUNT(*) as n FROM comandes
+                                    WHERE observacions LIKE '%[ACCEPTAT]%'
+                                      AND (fd_albara IS NULL OR fd_albara='')''', one=True)
+        n_pendents_albara = n_pendents_albara['n'] if n_pendents_albara else 0
     else:
         usuaris_list = []
         comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
@@ -2005,6 +2016,8 @@ def historial():
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
                            usuaris_list=usuaris_list if session.get('is_admin') else [],
                            filtre_uid=filtre_uid, filtre_all=filtre_all if session.get('is_admin') else False,
+                           filtre_albara=filtre_albara if session.get('is_admin') else False,
+                           n_pendents_albara=n_pendents_albara if session.get('is_admin') else 0,
                            web_return_url=_current_web_return_url())
 
 @app.route('/pdf-comparativa/<sessio_id>')

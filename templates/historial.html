@@ -109,10 +109,13 @@ tr:hover td{background:#FAFAF8}
 
   {% if session.is_admin %}
   <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:1rem">
-    <a href="/historial" class="filter-btn {% if not filtre_all and filtre_uid == session.user_id %}active{% endif %}">Els meus</a>
+    <a href="/historial" class="filter-btn {% if not filtre_all and not filtre_albara and filtre_uid == session.user_id %}active{% endif %}">Els meus</a>
     <a href="/historial?user_id=all" class="filter-btn {% if filtre_all %}active{% endif %}">Tots</a>
+    <a href="/historial?albara=pendent" class="filter-btn {% if filtre_albara %}active{% endif %}" style="{% if n_pendents_albara %}border-color:var(--amber);color:var(--amber){% endif %}">
+      Pendents albarà{% if n_pendents_albara %} <strong style="background:var(--amber);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px">{{ n_pendents_albara }}</strong>{% endif %}
+    </a>
     {% for u in usuaris_list %}
-    <a href="/historial?user_id={{ u.id }}" class="filter-btn {% if filtre_uid == u.id and not filtre_all %}active{% endif %}">{{ u.nom or u.username }}</a>
+    <a href="/historial?user_id={{ u.id }}" class="filter-btn {% if filtre_uid == u.id and not filtre_all and not filtre_albara %}active{% endif %}">{{ u.nom or u.username }}</a>
     {% endfor %}
   </div>
   <div id="barra-seleccio" style="display:none;align-items:center;gap:.75rem;margin-bottom:1rem;padding:.65rem 1rem;background:var(--red-l);border:1px solid #E8B4B4;border-radius:var(--r)">
