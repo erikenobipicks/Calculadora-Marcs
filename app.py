@@ -1529,6 +1529,46 @@ def desar_marge():
 @login_required
 def guardar():
     d = request.json
+    comanda_id = d.get('comanda_id')  # if set → UPDATE existing row
+
+    # Common field values
+    vals_comuns = [
+        d.get('client_nom',''), d.get('client_tel',''),
+        d.get('pre_marc',''), d.get('marc_principal',''),
+        d.get('amplada',0), d.get('alcada',0), d.get('copia',0),
+        d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
+        d.get('passpartu_ref',''), d.get('impressio',''),
+        1 if d.get('revers_peu') else 0, d.get('revers_peu_preu', 0),
+        d.get('tipus_peca','fotografia'), d.get('tipus_peca_detall',''),
+        d.get('final_amplada',0), d.get('final_alcada',0),
+        d.get('marge',60), d.get('descompte',0), d.get('quantitat',1),
+        d.get('preu_net',0), d.get('preu_final',0),
+        float(d.get('cost_produccio') or 0),
+        d.get('entrega',0), d.get('pendent',0),
+        d.get('observacions',''), d.get('opcio_nom','Opció A'), d.get('lang','ca'),
+    ]
+
+    if comanda_id:
+        # Verify ownership before updating
+        existing = query('SELECT id, num_pressupost, sessio_id FROM comandes WHERE id=? AND user_id=?',
+                         [comanda_id, session['user_id']], one=True)
+        if existing:
+            execute('''UPDATE comandes SET
+                client_nom=?, client_tel=?, pre_marc=?, marc_principal=?,
+                amplada=?, alcada=?, copia=?,
+                encolat=?, vidre=?, passpartout=?, passpartu_ref=?, impressio=?,
+                revers_peu=?, revers_peu_preu=?,
+                tipus_peca=?, tipus_peca_detall=?, final_amplada=?, final_alcada=?,
+                marge=?, descompte=?, quantitat=?,
+                preu_net=?, preu_final=?, cost_produccio=?,
+                entrega=?, pendent=?, observacions=?, opcio_nom=?, lang=?
+                WHERE id=? AND user_id=?''',
+                vals_comuns + [comanda_id, session['user_id']])
+            return jsonify({'ok': True, 'id': existing['id'],
+                            'sessio_id': existing['sessio_id'],
+                            'num': existing['num_pressupost']})
+        # If not found (wrong user or deleted), fall through to INSERT
+
     sessio_id = d.get('sessio_id') or secrets.token_hex(8)
     num_pressupost = generar_num_pressupost()
     cid = execute('''INSERT INTO comandes
@@ -1540,26 +1580,10 @@ def guardar():
          marge, descompte, quantitat,
          preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', [
-        session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M'),
-        d.get('client_nom',''), d.get('client_tel',''),
-        d.get('pre_marc',''), d.get('marc_principal',''),
-        d.get('amplada',0), d.get('alcada',0), d.get('copia',0),
-        d.get('encolat',''), d.get('vidre',''), d.get('passpartout',''),
-        d.get('passpartu_ref',''),
-        d.get('impressio',''),
-        1 if d.get('revers_peu') else 0,
-        d.get('revers_peu_preu', 0),
-        d.get('tipus_peca','fotografia'),
-        d.get('tipus_peca_detall',''),
-        d.get('final_amplada',0), d.get('final_alcada',0),
-        d.get('marge',60), d.get('descompte',0), d.get('quantitat',1),
-        d.get('preu_net',0), d.get('preu_final',0),
-        float(d.get('cost_produccio') or 0),
-        d.get('entrega',0), d.get('pendent',0),
-        d.get('observacions',''),
-        sessio_id, d.get('opcio_nom','Opció A'), num_pressupost, d.get('lang','ca')
-    ])
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        [session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M')] +
+        vals_comuns[:27] + [sessio_id] + [vals_comuns[27]] + [num_pressupost] + [vals_comuns[28]]
+    )
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
 
@@ -2361,9 +2385,14 @@ def crear_pdf_comparativa(comandes):
 
     # Header
     c0 = comandes[0]
+    _u_comp = query('SELECT nom_empresa FROM usuaris WHERE id=?', [c0.get('user_id',0)], one=True)
+    nom_empresa_comp = (_row_get(_u_comp, 'nom_empresa', '') or '') if _u_comp else ''
+    if not nom_empresa_comp:
+        _r_comp = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+        nom_empresa_comp = (_r_comp['valor'] if _r_comp else '') or 'Reus Revela'
     header = Table([[
         p(f"{t['comparativa']}", bold=True, size=14, color=colors.white),
-        p(f"Objectiu · Reus", size=9, color=colors.HexColor("#B2BEC3"), align='RIGHT')
+        p(nom_empresa_comp, size=9, color=colors.HexColor("#B2BEC3"), align='RIGHT')
     ]], colWidths=[W*0.65, W*0.35])
     header.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), DARK),
@@ -2399,12 +2428,48 @@ def crear_pdf_comparativa(comandes):
     ]))
     story.append(hdr_row)
 
+    # Photo row (frame images for each option)
+    import os as _os_comp
+    from reportlab.platypus import Image as RLImageComp
+    _foto_cells = [p('', size=8)]
+    _has_foto_comp = False
+    for _c in comandes:
+        _cell = p('', size=8)
+        if _c.get('marc_principal'):
+            _r_f = query('SELECT foto FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+                         [_c['marc_principal']], one=True)
+            _foto_url = _resolve_moldura_photo(_c['marc_principal'], _r_f['foto'] if _r_f else '')
+            if _foto_url.startswith('/static/'):
+                _rel = _foto_url.lstrip('/')
+                _full = _os_comp.path.join(app.root_path, 'static', _rel.replace('static/',''))
+                if _os_comp.path.exists(_full):
+                    try:
+                        _img_c = RLImageComp(_full, width=min(col_w - 8*mm, 35*mm), height=22*mm)
+                        _cell = _img_c
+                        _has_foto_comp = True
+                    except Exception:
+                        pass
+        _foto_cells.append(_cell)
+    if _has_foto_comp:
+        foto_row_tbl = Table([_foto_cells], colWidths=[col_lbl]+[col_w]*n)
+        foto_row_tbl.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,-1), LIG),
+            ('BOX',(0,0),(-1,-1),0.5,BRD),
+            ('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+            ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),
+            ('LEFTPADDING',(0,0),(-1,-1),4),('RIGHTPADDING',(0,0),(-1,-1),4),
+            ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+            ('ALIGN',(1,0),(-1,0),'CENTER'),
+        ]))
+        story.append(foto_row_tbl)
+
     # Build comparison rows
     def val_clean(c, key):
         v = c.get(key,'') or ''
         return '—' if v in ['','-','None'] else str(v)
 
     fields = [
+        (t['marc_principal'], 'marc_principal',   False),
         (t['tipus_peca'],     'piece_type',       False),
         (t['mida_final'],     'final_size',      False),
         (t['mides_foto'],     'photo_size',      False),
@@ -2426,7 +2491,9 @@ def crear_pdf_comparativa(comandes):
         lbl_color = DARK if not is_price else colors.HexColor("#1A6B45") if key=='preu_final' else                     RED if key=='pendent' else colors.HexColor("#6B6860")
         row = [p(lbl, bold=is_price, size=9, color=lbl_color)]
         for c in comandes:
-            if key == 'piece_type':
+            if key == 'marc_principal':
+                val = c.get('marc_principal') or t['sense_marc']
+            elif key == 'piece_type':
                 val = _display_piece_type(c, t)
             elif key == 'final_size':
                 val = _final_size_text(c, sep=' x ', with_unit=True)
@@ -2860,11 +2927,15 @@ def crear_pdf(c):
     story.append(Spacer(1, 5*mm))
 
     # â”€â”€ Foto del marc (si existeix) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Foto del marc + referencia (side-by-side)
     foto_path = None
-    if c.get('marc_principal'):
-        r = query('SELECT foto FROM moldures WHERE LOWER(referencia)=LOWER(?)',
-                  [c['marc_principal']], one=True)
-        foto_url = _resolve_moldura_photo(c['marc_principal'], r['foto'] if r else '')
+    marc_ref = c.get('marc_principal') or ''
+    marc_descripcio = ''
+    if marc_ref:
+        r = query('SELECT foto, descripcio FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+                  [marc_ref], one=True)
+        marc_descripcio = (_row_get(r, 'descripcio', '') or '') if r else ''
+        foto_url = _resolve_moldura_photo(marc_ref, r['foto'] if r else '')
         if foto_url.startswith('/static/'):
             rel = foto_url.lstrip('/')
             full = _os.path.join(app.root_path, 'static', rel.replace('static/',''))
@@ -2873,15 +2944,34 @@ def crear_pdf(c):
 
     if foto_path:
         try:
-            img = RLImage(foto_path, width=40*mm, height=30*mm)
-            img.hAlign = 'LEFT'
-            story.append(img)
-            story.append(Spacer(1, 3*mm))
-        except:
-            pass
+            _ref_lbl = marc_descripcio or marc_ref
+            _img_rl = RLImage(foto_path, width=45*mm, height=32*mm)
+            _ref_cell_rows = [[p(t['marc_principal'], bold=True, size=8,
+                                  color=colors.HexColor(“#6B6860”))],
+                               [p(_ref_lbl, bold=True, size=11)]]
+            if marc_descripcio:
+                _ref_cell_rows.append([p(marc_ref, size=8,
+                                         color=colors.HexColor(“#6B6860”))])
+            _ref_cell = Table(_ref_cell_rows, colWidths=[W - 55*mm])
+            _ref_cell.setStyle(TableStyle([
+                ('VALIGN',(0,0),(-1,-1),'TOP'),
+                ('TOPPADDING',(0,0),(-1,-1),2),('BOTTOMPADDING',(0,0),(-1,-1),2),
+                ('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(-1,-1),0),
+            ]))
+            foto_side = Table([[_img_rl, _ref_cell]], colWidths=[50*mm, W - 50*mm])
+            foto_side.setStyle(TableStyle([
+                ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+                ('BACKGROUND',(0,0),(-1,-1), LIG),
+                ('BOX',(0,0),(-1,-1),0.5,BRD),
+                ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+                ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+            ]))
+            story.append(foto_side)
+            story.append(Spacer(1, 4*mm))
+        except Exception as _e:
+            print(f”Foto marc PDF error: {_e}”)
 
-    # â”€â”€ Detall de la comanda â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    det_rows = []
+    # Detall de la comanda
     final_size = _final_size_text(c, with_unit=True)
     photo_size = _photo_size_text(c, with_unit=True)
     piece_type = _display_piece_type(c, t)
@@ -2891,36 +2981,6 @@ def crear_pdf(c):
     revers_peu_label = _display_revers_peu(c, t)
     impressio_label = _display_impressio(c, t)
 
-    if final_size:
-        det_rows.append(fila(t['mida_final']+':', final_size))
-    if photo_size:
-        det_rows.append(fila(t['mides_foto']+':', photo_size))
-    if muntatge_label:
-        det_rows.append(fila(t['muntatge']+':', muntatge_label))
-    if proteccio_label:
-        det_rows.append(fila(t['vidre_mirall']+':', proteccio_label))
-    if interior_label:
-        det_rows.append(fila(t['interior']+':', interior_label))
-    if revers_peu_label:
-        det_rows.append(fila(t['revers_peu']+':', revers_peu_label))
-    if impressio_label:
-        det_rows.append(fila(t['impressio']+':', impressio_label))
-    det_rows.append(fila(t['marc_principal']+':',
-                         c['marc_principal'] if c.get('marc_principal') else t['sense_marc']))
-    det_rows.append(fila(t['mides_foto']+':', f"{int(c['amplada'])} × {int(c['alcada'])}"))
-    if c.get('encolat') and c['encolat'] not in ['-','']:
-        det_rows.append(fila(t['muntatge']+':', c['encolat']))
-    if c.get('vidre') and c['vidre'] not in ['-','CONSERVAR','']:
-        det_rows.append(fila(t['vidre_mirall']+':', c['vidre']))
-    elif c.get('vidre') == 'CONSERVAR':
-        det_rows.append(fila(t['proteccio']+':', t['conservar_vidre']))
-    if c.get('passpartout') and c['passpartout'] not in ['-','']:
-        det_rows.append(fila(t['interior']+':', c['passpartout']))
-    if c.get('impressio') and c['impressio'] not in ['-','']:
-        det_rows.append(fila(t['impressio']+':', c['impressio']))
-    if c.get('observacions'):
-        det_rows.append(fila(t['observacions']+':', c['observacions']))
-
     det_rows = []
     if piece_type:
         det_rows.append(fila(t['tipus_peca']+':', piece_type))
@@ -2928,6 +2988,10 @@ def crear_pdf(c):
         det_rows.append(fila(t['mida_final']+':', final_size))
     if photo_size:
         det_rows.append(fila(t['mides_foto']+':', photo_size))
+    if not foto_path:
+        # Show marc as text row only when there's no photo (photo already shown above)
+        det_rows.append(fila(t['marc_principal']+':',
+                             marc_ref or t['sense_marc']))
     if muntatge_label:
         det_rows.append(fila(t['muntatge']+':', muntatge_label))
     if proteccio_label:

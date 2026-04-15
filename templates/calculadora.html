@@ -559,7 +559,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       </div>
 
       <div class="actions">
-        <button class="btn btn-g" onclick="guardar()">Desar</button>
+        <button class="btn btn-g" onclick="guardar()">Desar opció</button>
+        <button class="btn btn-g" id="btn-desar-totes" onclick="guardarTotes()" style="display:none" title="Desa totes les opcions en un sol clic">Desar totes</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
         <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
         <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
@@ -1917,6 +1918,7 @@ function desarMarge(){
 // ── Guardar ───────────────────────────────────────────────────────────────
 function guardar(){
   var d={
+    comanda_id: uid || null,
     sessio_id:sessioId, opcio_nom:opcions[opcioActual].nom,
     client_nom:document.getElementById('client_nom').value,
     client_tel:document.getElementById('client_tel').value,
@@ -1962,6 +1964,94 @@ function guardar(){
         renderTabs();
       }
     });
+}
+
+function guardarTotes(){
+  // Snapshot the current option so its latest DOM state is captured
+  opcions[opcioActual].estat = capturaEstat();
+
+  var btn = document.getElementById('btn-desar-totes');
+  if(btn){ btn.disabled = true; btn.textContent = 'Desant...'; }
+
+  var idx = 0;
+  var saved = 0;
+  var errors = 0;
+
+  function next(){
+    if(idx >= opcions.length){
+      if(btn){ btn.disabled=false; btn.textContent='Desar totes'; }
+      renderTabs();
+      if(errors === 0)
+        showAlert('Totes les opcions desades ('+saved+')', 'ok');
+      else
+        showAlert('Desades '+saved+' opcions, '+errors+' errors', 'err');
+      return;
+    }
+    var i = idx++;
+    var e = opcions[i].estat;
+    if(!e){ errors++; next(); return; }
+
+    var d = {
+      comanda_id: opcions[i].id || null,
+      sessio_id:  sessioId,
+      opcio_nom:  opcions[i].nom,
+      client_nom: e.client_nom||'',
+      client_tel: e.client_tel||'',
+      pre_marc:   e.pre_marc||'-',
+      marc_principal: e.marc_principal||'',
+      tipus_peca: e.tipus_peca||'fotografia',
+      tipus_peca_detall: e.tipus_peca_detall||'',
+      amplada:    parseFloat(e.amplada)||0,
+      alcada:     parseFloat(e.alcada)||0,
+      final_amplada: 0, final_alcada: 0,
+      copia: 0,
+      encolat:   '-', vidre: '-', passpartout: '-', passpartu_ref: '',
+      impressio: '-', revers_peu: e.revers_peu||false,
+      revers_peu_preu: e._revers_peu_preu||0,
+      marge:      marge,
+      descompte:  parseFloat(e.descompte)||0,
+      quantitat:  parseFloat(e.quantitat)||1,
+      entrega:    parseFloat(e.entrega)||0,
+      observacions: e.observacions||'',
+      finestres_extra: e.finestres_extra||'0',
+      lang: e.lang||_lang,
+      preu_net:       e._preu_net||0,
+      preu_final:     e._preu_final||0,
+      pendent:        e._pendent||0,
+      cost_produccio: e._cost_produccio||0,
+    };
+    // Resolve references from _preus/_closest stored in snapshot
+    var preus   = e._preus   || {};
+    var closest = e._closest || {};
+    var tipusMap = {
+      muntatge:  {encolat:'encolat',protter:'protter',laminat:'laminat'},
+      proteccio: {vidre:'vidre',doble_vidre:'doble_vidre',mirall:'mirall'},
+      interior:  {passpartu:'passpartu',doble_pas:'doble_pas',proeco:'proeco'}
+    };
+    ['muntatge','proteccio','interior'].forEach(function(g){
+      var val = e[g]||'';
+      var k   = tipusMap[g]&&tipusMap[g][val];
+      var ref = (k&&closest[k]) ? closest[k].ref : (val||'-');
+      if(g==='muntatge') d.encolat     = ref||'-';
+      if(g==='proteccio')d.vidre       = ref||'-';
+      if(g==='interior') d.passpartout = ref||'-';
+    });
+    d.impressio = (e.impressio && closest.impressio) ? (closest.impressio.ref||'-') : '-';
+
+    fetch('/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res.ok){
+          opcions[i].id = res.id;
+          if(!sessioId) sessioId = res.sessio_id;
+          saved++;
+        } else {
+          errors++;
+        }
+        next();
+      }).catch(function(){ errors++; next(); });
+  }
+  next();
 }
 
 function generarPDF(){if(!uid){alert('Primer guarda el pressupost.');return;}window.open('/pdf/'+uid,'_blank');}
@@ -2147,6 +2237,8 @@ function renderTabs(){
     list.appendChild(btn);
   });
   document.getElementById('btn-comparativa').style.display=opcions.filter(function(o){return o.id;}).length>1?'block':'none';
+  var btnTotes = document.getElementById('btn-desar-totes');
+  if(btnTotes) btnTotes.style.display = opcions.length > 1 ? 'inline-flex' : 'none';
 }
 
 function capturaEstat(){
@@ -2177,6 +2269,11 @@ function capturaEstat(){
     _preus:JSON.parse(JSON.stringify(PREUS)),
     _gruix:JSON.parse(JSON.stringify(GRUIX)),
     _lastKey:_lastFetchKey,
+    _preu_net:       window._c ? window._c.preu_net       : 0,
+    _preu_final:     window._c ? window._c.preu_final     : 0,
+    _pendent:        window._c ? window._c.pendent        : 0,
+    _cost_produccio: window._c ? (window._c.cost_produccio||0) : 0,
+    _revers_peu_preu:window._c ? (window._c.revers_peu_preu||0) : 0,
   };
 }
 
@@ -2278,16 +2375,28 @@ function canviarOpcio(idx){
 
 function afegirOpcio(){
   var ll=['A','B','C','D','E','F'];
-  // Save client data before clearing
-  var nom = document.getElementById('client_nom').value;
-  var tel = document.getElementById('client_tel').value;
-  opcions[opcioActual].estat=capturaEstat();
-  opcions.push({nom:'Opció '+(ll[opcions.length]||opcions.length+1),id:null});
-  opcioActual=opcions.length-1; uid=null;
-  netejar();
-  // Restore client data
-  document.getElementById('client_nom').value = nom;
-  document.getElementById('client_tel').value = tel;
+  // Snapshot the current option before switching
+  opcions[opcioActual].estat = capturaEstat();
+  var estatAnterior = opcions[opcioActual].estat;
+
+  // Ask if user wants to duplicate
+  var duplicar = confirm('Vols duplicar les dades de l\'opció actual?\n\nPrem "Acceptar" per duplicar o "Cancel·lar" per opció en blanc.');
+
+  opcions.push({nom:'Opció '+(ll[opcions.length]||opcions.length+1), id:null});
+  opcioActual = opcions.length-1;
+  uid = null;
+
+  if(duplicar){
+    restauraEstat(estatAnterior);
+    // Clear the saved ID so it's treated as unsaved
+    opcions[opcioActual].id = null;
+  } else {
+    var nom = estatAnterior.client_nom;
+    var tel = estatAnterior.client_tel;
+    netejar();
+    document.getElementById('client_nom').value = nom;
+    document.getElementById('client_tel').value = tel;
+  }
   renderTabs();
 }
 
