@@ -3550,6 +3550,12 @@ def init_db():
                 ('comandes','pagat','INTEGER DEFAULT 0'),
                 ('comandes','entregat','INTEGER DEFAULT 0'),
                 ('comandes','lang','TEXT DEFAULT \'ca\''),
+                ('comandes','foto_comanda','TEXT'),
+                ('comandes','foto_ts','REAL'),
+                ('comandes','passpartu_ref',"TEXT DEFAULT ''"),
+                ('comandes','cost_produccio','REAL DEFAULT 0'),
+                ('comandes','fd_albara',"TEXT DEFAULT ''"),
+                ('usuaris','nom_fiscal',"TEXT DEFAULT ''"),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
