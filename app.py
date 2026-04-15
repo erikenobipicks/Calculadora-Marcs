@@ -1894,6 +1894,16 @@ def _fd_cerca_contacte(nom=None, nif=None):
             return items[0]
     return None
 
+def _fd_extract_contact_id(r):
+    """Extreu l'ID d'un contacte de la resposta de l'API de FD."""
+    if not r:
+        return ''
+    c = r.get('content') or {}
+    m = c.get('main') or {}
+    return (r.get('id') or r.get('uuid') or r.get('contactId') or r.get('_id') or
+            c.get('uuid') or c.get('id') or c.get('contactId') or
+            m.get('id') or m.get('uuid') or '')
+
 def _fd_crear_contacte(nom, nif=None, telefon=None):
     main = {
         'name': nom, 'country': 'ES', 'currency': 'EUR',
@@ -1904,9 +1914,17 @@ def _fd_crear_contacte(nom, nif=None, telefon=None):
     res = _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
     if '_error' in (res or {}):
         return res
-    # El POST no sempre retorna l'ID; busquem el contacte just després per obtenir-lo
-    trobat = _fd_cerca_contacte(nom=nom, nif=nif if nif else None)
-    return trobat if trobat else res
+    # Si la resposta ja porta ID, la retornem directament
+    if _fd_extract_contact_id(res):
+        return res
+    # Si no té ID però tenim NIF, busquem per NIF (cerca exacta, mai per nom)
+    if nif:
+        trobat = _fd_cerca_contacte(nif=nif)
+        if trobat:
+            return trobat
+    # Retornem la resposta original (sense ID); l'error es gestionarà a dalt
+    print(f'FD crear_contacte: resposta sense ID (nom={nom}, nif={nif}): {json.dumps(res, ensure_ascii=False)}')
+    return res
 
 def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
@@ -1963,15 +1981,9 @@ def api_crear_albara():
     if '_error' in (contacte or {}):
         return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    _c_content = contacte.get('content') or {}
-    _c_main = _c_content.get('main') or {}
-    contact_id = (contacte.get('id') or contacte.get('uuid') or
-                  contacte.get('contactId') or contacte.get('_id') or
-                  _c_content.get('uuid') or _c_content.get('id') or
-                  _c_content.get('contactId') or
-                  _c_main.get('id') or _c_main.get('uuid') or '')
+    contact_id = _fd_extract_contact_id(contacte)
     if not contact_id:
-        print(f'FD contacte sense ID (resposta completa): {json.dumps(contacte, ensure_ascii=False)}')
+        print(f'FD contacte sense ID (api_crear_albara): {json.dumps(contacte, ensure_ascii=False)}')
         return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
 
     # Línies de l'albarà
@@ -2042,15 +2054,9 @@ def api_albara_de_comanda():
     if '_error' in (contacte or {}):
         return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    _c_content = contacte.get('content') or {}
-    _c_main    = _c_content.get('main') or {}
-    contact_id = (contacte.get('id') or contacte.get('uuid') or
-                  contacte.get('contactId') or contacte.get('_id') or
-                  _c_content.get('uuid') or _c_content.get('id') or
-                  _c_content.get('contactId') or
-                  _c_main.get('id') or _c_main.get('uuid') or '')
+    contact_id = _fd_extract_contact_id(contacte)
     if not contact_id:
-        print(f'FD contacte sense ID (resposta): {json.dumps(contacte, ensure_ascii=False)}')
+        print(f'FD contacte sense ID (api_albara_de_comanda): {json.dumps(contacte, ensure_ascii=False)}')
         return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
 
     # Build albaran lines — one per comanda row
