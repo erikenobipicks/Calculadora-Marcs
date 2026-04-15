@@ -1,4 +1,4 @@
-﻿import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
+import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime
@@ -393,7 +393,7 @@ def _assert_no_conflict_markers():
 
 _assert_no_conflict_markers()
 
-# â”€â”€ DB layer: PostgreSQL (production) or SQLite (local) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ DB layer: PostgreSQL (production) or SQLite (local) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
@@ -886,7 +886,7 @@ def _seed_admin_if_configured(db):
             db.commit()
             print(f"Admin creat des de variables d'entorn: usuari={admin_user}")
 
-# â”€â”€ Auth decorators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Auth decorators â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -952,7 +952,7 @@ def calcular_precio_passpartu(ew, eh):
         mult = _MULT_GRAN
     return round(max(coste_base * mult, _MIN_PRICE), 2)
 
-# â”€â”€ Routes: Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Routes: Auth â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     next_path = _safe_next_path(request.values.get('next'), url_for('index'))
@@ -1271,7 +1271,7 @@ def bridge_auth():
         return redirect(url_for('setup'))
     return redirect(target)
 
-# â”€â”€ Routes: App principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Routes: App principal â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 @app.route('/ajuda')
 @login_required
@@ -1524,7 +1524,7 @@ def desar_marge():
     _sync_private_commercial_settings(margins['frames'], margins['prints'], margins=margins)
     return jsonify({'ok': True, 'margins': margins})
 
-# â”€â”€ Routes: Guardar comanda i historial â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Routes: Guardar comanda i historial â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/guardar', methods=['POST'])
 @login_required
 def guardar():
@@ -1779,7 +1779,7 @@ def admin_moldura_toggle(ref):
         pass
     return jsonify({'ok': True, 'actiu': nou})
 
-# â”€â”€ API: buscar moldura per ref exacte (autocomplete) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ API: buscar moldura per ref exacte (autocomplete) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/admin/cataleg/api/cerca')
 @admin_required
 def api_cerca_moldura():
@@ -1919,7 +1919,7 @@ def generar_pdf(comanda_id):
     return send_file(pdf, mimetype='application/pdf',
                      download_name=f"pressupost_{c['client_nom']}_{comanda_id}.pdf")
 
-# â”€â”€ Routes: Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Routes: Admin â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/admin')
 @admin_required
 def admin():
@@ -2325,7 +2325,7 @@ def admin_foto():
             flash(str(e), 'error')
     return redirect(url_for('admin'))
 
-# â”€â”€ PDF generator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ PDF generator â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 def generar_num_pressupost():
     """Genera número tipus RR-2503-001"""
@@ -2652,7 +2652,7 @@ def crear_pdf_cataleg_admin(moldures, q='', proveidor=''):
     buf.seek(0)
     return buf
 
-# â”€â”€ Translations for PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Translations for PDF â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 PDF_T = {
     'ca': {
         'pressupost': 'PRESSUPOST',
@@ -2875,7 +2875,7 @@ def crear_pdf(c):
     story.append(header)
     story.append(Spacer(1, 3*mm))
 
-    # â”€â”€ Logo (si existeix) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # â"€â"€ Logo (si existeix) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     try:
         u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
         logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
@@ -2903,7 +2903,7 @@ def crear_pdf(c):
     except Exception as _e:
         print(f"Logo PDF error: {_e}")
 
-    # â”€â”€ Dades client + data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # â"€â"€ Dades client + data â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     opcio_txt = c.get('opcio_nom','') or ''
     num_pres = c.get('num_pressupost','') or ''
     t1_rows = [
@@ -2926,7 +2926,7 @@ def crear_pdf(c):
     story.append(t1)
     story.append(Spacer(1, 5*mm))
 
-    # â”€â”€ Foto del marc (si existeix) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # â"€â"€ Foto del marc (si existeix) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     # Foto del marc + referencia (side-by-side)
     foto_path = None
     marc_ref = c.get('marc_principal') or ''
@@ -2947,11 +2947,11 @@ def crear_pdf(c):
             _ref_lbl = marc_descripcio or marc_ref
             _img_rl = RLImage(foto_path, width=45*mm, height=32*mm)
             _ref_cell_rows = [[p(t['marc_principal'], bold=True, size=8,
-                                  color=colors.HexColor(“#6B6860”))],
+                                  color=colors.HexColor("#6B6860"))],
                                [p(_ref_lbl, bold=True, size=11)]]
             if marc_descripcio:
                 _ref_cell_rows.append([p(marc_ref, size=8,
-                                         color=colors.HexColor(“#6B6860”))])
+                                         color=colors.HexColor("#6B6860"))])
             _ref_cell = Table(_ref_cell_rows, colWidths=[W - 55*mm])
             _ref_cell.setStyle(TableStyle([
                 ('VALIGN',(0,0),(-1,-1),'TOP'),
@@ -2969,7 +2969,7 @@ def crear_pdf(c):
             story.append(foto_side)
             story.append(Spacer(1, 4*mm))
         except Exception as _e:
-            print(f”Foto marc PDF error: {_e}”)
+            print(f"Foto marc PDF error: {_e}")
 
     # Detall de la comanda
     final_size = _final_size_text(c, with_unit=True)
@@ -3413,7 +3413,7 @@ def api_closest():
     }
     return jsonify(result)
 
-# â”€â”€ Routes: Email (mailto) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Routes: Email (mailto) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/mailto-data', methods=['POST'])
 @login_required
 def mailto_data():
@@ -3656,7 +3656,7 @@ def enviar_email():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
-# â”€â”€ Init DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Init DB â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 def init_db():
     with app.app_context():
         db = get_db()
