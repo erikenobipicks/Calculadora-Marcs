@@ -1714,6 +1714,38 @@ def cataleg():
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS)
 
+@app.route('/admin/debug-fotos')
+@admin_required
+def admin_debug_fotos():
+    """Mostra per a cada motllura: referencia, ref2, foto resolta i si existeix el fitxer."""
+    rows = query('SELECT referencia, ref2, foto, proveidor FROM moldures ORDER BY referencia')
+    out = []
+    for r in (rows or []):
+        ref  = _row_get(r, 'referencia', '') or ''
+        ref2 = _row_get(r, 'ref2', '') or ''
+        foto = _row_get(r, 'foto', '') or ''
+        prov = _row_get(r, 'proveidor', '') or ''
+        resolved = _resolve_moldura_photo(ref, foto, ref2=ref2)
+        out.append({'ref': ref, 'ref2': ref2, 'proveidor': prov,
+                    'foto_db': foto, 'foto_resolta': resolved})
+    # Return as plain text table for easy reading
+    lines = ['referencia | ref2 | proveidor | foto_resolta']
+    lines.append('-' * 80)
+    no_foto = []
+    for o in out:
+        if o['foto_resolta']:
+            lines.append(f"OK  {o['ref']:<25} ref2={o['ref2']:<20} -> {o['foto_resolta']}")
+        else:
+            no_foto.append(o)
+    lines.append('')
+    lines.append(f'--- SENSE FOTO ({len(no_foto)}) ---')
+    for o in no_foto:
+        lines.append(f"    {o['ref']:<25} ref2={o['ref2']:<20} prov={o['proveidor']}")
+    lines.append('')
+    lines.append(f'Total: {len(out)} motllures, amb foto: {len(out)-len(no_foto)}, sense: {len(no_foto)}')
+    return '<pre>' + '\n'.join(lines) + '</pre>'
+
+
 @app.route('/admin/cataleg')
 @admin_required
 def admin_cataleg():
