@@ -1965,16 +1965,24 @@ h2{{margin-top:2rem}}
 @app.route('/historial')
 @login_required
 def historial():
-    filtre_uid = request.args.get('user_id', type=int)
+    filtre_uid_raw = request.args.get('user_id', '').strip()
+    filtre_uid = int(filtre_uid_raw) if filtre_uid_raw.isdigit() else None
+    filtre_all  = filtre_uid_raw == 'all'
     if session.get('is_admin'):
-        if filtre_uid:
+        if filtre_all:
+            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                               JOIN usuaris u ON c.user_id=u.id
+                               ORDER BY c.id DESC''')
+        elif filtre_uid:
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         else:
+            # Per defecte l'admin veu les seves pròpies comandes
+            filtre_uid = session['user_id']
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
-                               ORDER BY c.id DESC''')
+                               WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         usuaris_list = query('SELECT id, nom, username FROM usuaris WHERE is_admin=0 ORDER BY nom')
     else:
         usuaris_list = []
@@ -1996,7 +2004,7 @@ def historial():
         grp[0]['entregat'] = any(op.get('entregat') for op in grp)
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
                            usuaris_list=usuaris_list if session.get('is_admin') else [],
-                           filtre_uid=filtre_uid,
+                           filtre_uid=filtre_uid, filtre_all=filtre_all if session.get('is_admin') else False,
                            web_return_url=_current_web_return_url())
 
 @app.route('/pdf-comparativa/<sessio_id>')

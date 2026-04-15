@@ -108,6 +108,13 @@ tr:hover td{background:#FAFAF8}
   </div>
 
   {% if session.is_admin %}
+  <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:1rem">
+    <a href="/historial" class="filter-btn {% if not filtre_all and filtre_uid == session.user_id %}active{% endif %}">Els meus</a>
+    <a href="/historial?user_id=all" class="filter-btn {% if filtre_all %}active{% endif %}">Tots</a>
+    {% for u in usuaris_list %}
+    <a href="/historial?user_id={{ u.id }}" class="filter-btn {% if filtre_uid == u.id and not filtre_all %}active{% endif %}">{{ u.nom or u.username }}</a>
+    {% endfor %}
+  </div>
   <div id="barra-seleccio" style="display:none;align-items:center;gap:.75rem;margin-bottom:1rem;padding:.65rem 1rem;background:var(--red-l);border:1px solid #E8B4B4;border-radius:var(--r)">
     <span style="font-size:13px;font-weight:600;color:var(--red)"><span id="sel-count">0</span> seleccionats</span>
     <button id="btn-elim-sel" onclick="eliminarSeleccio()" class="btn-sm btn-del" style="display:none">Eliminar seleccionats</button>
