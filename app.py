@@ -1940,24 +1940,25 @@ def api_crear_albara():
     observacions = (d.get('observacions') or '').strip()
     num_pressupost = (d.get('num_pressupost') or '').strip()
 
-    # Determinar contacte: usuari professional té fiscal_id, admin usa nom del client
-    user = query('SELECT nom, nom_empresa, fiscal_id, is_admin FROM usuaris WHERE id=?',
+    # Només l'admin (Reus Revela) pot crear albarans a FD
+    user = query('SELECT nom, nom_empresa, nom_fiscal, fiscal_id, is_admin FROM usuaris WHERE id=?',
                  [session['user_id']], one=True)
     is_admin = bool(_row_get(user, 'is_admin', 0))
-    # El contacte FD és sempre l'empresa que encomana la feina a Reus Revela.
-    # Prioritat: nom_fiscal (raó social) > nom_empresa (comercial) > nom
-    nif    = _row_get(user, 'fiscal_id', '').strip()
-    nom_fd = (_row_get(user, 'nom_fiscal', '').strip()
-              or _row_get(user, 'nom_empresa', '').strip()
-              or _row_get(user, 'nom', '').strip())
+    if not is_admin:
+        return jsonify({'ok': False, 'error': 'Només l\'administrador pot crear albarans a Factura Directa.'}), 403
+
+    # El contacte FD és el CLIENT (nom del client de la calculadora)
+    # El NIF del client és opcional — si s'envia, s'usa per cercar exacte a FD
+    nif_client = (d.get('client_nif') or '').strip()
+    nom_fd     = client_nom
 
     if not nom_fd:
-        return jsonify({'ok': False, 'error': 'El teu perfil no té nom d\'empresa configurat. Afegeix-lo a Ajustos.'}), 400
+        return jsonify({'ok': False, 'error': 'Cal omplir el nom del client abans de crear l\'albarà.'}), 400
 
-    # Buscar o crear contacte
-    contacte = _fd_cerca_contacte(nom=nom_fd, nif=nif if nif else None)
+    # Buscar per NIF (exacte) o crear nou — no busquem per nom per evitar falsos positius
+    contacte = _fd_cerca_contacte(nif=nif_client) if nif_client else None
     if not contacte:
-        contacte = _fd_crear_contacte(nom_fd, nif=nif or None, telefon=client_tel or None)
+        contacte = _fd_crear_contacte(nom_fd, nif=nif_client or None, telefon=client_tel or None)
     if '_error' in (contacte or {}):
         return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
@@ -1976,8 +1977,6 @@ def api_crear_albara():
     desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
     if opcions_text:
         desc_marc += f' · {opcions_text}'
-    if client_nom:
-        desc_marc += f' ({client_nom})'
 
     linies = [{
         'text':      desc_marc,

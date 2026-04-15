@@ -2511,7 +2511,7 @@ recalcMides();
     </div>
     <div style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
       <button type="button" id="mail-btn-copiar" onclick="copiarMailText()" style="padding:8px 16px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">Copiar text</button>
-      <button type="button" id="mail-btn-albara" onclick="crearAlbaraFD()" style="padding:8px 16px;border:1px solid var(--amber);border-radius:7px;background:var(--amber-l);color:var(--amber);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Crear albarà FD</button>
+      {% if session.is_admin %}<button type="button" id="mail-btn-albara" onclick="crearAlbaraFD()" style="padding:8px 16px;border:1px solid var(--amber);border-radius:7px;background:var(--amber-l);color:var(--amber);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Crear albarà FD</button>{% endif %}
       <button type="button" onclick="obrirMailClient()" style="padding:8px 18px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Obrir gestor de correu →</button>
     </div>
   </div>
