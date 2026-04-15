@@ -784,6 +784,49 @@ _INTERMOL_REFS = [
     ('8537655','8537'),('8547603','8547'),('8547675','8547'),('8547703','8547'),('85574001','8557'),
 ]
 
+_PROECO_PREUS = [
+    ('PROECO1520', 7.81),  ('PROECO1824', 9.24),  ('PROECO2020', 7.81),
+    ('PROECO2025', 8.80),  ('PROECO2030', 10.67), ('PROECO2323', 8.80),
+    ('PROECO2430', 11.55), ('PROECO2436', 12.65), ('PROECO2835', 14.52),
+    ('PROECO3030', 14.52), ('PROECO3040', 15.51), ('PROECO3045', 16.50),
+    ('PROECO3050', 17.93), ('PROECO3060', 20.35), ('PROECO3550', 19.36),
+    ('PROECO4050', 20.35), ('PROECO4060', 21.34), ('PROECO5050', 23.21),
+    ('PROECO5060', 25.19), ('PROECO5070', 29.04), ('PROECO5075', 31.90),
+    ('PROECO60100', 43.56),('PROECO6060', 29.04), ('PROECO6070', 33.88),
+    ('PROECO6080', 36.74), ('PROECO6090', 40.70), ('PROECO70100', 48.40),
+    ('PROECO80100', 50.38),('PROECO80120', 55.22),('PROECO80150', 61.05),
+    ('PROECO80180', 87.12),('PROECO80200', 116.16),('PROECO90100', 53.24),
+    ('PROECO90120', 62.92),('PROECO90150', 72.60),('PROECO90180', 92.95),
+    ('PROECO90200', 125.84),
+]
+
+def _seed_proeco_preus(db, use_pg=False):
+    """Inserta els preus de ProEco si no existeixen."""
+    ok = 0
+    if use_pg:
+        cur = db.cursor()
+        for ref, preu in _PROECO_PREUS:
+            try:
+                cur.execute(
+                    "INSERT INTO proeco (referencia, preu) VALUES (%s, %s) ON CONFLICT (referencia) DO NOTHING",
+                    [ref, preu]
+                )
+                ok += 1
+            except Exception as e:
+                print(f'ProEco seed PG skip {ref}: {e}')
+    else:
+        for ref, preu in _PROECO_PREUS:
+            try:
+                db.execute(
+                    "INSERT OR IGNORE INTO proeco (referencia, preu) VALUES (?, ?)",
+                    [ref, preu]
+                )
+                ok += 1
+            except Exception as e:
+                print(f'ProEco seed SQLite skip {ref}: {e}')
+    print(f'ProEco seed: {ok}/{len(_PROECO_PREUS)} preus inserits')
+
+
 def _seed_intermol_moldures(db, use_pg=False):
     """Inserta les motllures Intermol si no existeixen (ref2 = família, proveidor = Intermol)."""
     ok = 0
@@ -1860,7 +1903,9 @@ def admin():
     config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
     impressio = query('SELECT * FROM impressio ORDER BY preu')
     passpartous = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
-    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio, passpartous=passpartous)
+    proeco_rows = query('SELECT referencia, preu FROM proeco ORDER BY referencia') or []
+    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio,
+                           passpartous=passpartous, proeco_rows=proeco_rows)
 
 @app.route('/admin/usuari', methods=['POST'])
 @admin_required
@@ -2203,6 +2248,27 @@ def admin_passpartous():
         ref = request.form.get('ref', '').strip()
         execute('DELETE FROM passpartout WHERE referencia=?', [ref])
         flash('Referència eliminada.', 'ok')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/proeco', methods=['POST'])
+@admin_required
+def admin_proeco():
+    action = request.form.get('action')
+    if action == 'crear':
+        ref = request.form.get('referencia', '').strip().upper()
+        preu = float(request.form.get('preu', 0))
+        if ref:
+            execute('INSERT OR REPLACE INTO proeco (referencia, preu) VALUES (?,?)', [ref, preu])
+            flash(f'ProEco {ref} desat.', 'ok')
+    elif action == 'eliminar':
+        execute('DELETE FROM proeco WHERE referencia=?', [request.form.get('ref')])
+        flash('Preu ProEco eliminat.', 'ok')
+    elif action == 'editar':
+        ref = request.form.get('ref', '').strip().upper()
+        preu = float(request.form.get('preu', 0))
+        execute('UPDATE proeco SET preu=? WHERE referencia=?', [preu, ref])
+        flash(f'ProEco {ref} actualitzat.', 'ok')
     return redirect(url_for('admin'))
 
 
@@ -3277,7 +3343,7 @@ def api_closest():
         'mirall':       cc('vidres',      w, h, prefix='MIR-'),
         'passpartu':    {'ref': f'pas-{w}x{h}', 'preu': calcular_precio_passpartu(w, h)},
         'doble_pas':    {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 1.9, 2)},
-        'proeco':       {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 0.75, 2)},
+        'proeco':       cc('proeco', w, h),
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
@@ -3565,6 +3631,8 @@ def init_db():
                     referencia TEXT PRIMARY KEY, preu REAL)""",
                 """CREATE TABLE IF NOT EXISTS encolat_pro (
                     referencia TEXT PRIMARY KEY, preu REAL)""",
+                """CREATE TABLE IF NOT EXISTS proeco (
+                    referencia TEXT PRIMARY KEY, preu REAL)""",
                 """CREATE TABLE IF NOT EXISTS comandes (
                     id SERIAL PRIMARY KEY, user_id INTEGER, data TEXT,
                     client_nom TEXT, client_tel TEXT, pre_marc TEXT,
@@ -3644,6 +3712,7 @@ def init_db():
                        ['empresa_tel',''])
             db.commit()
             _seed_admin_if_configured(db)
+            _seed_proeco_preus(db, use_pg=True)
             _seed_intermol_moldures(db, use_pg=True)
             db.commit()
         else:
@@ -3684,6 +3753,9 @@ def init_db():
                     referencia TEXT PRIMARY KEY, preu REAL
                 );
                 CREATE TABLE IF NOT EXISTS encolat_pro (
+                    referencia TEXT PRIMARY KEY, preu REAL
+                );
+                CREATE TABLE IF NOT EXISTS proeco (
                     referencia TEXT PRIMARY KEY, preu REAL
                 );
                 CREATE TABLE IF NOT EXISTS comandes (
@@ -3748,6 +3820,7 @@ def init_db():
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_tel','')")
             db.commit()
             _seed_admin_if_configured(db)
+            _seed_proeco_preus(db, use_pg=False)
             _seed_intermol_moldures(db, use_pg=False)
             db.commit()
 

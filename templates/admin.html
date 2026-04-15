@@ -215,6 +215,45 @@ tr:last-child td{border-bottom:none}
       </div>
 
       <div class="section">
+        <div class="section-title">Tarifes ProEco</div>
+        <p class="muted" style="margin-bottom:1rem">Preus de cost del ProEco per mida (format: PROECO3040 = 30×40 cm). El professional aplica el seu marge a sobre.</p>
+        <form method="post" action="/admin/proeco" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+          <input type="hidden" name="action" value="crear">
+          <div><label>Referència</label><input type="text" name="referencia" placeholder="PROECO3040" required style="text-transform:uppercase"></div>
+          <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="15.51" required></div>
+          <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
+        </form>
+        <div class="table-wrap">
+        <table style="font-size:12px">
+          <thead><tr><th>Referència</th><th>Mida</th><th>Preu cost</th><th>Editar</th><th></th></tr></thead>
+          <tbody>
+          {% for p in proeco_rows %}
+          {% set dims = p.referencia[6:] %}
+          <tr>
+            <td style="font-weight:600;color:#6c5ce7">{{ p.referencia }}</td>
+            <td style="color:var(--muted)">{{ dims[:2] }}×{{ dims[2:] }} cm</td>
+            <td>
+              <form method="post" action="/admin/proeco" style="display:inline-flex;gap:.3rem;align-items:center">
+                <input type="hidden" name="action" value="editar">
+                <input type="hidden" name="ref" value="{{ p.referencia }}">
+                <input type="number" name="preu" step="0.01" value="{{ "%.2f"|format(p.preu) }}" style="width:80px;padding:3px 6px;font-size:12px;border:1px solid #dfe6e9;border-radius:4px">
+                <button type="submit" class="btn btn-sm" style="background:#f0f4ff;color:#6c5ce7;border:1px solid #c7d2fe;padding:2px 8px">✓</button>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/admin/proeco" style="display:inline">
+                <input type="hidden" name="action" value="eliminar">
+                <input type="hidden" name="ref" value="{{ p.referencia }}">
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar {{ p.referencia }}?')">×</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        <hr style="margin:2rem 0">
+
         <div class="section-title">Tarifes d'impressió fotogràfica</div>
         <p class="muted" style="margin-bottom:1rem">Afegeix, revisa o elimina formats de cost d'impressió. Aquest bloc queda separat perquè sigui més fàcil mantenir-lo sense barrejar-lo amb usuaris.</p>
         <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
