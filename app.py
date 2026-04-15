@@ -259,16 +259,28 @@ def _find_local_moldura_photo(ref):
     return ''
 
 
-def _resolve_moldura_photo(ref, foto):
+def _resolve_moldura_photo(ref, foto, ref2=''):
+    """Resolve photo for a moldura. Tries: stored foto URL, then local file by
+    referencia (stripping separators), then local file by ref2 (supplier code)."""
     public_url = _to_public_photo_url(foto)
-    return public_url or _find_local_moldura_photo(ref)
+    if public_url:
+        return public_url
+    local = _find_local_moldura_photo(ref)
+    if local:
+        return local
+    if ref2:
+        local2 = _find_local_moldura_photo(ref2)
+        if local2:
+            return local2
+    return ''
 
 
 def _serialize_moldura(row):
     if not row:
         return None
     data = dict(row)
-    data['foto'] = _resolve_moldura_photo(data.get('referencia', ''), data.get('foto', ''))
+    data['foto'] = _resolve_moldura_photo(
+        data.get('referencia', ''), data.get('foto', ''), ref2=data.get('ref2', ''))
     return data
 
 
@@ -1360,11 +1372,11 @@ def lookup():
     tipus = request.args.get('tipus', 'moldura')
     if tipus == 'moldura':
         try:
-            r = query('SELECT preu_taller, gruix, descripcio, foto FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+            r = query('SELECT preu_taller, gruix, descripcio, foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
             print(f"lookup moldura ref={ref} result={r}")
             if r:
                 return jsonify({'ok': True, 'preu': r['preu_taller'], 'gruix': r['gruix'],
-                                'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'])})
+                                'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'], ref2=_row_get(r,'ref2',''))})
         except Exception as e:
             print(f"lookup ERROR: {e}")
             return jsonify({'ok': False, 'error': str(e)})
@@ -2459,9 +2471,10 @@ def crear_pdf_comparativa(comandes):
     for _c in comandes:
         _cell = p('', size=8)
         if _c.get('marc_principal'):
-            _r_f = query('SELECT foto FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+            _r_f = query('SELECT foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)',
                          [_c['marc_principal']], one=True)
-            _foto_url = _resolve_moldura_photo(_c['marc_principal'], _r_f['foto'] if _r_f else '')
+            _foto_url = _resolve_moldura_photo(_c['marc_principal'], _r_f['foto'] if _r_f else '',
+                                               ref2=(_row_get(_r_f,'ref2','') or '') if _r_f else '')
             if _foto_url.startswith('/static/'):
                 _rel = _foto_url.lstrip('/')
                 _full = _os_comp.path.join(app.root_path, 'static', _rel.replace('static/',''))
@@ -2955,10 +2968,11 @@ def crear_pdf(c):
     marc_ref = c.get('marc_principal') or ''
     marc_descripcio = ''
     if marc_ref:
-        r = query('SELECT foto, descripcio FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+        r = query('SELECT foto, descripcio, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)',
                   [marc_ref], one=True)
         marc_descripcio = (_row_get(r, 'descripcio', '') or '') if r else ''
-        foto_url = _resolve_moldura_photo(marc_ref, r['foto'] if r else '')
+        foto_url = _resolve_moldura_photo(marc_ref, r['foto'] if r else '',
+                                          ref2=(_row_get(r, 'ref2', '') or '') if r else '')
         if foto_url.startswith('/static/'):
             rel = foto_url.lstrip('/')
             full = _os.path.join(app.root_path, 'static', rel.replace('static/',''))
