@@ -107,6 +107,13 @@ tr:hover td{background:#FAFAF8}
     </div>
   </div>
 
+  {% if session.is_admin %}
+  <div id="barra-seleccio" style="display:none;align-items:center;gap:.75rem;margin-bottom:1rem;padding:.65rem 1rem;background:var(--red-l);border:1px solid #E8B4B4;border-radius:var(--r)">
+    <span style="font-size:13px;font-weight:600;color:var(--red)"><span id="sel-count">0</span> seleccionats</span>
+    <button id="btn-elim-sel" onclick="eliminarSeleccio()" class="btn-sm btn-del" style="display:none">Eliminar seleccionats</button>
+  </div>
+  {% endif %}
+
   {% if sessio_list %}
     {% for opcions in sessio_list %}
     {% set c0 = opcions[0] %}
@@ -336,8 +343,12 @@ function marcarPagat(sessioId, btn) {
 
 function updateSeleccio(){
   var chks = document.querySelectorAll('.sessio-chk:checked');
-  document.getElementById('sel-count').textContent = chks.length;
-  document.getElementById('btn-elim-sel').style.display = chks.length ? 'inline-flex' : 'none';
+  var n = chks.length;
+  var barra = document.getElementById('barra-seleccio');
+  var btnEl = document.getElementById('btn-elim-sel');
+  if(barra) barra.style.display = n ? 'flex' : 'none';
+  if(document.getElementById('sel-count')) document.getElementById('sel-count').textContent = n;
+  if(btnEl) btnEl.style.display = n ? 'inline-flex' : 'none';
 }
 
 function eliminarSeleccio(){
