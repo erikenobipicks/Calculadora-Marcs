@@ -892,6 +892,47 @@ def _seed_intermol_moldures(db, use_pg=False):
     print(f'Intermol cleanup: {deleted} registres erronis eliminats (fotos resoltes per referencia)')
 
 
+def _fix_ref2_errors(db, use_pg=False):
+    """Corregeix errors de transcripció coneguts al camp ref2 de moldures."""
+    fixes = [
+        # (referencia, ref2_erroni, ref2_correcte)
+        ('M2314', '6183/1022', '6183/1021'),  # foto 61831021.jpg disponible
+        ('M2315', '6214/1019', '6412/1019'),  # 6214 era 6412 invertit
+        ('M2316', '6214/4010', '6412/4010'),
+        ('M2317', '6214/5004', '6412/5004'),
+    ]
+    fixed = 0
+    if use_pg:
+        cur = db.cursor()
+        for ref, wrong, correct in fixes:
+            try:
+                cur.execute(
+                    "UPDATE moldures SET ref2=%s WHERE referencia=%s AND ref2=%s",
+                    [correct, ref, wrong])
+                fixed += cur.rowcount
+            except Exception as e:
+                print(f'ref2 fix PG {ref}: {e}')
+        try:
+            db.commit()
+        except Exception:
+            pass
+    else:
+        for ref, wrong, correct in fixes:
+            try:
+                db.execute(
+                    "UPDATE moldures SET ref2=? WHERE referencia=? AND ref2=?",
+                    [correct, ref, wrong])
+                fixed += 1
+            except Exception as e:
+                print(f'ref2 fix SQLite {ref}: {e}')
+        try:
+            db.commit()
+        except Exception:
+            pass
+    if fixed:
+        print(f'ref2 fixes: {fixed} correccions aplicades')
+
+
 def _seed_admin_if_configured(db):
     admin_user = os.environ.get('ADMIN_USERNAME', '').strip()
     admin_pass = os.environ.get('ADMIN_PASSWORD', '').strip()
@@ -3847,6 +3888,7 @@ def init_db():
             _seed_admin_if_configured(db)
             _seed_proeco_preus(db, use_pg=True)
             _seed_intermol_moldures(db, use_pg=True)
+            _fix_ref2_errors(db, use_pg=True)
             db.commit()
         else:
             db.executescript('''
@@ -3955,6 +3997,7 @@ def init_db():
             _seed_admin_if_configured(db)
             _seed_proeco_preus(db, use_pg=False)
             _seed_intermol_moldures(db, use_pg=False)
+            _fix_ref2_errors(db, use_pg=False)
             db.commit()
 
 # Init DB via before_first_request equivalent
