@@ -1377,14 +1377,10 @@ def index():
             return redirect(url_for('setup'))
     except:
         pass
-    user = query('SELECT nom, username, nom_empresa, profile_type, access_status, web_url, instagram, fiscal_id, notes_validacio FROM usuaris WHERE id=?', [session['user_id']], one=True)
-    return render_template(
-        'portal.html',
-        user=user,
-        web_return_url=_current_web_return_url(),
-        web_canvas_url=_current_web_module_url('/area-privada/lienzos'),
-        web_prints_url=_current_web_module_url('/area-privada/impresiones'),
-    )
+    web_url = _current_web_return_url()
+    if web_url:
+        return redirect(web_url)
+    return redirect(url_for('calculadora'))
 
 
 @app.route('/calculadora')

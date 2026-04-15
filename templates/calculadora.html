@@ -200,7 +200,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   {% set brand_name = "Calculadora de marcs" if not brand_name_raw or brand_name_raw == "Calculadora" else brand_name_raw %}
   {% set show_brand_subtitle = brand_name_raw and brand_name_raw not in ("Calculadora", "Reus Revela") %}
   <div class="brand" title="{{ brand_name_raw or brand_name }}">
-    <a href="/" class="brand-link" aria-label="{{ brand_name }}">
+    <a href="{{ web_return_url or 'https://reusrevela.cat/area-privada' }}" class="brand-link" aria-label="{{ brand_name }}">
       <span class="brand-name">{{ brand_name }}</span>
       {% if show_brand_subtitle %}
       <span class="brand-sub">Reus Revela</span>
