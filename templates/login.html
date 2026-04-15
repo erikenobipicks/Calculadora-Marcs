@@ -19,8 +19,10 @@ input:focus{border-color:#0984e3}
 button{width:100%;padding:11px;background:#0984e3;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
 button:hover{background:#0773c5}
 .alert{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1.2rem}
-.bar{width:40px;height:4px;background:#0984e3;border-radius:2px;margin:0 auto 1.5rem}
-
+.bar{width:40px;height:4px;background:#1A6B45;border-radius:2px;margin:0 auto 1.5rem}
+.info{margin-top:1.2rem;padding:10px 14px;background:#f0f7f4;border:1px solid #c3ddd4;border-radius:8px;font-size:13px;color:#2f5c42;text-align:center;line-height:1.5}
+.info a{color:#1A6B45;font-weight:700;text-decoration:none}
+.info a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -47,6 +49,9 @@ button:hover{background:#0773c5}
     </div>
     <button type="submit">Entrar</button>
   </form>
+  <div class="info">
+    Accedeix normalment des de l'<a href="{{ web_return_url or 'https://reusrevela.cat/area-privada' }}">àrea privada de Reus Revela</a>
+  </div>
 </div>
 </body>
 </html>
