@@ -234,10 +234,22 @@ def _find_local_moldura_photo(ref):
     if not ref or not os.path.isdir(fotos_dir):
         return ''
 
+    ref_strip = ref.strip()
+    # Supplier codes use separators: "1717-206" or "4017/530" → photo is "1717206.jpg"
+    ref_clean = ref_strip.replace('-', '').replace('/', '')
+
     candidates = []
-    for stem in [ref.strip(), ref.strip().lower(), ref.strip().upper(), _safe_moldura_ref(ref)]:
+    for stem in [ref_strip, ref_strip.lower(), ref_strip.upper(), _safe_moldura_ref(ref_strip),
+                 ref_clean, ref_clean.lower()]:
         if stem and stem not in candidates:
             candidates.append(stem)
+
+    # Handle leading-zero suffix: "1815-0171" → clean "18150171" → also try "1815171"
+    if len(ref_clean) > 4 and ref_clean[:4].isdigit() and ref_clean[4:5] == '0':
+        suffix_no_zero = ref_clean[4:].lstrip('0') or ref_clean[4:]
+        alt = ref_clean[:4] + suffix_no_zero
+        if alt and alt not in candidates:
+            candidates.append(alt)
 
     for stem in candidates:
         for ext in MOLDURA_IMAGE_EXTS:
@@ -828,72 +840,44 @@ def _seed_proeco_preus(db, use_pg=False):
 
 
 def _seed_intermol_moldures(db, use_pg=False):
-    """Vincula les fotos Intermol als registres existents via ref2.
-    També neteja els registres erronis inserits anteriorment (sense preu ni dades).
-    NO crea registres nous — les motllures s'han d'entrar manualment amb codi intern.
+    """Neteja registres Intermol inserits per error (codi proveïdor com a referència primària).
+    Les fotos es resolen dinàmicament via _find_local_moldura_photo: el codi intern
+    "1717-206" troba automàticament "1717206.jpg" eliminant el guió/barra.
     """
     refs = [r for r, _ in _INTERMOL_REFS]
-    deleted = linked = 0
+    deleted = 0
 
     if use_pg:
         cur = db.cursor()
-        # 1) Eliminar registres creats per error (ref = codi Intermol, sense dades)
         for ref in refs:
             try:
                 cur.execute(
                     "DELETE FROM moldures WHERE referencia=%s "
-                    "AND preu_taller=0 AND cost=0 AND COALESCE(descripcio,'')='' "
-                    "AND COALESCE(ref2,'') != referencia",
+                    "AND preu_taller=0 AND cost=0 AND COALESCE(descripcio,'')=''",
                     [ref]
                 )
                 deleted += cur.rowcount
             except Exception as e:
                 print(f'Intermol cleanup PG {ref}: {e}')
-        # 2) Vincular foto als registres existents on ref2 = codi Intermol
-        for ref, _ in _INTERMOL_REFS:
-            foto_path = f'/static/fotos/{ref}.jpg'
-            try:
-                cur.execute(
-                    "UPDATE moldures SET foto=%s "
-                    "WHERE ref2=%s AND (foto IS NULL OR foto='')",
-                    [foto_path, ref]
-                )
-                linked += cur.rowcount
-            except Exception as e:
-                print(f'Intermol link PG {ref}: {e}')
         try:
             db.commit()
         except Exception:
             pass
     else:
-        # 1) Eliminar registres creats per error
         for ref in refs:
             try:
                 db.execute(
                     "DELETE FROM moldures WHERE referencia=? "
-                    "AND preu_taller=0 AND cost=0 AND COALESCE(descripcio,'')='' "
-                    "AND COALESCE(ref2,'') != referencia",
+                    "AND preu_taller=0 AND cost=0 AND COALESCE(descripcio,'')=''",
                     [ref]
                 )
-                deleted += db.total_changes
             except Exception as e:
                 print(f'Intermol cleanup SQLite {ref}: {e}')
-        # 2) Vincular foto als registres existents on ref2 = codi Intermol
-        for ref, _ in _INTERMOL_REFS:
-            foto_path = f'/static/fotos/{ref}.jpg'
-            try:
-                db.execute(
-                    "UPDATE moldures SET foto=? WHERE ref2=? AND (foto IS NULL OR foto='')",
-                    [foto_path, ref]
-                )
-                linked += 1
-            except Exception as e:
-                print(f'Intermol link SQLite {ref}: {e}')
         try:
             db.commit()
         except Exception:
             pass
-    print(f'Intermol fotos: {deleted} registres erronis eliminats, {linked} fotos vinculades via ref2')
+    print(f'Intermol cleanup: {deleted} registres erronis eliminats (fotos resoltes per referencia)')
 
 
 def _seed_admin_if_configured(db):
