@@ -1890,7 +1890,10 @@ def _fd_cerca_contacte(nom=None, nif=None):
     return None
 
 def _fd_crear_contacte(nom, nif=None, telefon=None):
-    main = {'name': nom, 'country': 'ES', 'currency': 'EUR'}
+    main = {
+        'name': nom, 'country': 'ES', 'currency': 'EUR',
+        'accounts': {'client': '430000', 'clientCredit': '438000'},
+    }
     if nif:     main['fiscalId'] = nif
     if telefon: main['phone']    = telefon
     res = _fd_post('contacts', {'content': {'type': 'contact', 'main': main}})
