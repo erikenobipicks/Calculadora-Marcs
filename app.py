@@ -1459,7 +1459,7 @@ def refs():
 @app.route('/api/moldura-options')
 @login_required
 def moldura_options():
-    rows = query("""SELECT referencia, gruix, descripcio, foto
+    rows = query("""SELECT referencia, gruix, descripcio, foto, ref2
                     FROM moldures
                     ORDER BY referencia""")
     return jsonify(_serialize_moldures(rows))
@@ -1734,7 +1734,7 @@ def cataleg():
     q = request.args.get('q', '').strip()
     color = request.args.get('color', '').strip().lower()
     gruix = request.args.get('gruix', '').strip().lower()
-    sql = """SELECT referencia, gruix, descripcio, foto
+    sql = """SELECT referencia, gruix, descripcio, foto, ref2
              FROM moldures"""
     args = []
     if q:
