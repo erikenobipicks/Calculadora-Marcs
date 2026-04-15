@@ -786,22 +786,32 @@ _INTERMOL_REFS = [
 
 def _seed_intermol_moldures(db, use_pg=False):
     """Inserta les motllures Intermol si no existeixen (ref2 = família, proveidor = Intermol)."""
-    for ref, familia in _INTERMOL_REFS:
-        try:
-            if use_pg:
-                db.execute(
+    ok = 0
+    if use_pg:
+        # psycopg2: cal usar cursor, no db.execute()
+        cur = db.cursor()
+        for ref, familia in _INTERMOL_REFS:
+            try:
+                cur.execute(
                     "INSERT INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto) "
                     "VALUES (%s,0,0,0,'Intermol',%s,'','','') ON CONFLICT (referencia) DO NOTHING",
                     [ref, familia]
                 )
-            else:
+                ok += 1
+            except Exception as e:
+                print(f'Intermol seed PG skip {ref}: {e}')
+    else:
+        for ref, familia in _INTERMOL_REFS:
+            try:
                 db.execute(
                     "INSERT OR IGNORE INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto) "
-                    "VALUES (?,0,0,0,'Intermol',?,?,'','')",
-                    [ref, familia, '']
+                    "VALUES (?,0,0,0,'Intermol',?,'','','')",
+                    [ref, familia]
                 )
-        except Exception as e:
-            print(f'Intermol seed skip {ref}: {e}')
+                ok += 1
+            except Exception as e:
+                print(f'Intermol seed SQLite skip {ref}: {e}')
+    print(f'Intermol seed: {ok}/{len(_INTERMOL_REFS)} motllures inserides')
 
 
 def _seed_admin_if_configured(db):
