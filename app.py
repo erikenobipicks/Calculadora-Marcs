@@ -244,10 +244,10 @@ def _find_local_moldura_photo(ref):
         if stem and stem not in candidates:
             candidates.append(stem)
 
-    # Handle leading-zero suffix: "1815-0171" → clean "18150171" → also try "1815171"
-    if len(ref_clean) > 4 and ref_clean[:4].isdigit() and ref_clean[4:5] == '0':
-        suffix_no_zero = ref_clean[4:].lstrip('0') or ref_clean[4:]
-        alt = ref_clean[:4] + suffix_no_zero
+    # Handle leading-zero suffix: "1815-0171" (clean "18150171") → also try "1815171"
+    # "7184/0086" (clean "71840086") → also try "7184086" (remove exactly ONE leading zero)
+    if len(ref_clean) == 8 and ref_clean[:4].isdigit() and ref_clean[4] == '0':
+        alt = ref_clean[:4] + ref_clean[5:]  # remove the single leading zero at position 4
         if alt and alt not in candidates:
             candidates.append(alt)
 
