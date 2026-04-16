@@ -81,10 +81,20 @@ nav{background:var(--nav);height:56px;display:flex;align-items:center;justify-co
     <a href="/historial">Historial</a>
     <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
+    {% if session.is_admin %}<a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara }}</span></a>{% endif %}
     {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
     <a href="/logout">Sortir</a>
   </div>
 </nav>
+{% if session.is_admin %}
+<style>
+.nav-pendents{position:relative}
+.nav-badge{background:var(--amber,#f59e0b);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;min-width:16px;text-align:center;display:inline-block;line-height:15px}
+</style>
+<script>
+(function(){var b=document.getElementById('nav-pendents-badge');if(!b)return;function u(){fetch('/api/pendents-albara').then(r=>r.json()).then(d=>{b.textContent=d.n;b.style.display=d.n?'inline-block':'none'}).catch(()=>{})}setInterval(u,60000)})();
+</script>
+{% endif %}
 
 <div class="wrap">
   <section class="hero">

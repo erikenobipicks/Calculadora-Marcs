@@ -169,6 +169,16 @@ def _current_brand_palette():
 def inject_brand_theme():
     return _current_brand_palette()
 
+
+@app.context_processor
+def inject_pendents_albara():
+    if session.get('is_admin'):
+        row = query('''SELECT COUNT(*) as n FROM comandes
+                       WHERE observacions LIKE '%[ACCEPTAT]%'
+                         AND (fd_albara IS NULL OR fd_albara='')''', one=True)
+        return {'nav_pendents_albara': row['n'] if row else 0}
+    return {'nav_pendents_albara': 0}
+
 LAMINATE_ONLY_PRICES = {
     '20x30': 7.35,
     '24x30': 7.35,
@@ -1452,6 +1462,17 @@ def refs():
     return jsonify([r[col] for r in rows])
 
 
+@app.route('/api/pendents-albara')
+@login_required
+def api_pendents_albara():
+    if not session.get('is_admin'):
+        return jsonify({'n': 0})
+    row = query('''SELECT COUNT(*) as n FROM comandes
+                   WHERE observacions LIKE '%[ACCEPTAT]%'
+                     AND (fd_albara IS NULL OR fd_albara='')''', one=True)
+    return jsonify({'n': row['n'] if row else 0})
+
+
 @app.route('/api/moldura-options')
 @login_required
 def moldura_options():
@@ -2214,6 +2235,8 @@ def api_crear_albara():
     opcions_text = (d.get('opcions') or '').strip()
     observacions = (d.get('observacions') or '').strip()
     num_pressupost = (d.get('num_pressupost') or '').strip()
+    quantitat    = float(d.get('quantitat') or 1)
+    revers_peu   = bool(d.get('revers_peu'))
 
     # Només l'admin (Reus Revela) pot crear albarans a FD
     user = query('SELECT nom, nom_empresa, nom_fiscal, fiscal_id, is_admin FROM usuaris WHERE id=?',
@@ -2244,13 +2267,20 @@ def api_crear_albara():
 
     # Línies de l'albarà
     desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+    parts = []
     if opcions_text:
-        desc_marc += f' · {opcions_text}'
+        parts.append(opcions_text)
+    if revers_peu:
+        parts.append('Revers amb peu')
+    if parts:
+        desc_marc += f' · {", ".join(parts)}'
 
+    # cost_produccio is total for all units (cTot*qty), divide by qty for unit price
+    unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
     linies = [{
         'text':      desc_marc,
-        'quantity':  1.0,
-        'unitPrice': round(cost_prod, 2),
+        'quantity':  float(quantitat),
+        'unitPrice': unit_cost,
         'tax':       ['S_IVA_21'],
     }]
 
@@ -2330,10 +2360,17 @@ def api_albara_de_comanda():
         cost_prod    = float(_row_get(com, 'cost_produccio', 0) or 0)
         client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
 
+        revers_peu   = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+        encolat      = (_row_get(com, 'encolat', '') or '').strip()
+        impressio    = (_row_get(com, 'impressio', '') or '').strip()
+
         parts_opc = []
         if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
         if vidre:                                parts_opc.append(vidre)
         if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
+        if encolat and encolat != '-':           parts_opc.append(encolat)
+        if revers_peu:                           parts_opc.append('Revers amb peu')
+        if impressio and impressio != '-':       parts_opc.append(impressio)
         desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
         if parts_opc:
             desc_marc += f' · {", ".join(parts_opc)}'
@@ -2342,10 +2379,12 @@ def api_albara_de_comanda():
         if client_nom:
             desc_marc = f'[{client_nom}] ' + desc_marc
 
+        # cost_produccio is total for all units (cTot*qty), divide by qty for unit price
+        unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
         linies.append({
             'text':      desc_marc,
             'quantity':  float(quantitat),
-            'unitPrice': round(cost_prod, 2),
+            'unitPrice': unit_cost,
             'tax':       ['S_IVA_21'],
         })
         if num_pres and num_pres not in notes_parts:
@@ -2363,6 +2402,107 @@ def api_albara_de_comanda():
 
     # Store albaran number on the session rows
     execute("UPDATE comandes SET fd_albara=? WHERE sessio_id=?", [str(num_albara), sessio_id])
+
+    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+
+@app.route('/api/albara-individual', methods=['POST'])
+@admin_required
+def api_albara_individual():
+    """Crea un albarà FD per una comanda individual (no per sessió sencera)."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+
+    d = request.get_json(force=True) or {}
+    comanda_id = d.get('comanda_id')
+    if not comanda_id:
+        return jsonify({'ok': False, 'error': 'Falta comanda_id'}), 400
+
+    com = query(
+        '''SELECT c.*, u.nom as usuari_nom, u.nom_empresa, u.nom_fiscal, u.fiscal_id, u.empresa_tel
+           FROM comandes c JOIN usuaris u ON c.user_id=u.id
+           WHERE c.id=?''', [comanda_id], one=True)
+    if not com:
+        return jsonify({'ok': False, 'error': 'Comanda no trobada'}), 404
+
+    # Determine FD contact: if admin's own order, use client_nom; if professional's order, use nom_fiscal/nom_empresa
+    is_pro_order = not bool(_row_get(com, 'is_admin', 0))
+    if is_pro_order:
+        nom_fiscal  = (_row_get(com, 'nom_fiscal', '') or '').strip()
+        nom_empresa = (_row_get(com, 'nom_empresa', '') or '').strip()
+        usuari_nom  = (_row_get(com, 'usuari_nom', '') or '').strip()
+        nom_fd      = nom_fiscal or nom_empresa or usuari_nom
+        fiscal_id   = (_row_get(com, 'fiscal_id', '') or '').strip()
+        telefon     = (_row_get(com, 'empresa_tel', '') or '').strip()
+    else:
+        nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
+        fiscal_id = ''
+        telefon   = (_row_get(com, 'client_tel', '') or '').strip()
+
+    if not nom_fd:
+        return jsonify({'ok': False, 'error': 'Cal un nom de contacte per crear l\'albarà.'}), 400
+
+    contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
+    if not contacte:
+        contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=telefon or None)
+    if '_error' in (contacte or {}):
+        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+
+    contact_id = _fd_extract_contact_id(contacte)
+    if not contact_id:
+        return jsonify({'ok': False, 'error': f'Contacte FD sense ID.'}), 500
+
+    # Build line item
+    marc        = (_row_get(com, 'marc_principal', '') or '').strip()
+    pre_marc    = (_row_get(com, 'pre_marc', '') or '').strip()
+    passpartout = (_row_get(com, 'passpartout', '') or '').strip()
+    vidre       = (_row_get(com, 'vidre', '') or '').strip()
+    encolat     = (_row_get(com, 'encolat', '') or '').strip()
+    impressio   = (_row_get(com, 'impressio', '') or '').strip()
+    revers_peu  = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    quantitat   = int(_row_get(com, 'quantitat', 1) or 1)
+    cost_prod   = float(_row_get(com, 'cost_produccio', 0) or 0)
+    client_nom  = (_row_get(com, 'client_nom', '') or '').strip()
+    opcio_nom   = (_row_get(com, 'opcio_nom', '') or '').strip()
+
+    parts_opc = []
+    if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
+    if vidre:                                parts_opc.append(vidre)
+    if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
+    if encolat and encolat != '-':           parts_opc.append(encolat)
+    if revers_peu:                           parts_opc.append('Revers amb peu')
+    if impressio and impressio != '-':       parts_opc.append(impressio)
+    desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+    if parts_opc:
+        desc_marc += f' · {", ".join(parts_opc)}'
+    if opcio_nom and opcio_nom != 'Opció A':
+        desc_marc += f' ({opcio_nom})'
+    if client_nom and is_pro_order:
+        desc_marc = f'[{client_nom}] ' + desc_marc
+
+    unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
+    linies = [{
+        'text':      desc_marc,
+        'quantity':  float(quantitat),
+        'unitPrice': unit_cost,
+        'tax':       ['S_IVA_21'],
+    }]
+
+    notes_parts = []
+    num_pres = (_row_get(com, 'num_pressupost', '') or '').strip()
+    if num_pres:
+        notes_parts.append(f'Pressupost: {num_pres}')
+    observacions = (_row_get(com, 'observacions', '') or '').strip()
+    if observacions:
+        notes_parts.append(f'Obs: {observacions}')
+    notes = ' | '.join(notes_parts)
+
+    albara = _fd_crear_albara(contact_id, linies, notes=notes)
+    if '_error' in (albara or {}):
+        return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
+
+    num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+    execute("UPDATE comandes SET fd_albara=? WHERE id=?", [str(num_albara), comanda_id])
 
     return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
 
@@ -3883,11 +4023,60 @@ def init_db():
                 ('comandes','cost_produccio','REAL DEFAULT 0'),
                 ('comandes','fd_albara',"TEXT DEFAULT ''"),
                 ('usuaris','nom_fiscal',"TEXT DEFAULT ''"),
+                # --- v2 price model: cost columns ---
+                ('moldures','preu_cost','REAL'),
+                ('moldures','merma_pct','REAL DEFAULT 10.0'),
+                ('moldures','minim_cm','REAL DEFAULT 100.0'),
+                ('moldures','preu_cost_ant','REAL'),
+                ('moldures','data_cost','TEXT'),
+                ('moldures','usuari_cost_id','INTEGER'),
+                ('moldures','notes_cost','TEXT'),
+                ('moldures','cost_verificat','INTEGER DEFAULT 0'),
+                ('vidres','preu_cost','REAL'),
+                ('vidres','preu_cost_ant','REAL'),
+                ('vidres','data_cost','TEXT'),
+                ('vidres','usuari_cost_id','INTEGER'),
+                ('vidres','notes_cost','TEXT'),
+                ('vidres','cost_verificat','INTEGER DEFAULT 0'),
+                ('encolat_pro','preu_cost','REAL'),
+                ('encolat_pro','preu_cost_ant','REAL'),
+                ('encolat_pro','data_cost','TEXT'),
+                ('encolat_pro','usuari_cost_id','INTEGER'),
+                ('encolat_pro','notes_cost','TEXT'),
+                ('encolat_pro','cost_verificat','INTEGER DEFAULT 0'),
+                ('passpartout','preu_cost','REAL'),
+                ('passpartout','preu_cost_ant','REAL'),
+                ('passpartout','data_cost','TEXT'),
+                ('passpartout','usuari_cost_id','INTEGER'),
+                ('passpartout','notes_cost','TEXT'),
+                ('passpartout','cost_verificat','INTEGER DEFAULT 0'),
+                # --- v2 price model: order snapshots ---
+                ('comandes','cost_unitari','REAL'),
+                ('comandes','pvd_unitari','REAL'),
+                ('comandes','marge_admin_snap','REAL'),
+                ('comandes','marge_pro_snap','REAL'),
+                # --- v2 price model: user margin aliases ---
+                ('usuaris','marge_pro_pct','REAL DEFAULT 60'),
+                ('usuaris','marge_impressio_pro_pct','REAL DEFAULT 100'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
                 except Exception as e:
                     print("ALTER skip:", e)
+            # --- v2: historial_preus_cost audit table ---
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS historial_preus_cost (
+                    id SERIAL PRIMARY KEY,
+                    taula TEXT NOT NULL,
+                    referencia TEXT NOT NULL,
+                    preu_cost_antic REAL,
+                    preu_cost_nou REAL,
+                    usuari_id INTEGER,
+                    data TEXT,
+                    notes TEXT
+                )""")
+            except Exception as e:
+                print("historial_preus_cost skip:", e)
             ddl_cur.close()
             ddl_conn.close()
             print("DDL done, checking admin...")
@@ -3901,6 +4090,11 @@ def init_db():
                        ['empresa_adreca',''])
             cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING",
                        ['empresa_tel',''])
+            # --- v2 price model: admin margin config ---
+            for k, v in [('marge_admin_moldures_pct','60'), ('marge_admin_vidres_pct','60'),
+                         ('marge_admin_passpartu_pct','60'), ('marge_admin_encolat_pct','60'),
+                         ('marge_pvp_suggerit_pct','40')]:
+                cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
             _seed_proeco_preus(db, use_pg=True)
@@ -4000,22 +4194,108 @@ def init_db():
                 "ALTER TABLE passpartout ADD COLUMN color TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN textura TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN descripcio TEXT DEFAULT ''",
+                # --- v2 price model: cost columns ---
+                "ALTER TABLE moldures ADD COLUMN preu_cost REAL",
+                "ALTER TABLE moldures ADD COLUMN merma_pct REAL DEFAULT 10.0",
+                "ALTER TABLE moldures ADD COLUMN minim_cm REAL DEFAULT 100.0",
+                "ALTER TABLE moldures ADD COLUMN preu_cost_ant REAL",
+                "ALTER TABLE moldures ADD COLUMN data_cost TEXT",
+                "ALTER TABLE moldures ADD COLUMN usuari_cost_id INTEGER",
+                "ALTER TABLE moldures ADD COLUMN notes_cost TEXT",
+                "ALTER TABLE moldures ADD COLUMN cost_verificat INTEGER DEFAULT 0",
+                "ALTER TABLE vidres ADD COLUMN preu_cost REAL",
+                "ALTER TABLE vidres ADD COLUMN preu_cost_ant REAL",
+                "ALTER TABLE vidres ADD COLUMN data_cost TEXT",
+                "ALTER TABLE vidres ADD COLUMN usuari_cost_id INTEGER",
+                "ALTER TABLE vidres ADD COLUMN notes_cost TEXT",
+                "ALTER TABLE vidres ADD COLUMN cost_verificat INTEGER DEFAULT 0",
+                "ALTER TABLE encolat_pro ADD COLUMN preu_cost REAL",
+                "ALTER TABLE encolat_pro ADD COLUMN preu_cost_ant REAL",
+                "ALTER TABLE encolat_pro ADD COLUMN data_cost TEXT",
+                "ALTER TABLE encolat_pro ADD COLUMN usuari_cost_id INTEGER",
+                "ALTER TABLE encolat_pro ADD COLUMN notes_cost TEXT",
+                "ALTER TABLE encolat_pro ADD COLUMN cost_verificat INTEGER DEFAULT 0",
+                "ALTER TABLE passpartout ADD COLUMN preu_cost REAL",
+                "ALTER TABLE passpartout ADD COLUMN preu_cost_ant REAL",
+                "ALTER TABLE passpartout ADD COLUMN data_cost TEXT",
+                "ALTER TABLE passpartout ADD COLUMN usuari_cost_id INTEGER",
+                "ALTER TABLE passpartout ADD COLUMN notes_cost TEXT",
+                "ALTER TABLE passpartout ADD COLUMN cost_verificat INTEGER DEFAULT 0",
+                # --- v2 price model: order snapshots ---
+                "ALTER TABLE comandes ADD COLUMN cost_unitari REAL",
+                "ALTER TABLE comandes ADD COLUMN pvd_unitari REAL",
+                "ALTER TABLE comandes ADD COLUMN marge_admin_snap REAL",
+                "ALTER TABLE comandes ADD COLUMN marge_pro_snap REAL",
+                # --- v2 price model: user margin aliases ---
+                "ALTER TABLE usuaris ADD COLUMN marge_pro_pct REAL DEFAULT 60",
+                "ALTER TABLE usuaris ADD COLUMN marge_impressio_pro_pct REAL DEFAULT 100",
             ]:
                 try:
                     db.execute(sql)
                 except Exception:
                     pass
             db.commit()
+            # --- v2: historial_preus_cost audit table ---
+            db.execute("""CREATE TABLE IF NOT EXISTS historial_preus_cost (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                taula TEXT NOT NULL,
+                referencia TEXT NOT NULL,
+                preu_cost_antic REAL,
+                preu_cost_nou REAL,
+                usuari_id INTEGER,
+                data TEXT,
+                notes TEXT
+            )""")
+            db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_nom','Reus Revela')")
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_adreca','')")
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_tel','')")
+            # --- v2 price model: admin margin config ---
+            for k, v in [('marge_admin_moldures_pct','60'), ('marge_admin_vidres_pct','60'),
+                         ('marge_admin_passpartu_pct','60'), ('marge_admin_encolat_pct','60'),
+                         ('marge_pvp_suggerit_pct','40')]:
+                db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
             _seed_proeco_preus(db, use_pg=False)
             _seed_intermol_moldures(db, use_pg=False)
             _fix_ref2_errors(db, use_pg=False)
             db.commit()
+
+        # --- v2 price model: one-time backfill (runs once, guarded by flag) ---
+        _run_v2_price_backfill(db)
+
+
+def _run_v2_price_backfill(db):
+    """Populate preu_cost from existing prices and copy marge to new columns. Idempotent."""
+    check = query("SELECT valor FROM config WHERE clau='migration_v2_done'", one=True)
+    if check:
+        return
+    print("Running v2 price model backfill...")
+    # Read current default margin to reverse-calculate cost
+    cfg = query("SELECT valor FROM config WHERE clau='marge_defecte'", one=True)
+    divisor = 1 + float(cfg['valor'] if cfg else 60) / 100  # e.g. 1.60
+
+    # Moldures: preu_cost = preu_taller / divisor
+    execute("UPDATE moldures SET preu_cost = ROUND(preu_taller / ?, 4) WHERE preu_cost IS NULL AND preu_taller IS NOT NULL", [divisor])
+    # Vidres
+    execute("UPDATE vidres SET preu_cost = ROUND(preu / ?, 4) WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
+    # Encolat
+    execute("UPDATE encolat_pro SET preu_cost = ROUND(preu / ?, 4) WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
+    # Passpartout
+    execute("UPDATE passpartout SET preu_cost = ROUND(preu / ?, 4) WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
+    # Copy existing margins to new alias columns (always overwrite defaults on first migration)
+    execute("UPDATE usuaris SET marge_pro_pct = marge WHERE marge IS NOT NULL")
+    execute("UPDATE usuaris SET marge_impressio_pro_pct = marge_impressio WHERE marge_impressio IS NOT NULL")
+    # Mark migration as done
+    if USE_PG:
+        execute("INSERT INTO config (clau, valor) VALUES (%s, %s) ON CONFLICT DO NOTHING", ['migration_v2_done', '1'])
+    else:
+        execute("INSERT OR IGNORE INTO config (clau, valor) VALUES (?, ?)", ['migration_v2_done', '1'])
+    db.commit()
+    print("v2 price backfill complete.")
+
 
 # Init DB via before_first_request equivalent
 _db_initialized = False
