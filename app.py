@@ -1434,8 +1434,9 @@ def calculadora():
         pass
     user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio FROM usuaris WHERE id=?', [session['user_id']], one=True)
     brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
-    marge_pro = float(_row_get(user, 'marge_pro_pct') or _row_get(user, 'marge') or 60)
-    marge_imp_pro = float(_row_get(user, 'marge_impressio_pro_pct') or _row_get(user, 'marge_impressio') or 0)
+    marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
+    marge_pro = float(_row_get(user, 'marge_pro_pct') or _row_get(user, 'marge') or 60) if marge_pro_actiu else 0.0
+    marge_imp_pro = float(_row_get(user, 'marge_impressio_pro_pct') or _row_get(user, 'marge_impressio') or 0) if marge_pro_actiu else 0.0
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
@@ -1443,6 +1444,7 @@ def calculadora():
                            gruix_filters=MOLDURA_GRUIX_FILTERS,
                            brand_color=brand_color,
                            brand_color_light=_mix_with_white(brand_color),
+                           marge_pro_actiu=marge_pro_actiu,
                            marge_pro=marge_pro,
                            marge_impressio_pro=marge_imp_pro)
 
@@ -1694,8 +1696,12 @@ def moldura_options():
 @login_required
 def get_marge():
     u = query('SELECT marge, marge_impressio, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
     marge = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
+    if not marge_pro_actiu:
+        marge = 0.0
+        marge_imp = 0.0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
     brand_color_secondary = _normalize_hex_color(
@@ -2325,6 +2331,9 @@ def admin_usuari():
 def admin_config():
     execute("UPDATE config SET valor=? WHERE clau='marge_defecte'",
             [request.form.get('marge', 60)])
+    # Toggle marge pro
+    mpa = '1' if request.form.get('marge_pro_actiu') else '0'
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('marge_pro_actiu', ?)", [mpa])
     if request.form.get('save_gmail'):
         gu = request.form.get('gmail_user','').strip()
         gp = request.form.get('gmail_pass','').strip().replace(' ','')
@@ -4333,7 +4342,8 @@ def init_db():
             # --- v2 price model: admin margin config ---
             for k, v in [('marge_admin_moldures_pct','60'), ('marge_admin_vidres_pct','60'),
                          ('marge_admin_passpartu_pct','60'), ('marge_admin_encolat_pct','60'),
-                         ('marge_pvp_suggerit_pct','40')]:
+                         ('marge_pvp_suggerit_pct','40'),
+                         ('marge_pro_actiu','1')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -4503,7 +4513,8 @@ def init_db():
             # --- v2 price model: admin margin config ---
             for k, v in [('marge_admin_moldures_pct','60'), ('marge_admin_vidres_pct','60'),
                          ('marge_admin_passpartu_pct','60'), ('marge_admin_encolat_pct','60'),
-                         ('marge_pvp_suggerit_pct','40')]:
+                         ('marge_pvp_suggerit_pct','40'),
+                         ('marge_pro_actiu','1')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)

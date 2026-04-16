@@ -305,6 +305,13 @@ tr:last-child td{border-bottom:none}
           <label>Marge de benefici per defecte (%)</label>
           <p class="hint">Tots els usuaris usaran aquest marge. Recomanació: 60</p>
           <input type="number" name="marge" value="{{ config.get('marge_defecte', 60) }}" min="0" max="200">
+          <div style="margin-top:.8rem">
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+              <input type="checkbox" name="marge_pro_actiu" value="1" {% if config.get('marge_pro_actiu','1')=='1' %}checked{% endif %}>
+              <span>Marge professional actiu</span>
+            </label>
+            <p class="hint">Si es desactiva, els professionals veuen preus PVD sense marge aplicat (preu de cost + marge admin).</p>
+          </div>
           <button type="submit" class="btn btn-primary">Desar</button>
         </form>
       </div>
