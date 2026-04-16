@@ -1660,7 +1660,9 @@ def admin_preus_cost_update():
                VALUES (?,?,?,?,?,?,?)''',
             [taula, referencia, preu_cost_ant, preu_cost_nou, session['user_id'], avui, notes])
 
-    return jsonify({'ok': True, 'pvd': pvd, 'preu_cost_ant': preu_cost_ant})
+    marge_admin = float(get_config_value(f'marge_admin_{cat_map.get(taula, "moldures")}_pct', '60'))
+    return jsonify({'ok': True, 'preu_cost_nou': preu_cost_nou, 'pvd': pvd,
+                     'preu_cost_ant': preu_cost_ant, 'marge_aplicat': marge_admin})
 
 
 @app.route('/admin/preus-cost/historial')
