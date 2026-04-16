@@ -589,6 +589,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 
 <div class="zoom-panel" id="zoom-panel"></div>
 <script>
+var MARGE_PRO = {{ marge_pro | tojson }};
+var MARGE_IMPRESSIO_PRO = {{ marge_impressio_pro | tojson }};
 
 function toggleMobileNav(btn){
   var nav = btn.closest('nav');
@@ -608,7 +610,7 @@ var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
 var GRUIX   = {pre:0, marc:0};
 var MERMA   = {pre:{pct:10, min:100}, marc:{pct:10, min:100}};
 var CLOSEST = {};
-var marge = {{ marge_pro|default(60) }}, marge_impressio = {{ marge_impressio_pro|default(0) }}, rmode = 'pvp', uid = null;
+var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid = null;
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
