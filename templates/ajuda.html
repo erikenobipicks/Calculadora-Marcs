@@ -491,6 +491,7 @@ nav{
     <div class="pill-row" id="pill-row">
       <button class="pill active" type="button" data-filter="all">Tot</button>
       <button class="pill" type="button" data-filter="inici">Inici</button>
+      <button class="pill" type="button" data-filter="configuracio">Configuraci&oacute;</button>
       <button class="pill" type="button" data-filter="calculadora">Calculadora</button>
       <button class="pill" type="button" data-filter="motllures">Motllures</button>
       <button class="pill" type="button" data-filter="preus">Preus</button>
@@ -507,6 +508,7 @@ nav{
         <h2>Accions r&agrave;pides</h2>
         <div class="mini-links">
           <button type="button" data-jump="inici">Comen&ccedil;ar un pressupost</button>
+          <button type="button" data-jump="configuracio">Configurar el teu compte</button>
           <button type="button" data-jump="calculadora">Entendre cada bloc</button>
           <button type="button" data-jump="motllures">Treballar amb motllures</button>
           <button type="button" data-jump="sortida">Enviar PDF o WhatsApp</button>
@@ -554,6 +556,76 @@ nav{
           <div class="step">
             <strong>5. Revisa resum i sortida</strong>
             <p>Comprova total, entrega a compte i pendent. Després pots desar, generar el PDF o compartir-ho per WhatsApp.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="section-card help-section" data-section="configuracio" id="section-configuracio">
+        <div class="section-head">
+          <div>
+            <h2>Configuraci&oacute; inicial</h2>
+            <p>El que has de fer quan entres per primera vegada per tenir la calculadora a punt.</p>
+          </div>
+          <span class="tag">Imprescindible</span>
+        </div>
+        <div class="accordion">
+          <div class="item">
+            <button type="button">
+              <span>
+                <span class="item-title">Assistent de benvinguda (4 passos)</span>
+                <span class="item-sub">Nom del negoci, logo, marge general i marge d'impressi&oacute;.</span>
+              </span>
+              <span class="chev">+</span>
+            </button>
+            <div class="item-body">
+              El primer cop que entres, l'assistent et guia en 4 passos:<br><br>
+              <strong>1. Nom del negoci</strong> &mdash; Apareix als PDFs que envies als clients. Posa el nom comercial del teu taller o botiga.<br>
+              <strong>2. Logo</strong> &mdash; Opcional per&ograve; recomanat (PNG o JPG, idealment 300&times;100 px). Surt a la cantonada del PDF.<br>
+              <strong>3. Marge general</strong> &mdash; El percentatge que apliques sobre el cost dels materials per obtenir el preu de venda. Per defecte &eacute;s 60%. Si poses 60, un producte que costa 10&euro; es ven a 16&euro; (sense IVA).<br>
+              <strong>4. Marge d'impressi&oacute;</strong> &mdash; Si ofereixes servei de c&ograve;pies fotogr&agrave;fiques, pots tenir un marge diferent (per defecte 100%). Si no fas impressions, deixa-ho a 0.
+            </div>
+          </div>
+          <div class="item">
+            <button type="button">
+              <span>
+                <span class="item-title">Ajustos (configuraci&oacute; completa)</span>
+                <span class="item-sub">Dades fiscals, colors de marca i marges per categoria.</span>
+              </span>
+              <span class="chev">+</span>
+            </button>
+            <div class="item-body">
+              Un cop passat l'assistent, pots accedir a <strong>Ajustos</strong> des del men&uacute; per configurar-ho tot amb m&eacute;s detall:<br><br>
+              <strong>Dades del negoci</strong> &mdash; Nom comercial, nom fiscal, NIF/CIF, adre&ccedil;a i tel&egrave;fon. Aquestes dades surten al PDF i s'utilitzen per als albarans.<br>
+              <strong>Colors de marca</strong> &mdash; Personalitza el color principal, secundari i del men&uacute; per adaptar la calculadora a la teva imatge corporativa. El canvi es veu a l'instant.<br>
+              <strong>Logo</strong> &mdash; Puja o canvia el logo en qualsevol moment.<br>
+              <strong>Marges per categoria</strong> &mdash; A m&eacute;s del marge general, pots definir marges espec&iacute;fics per: marcs, teles, impressions, foam, fine art i &agrave;lbums. Aix&ograve; et d&oacute;na control total sobre la rendibilitat de cada l&iacute;nia de producte.
+            </div>
+          </div>
+          <div class="item">
+            <button type="button">
+              <span>
+                <span class="item-title">Qu&egrave; &eacute;s el marge i com funciona?</span>
+                <span class="item-sub">La f&oacute;rmula b&agrave;sica que converteix cost en preu de venda.</span>
+              </span>
+              <span class="chev">+</span>
+            </button>
+            <div class="item-body">
+              <div class="formula">Preu de venda = Cost &times; (1 + Marge% / 100)</div>
+              Exemple amb marge del 60%: un marc que costa 10&euro; es ven a 16&euro; (sense IVA). El sistema aplica l'IVA del 21% autom&agrave;ticament per mostrar el preu final al client.<br><br>
+              <strong>Consell:</strong> Comen&ccedil;a amb el marge per defecte (60%) i ajusta'l despr&eacute;s de veure com queden els preus amb les teves motllures habituals. Sempre pots canviar-lo des d'Ajustos sense afectar els pressupostos ja guardats.
+            </div>
+          </div>
+          <div class="item">
+            <button type="button">
+              <span>
+                <span class="item-title">Idioma dels pressupostos</span>
+                <span class="item-sub">Catal&agrave;, castell&agrave; o angl&egrave;s &mdash; es tria per cada pressupost.</span>
+              </span>
+              <span class="chev">+</span>
+            </button>
+            <div class="item-body">
+              A la calculadora pots triar l'idioma del PDF (catal&agrave;, castell&agrave; o angl&egrave;s) abans de generar-lo. Cada pressupost guarda el seu idioma, aix&iacute; que pots tenir clients en diferents idiomes sense problema.
+            </div>
           </div>
         </div>
       </article>
