@@ -69,7 +69,9 @@ tr:hover td{background:#FAFAF8}
 .btn-entregat{background:#EEF2FF;color:#4F46E5;border:1px solid #C7D2FE}.btn-entregat:hover{background:#E0E7FF}
 .btn-entregat-on{background:#4F46E5;color:#fff;border:1px solid #3730A3}
 .btn-albara{background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA}.btn-albara:hover{background:#FFEDD5}
+.btn-albara-cost{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;font-size:10px}.btn-albara-cost:hover{background:#FEF3C7}
 .btn-albara-ok{background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7;font-size:10px}
+.albara-grp{display:inline-flex;gap:2px}
 .pagat-badge{display:inline-block;background:#1A6B45;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
 @media(max-width:920px){
   nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
@@ -219,11 +221,14 @@ tr:hover td{background:#FAFAF8}
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
               {% if session.is_admin %}
-              <button onclick="crearAlbaraIndividual({{ op.id }}, this)"
-                class="btn-sm {% if op.fd_albara %}btn-albara-ok{% else %}btn-albara{% endif %}"
-                title="{% if op.fd_albara %}Albarà: {{ op.fd_albara }}{% else %}Crear albarà FD{% endif %}">
-                {% if op.fd_albara %}✓ {{ op.fd_albara }}{% else %}FD{% endif %}
-              </button>
+              {% if op.fd_albara %}
+              <span class="btn-sm btn-albara-ok" title="Albarà: {{ op.fd_albara }}">✓ {{ op.fd_albara }}</span>
+              {% else %}
+              <span class="albara-grp">
+                <button onclick="crearAlbaraIndividual({{ op.id }}, 'pvp', this)" class="btn-sm btn-albara" title="Albarà a PVP (preu venda)">FD pvp</button>
+                <button onclick="crearAlbaraIndividual({{ op.id }}, 'cost', this)" class="btn-sm btn-albara-cost" title="Albarà a cost producció">FD cost</button>
+              </span>
+              {% endif %}
               {% endif %}
               <button onclick="acceptarComanda({{ op.id }}, this)" class="btn-sm btn-acc" title="Marcar com acceptat">✓</button>
               <button onclick="eliminarComanda({{ op.id }}, this)" class="btn-sm btn-del" title="Eliminar">×</button>
@@ -355,35 +360,28 @@ function crearAlbaraComanda(sessioId, btn) {
   });
 }
 
-function crearAlbaraIndividual(comandaId, btn) {
-  if(btn.classList.contains('btn-albara-ok')) {
-    alert('Aquesta comanda ja té albarà: ' + btn.textContent.trim());
-    return;
-  }
-  if(!confirm('Crear albarà individual a Factura Directa per aquest pressupost?')) return;
-  btn.disabled = true;
-  var orig = btn.textContent;
+function crearAlbaraIndividual(comandaId, modePreu, btn) {
+  var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
+  if(!confirm('Crear albarà a Factura Directa amb preu de ' + label + '?')) return;
+  var grp = btn.closest('.albara-grp');
+  if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
   btn.textContent = '...';
   fetch('/api/albara-individual', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({comanda_id: comandaId})
+    body: JSON.stringify({comanda_id: comandaId, mode_preu: modePreu})
   }).then(r=>r.json()).then(function(d){
     if(d.ok){
-      btn.classList.remove('btn-albara');
-      btn.classList.add('btn-albara-ok');
-      btn.style.background='#D1FAE5';btn.style.color='#065F46';btn.style.border='1px solid #6EE7B7';
-      btn.textContent = '✓ ' + (d.albara||'creat');
-      btn.title = 'Albarà: ' + (d.albara||'creat');
+      if(grp){
+        grp.innerHTML = '<span class="btn-sm btn-albara-ok" title="Albarà ' + label + ': ' + (d.albara||'creat') + '">✓ ' + (d.albara||'creat') + '</span>';
+      }
     } else {
       alert('Error: ' + (d.error||'Error desconegut'));
-      btn.textContent = orig;
+      if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; b.textContent = b.dataset.orig || b.textContent; });
     }
-    btn.disabled = false;
   }).catch(function(e){
     alert('Error de connexió: ' + e);
-    btn.textContent = orig;
-    btn.disabled = false;
+    if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
   });
 }
 

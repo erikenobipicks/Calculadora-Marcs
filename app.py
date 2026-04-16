@@ -2418,26 +2418,30 @@ def api_albara_individual():
     if not comanda_id:
         return jsonify({'ok': False, 'error': 'Falta comanda_id'}), 400
 
+    mode_preu = (d.get('mode_preu') or 'pvp').strip().lower()  # 'pvp' (default) or 'cost'
+
     com = query(
-        '''SELECT c.*, u.nom as usuari_nom, u.nom_empresa, u.nom_fiscal, u.fiscal_id, u.empresa_tel
+        '''SELECT c.*, u.nom as usuari_nom, u.nom_empresa, u.nom_fiscal, u.fiscal_id, u.empresa_tel, u.is_admin as owner_is_admin
            FROM comandes c JOIN usuaris u ON c.user_id=u.id
            WHERE c.id=?''', [comanda_id], one=True)
     if not com:
         return jsonify({'ok': False, 'error': 'Comanda no trobada'}), 404
 
     # Determine FD contact: if admin's own order, use client_nom; if professional's order, use nom_fiscal/nom_empresa
-    is_pro_order = not bool(_row_get(com, 'is_admin', 0))
-    if is_pro_order:
+    owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
+    if owner_is_admin:
+        # Admin's own order → the FD contact is the end client
+        nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
+        fiscal_id = ''
+        telefon   = (_row_get(com, 'client_tel', '') or '').strip()
+    else:
+        # Professional's order → the FD contact is the professional
         nom_fiscal  = (_row_get(com, 'nom_fiscal', '') or '').strip()
         nom_empresa = (_row_get(com, 'nom_empresa', '') or '').strip()
         usuari_nom  = (_row_get(com, 'usuari_nom', '') or '').strip()
         nom_fd      = nom_fiscal or nom_empresa or usuari_nom
         fiscal_id   = (_row_get(com, 'fiscal_id', '') or '').strip()
         telefon     = (_row_get(com, 'empresa_tel', '') or '').strip()
-    else:
-        nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
-        fiscal_id = ''
-        telefon   = (_row_get(com, 'client_tel', '') or '').strip()
 
     if not nom_fd:
         return jsonify({'ok': False, 'error': 'Cal un nom de contacte per crear l\'albarà.'}), 400
@@ -2462,6 +2466,7 @@ def api_albara_individual():
     revers_peu  = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
     quantitat   = int(_row_get(com, 'quantitat', 1) or 1)
     cost_prod   = float(_row_get(com, 'cost_produccio', 0) or 0)
+    preu_net    = float(_row_get(com, 'preu_net', 0) or 0)
     client_nom  = (_row_get(com, 'client_nom', '') or '').strip()
     opcio_nom   = (_row_get(com, 'opcio_nom', '') or '').strip()
 
@@ -2477,14 +2482,16 @@ def api_albara_individual():
         desc_marc += f' · {", ".join(parts_opc)}'
     if opcio_nom and opcio_nom != 'Opció A':
         desc_marc += f' ({opcio_nom})'
-    if client_nom and is_pro_order:
+    if client_nom and not owner_is_admin:
         desc_marc = f'[{client_nom}] ' + desc_marc
 
-    unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
+    # mode_preu: 'pvp' uses preu_net (PVP sense IVA), 'cost' uses cost_produccio
+    base_total = preu_net if mode_preu == 'pvp' else cost_prod
+    unit_price = round(base_total / quantitat, 2) if quantitat > 0 else round(base_total, 2)
     linies = [{
         'text':      desc_marc,
         'quantity':  float(quantitat),
-        'unitPrice': unit_cost,
+        'unitPrice': unit_price,
         'tax':       ['S_IVA_21'],
     }]
 
