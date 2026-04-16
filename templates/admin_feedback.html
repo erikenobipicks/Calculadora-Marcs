@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f3ee;--paper:#fff;--text:#1d1b18;--muted:#6c675f;--border:#e5ded2;--green:#1A6B45;--green-l:#E8F3EE;--red:#C0392B;--red-l:#FDEDEC;--amber:#b45309;--amber-l:#FFF7ED;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#fff') }}}
+*{box-sizing:border-box}body{margin:0;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+nav{background:var(--nav);padding:.9rem 1.4rem;display:flex;align-items:center;gap:1rem}
+nav a{color:var(--nav-text);text-decoration:none;font-size:13px;font-weight:500;opacity:.8}nav a:hover{opacity:1}
+nav .brand{color:var(--nav-text);font-weight:700;font-size:16px;margin-right:auto}
+.wrap{max-width:800px;margin:2rem auto;padding:0 1.2rem}
+h1{font-size:22px;margin:0 0 1.2rem}
+.card{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem;margin-bottom:.75rem}
+.card-head{display:flex;align-items:center;gap:.6rem;margin-bottom:.4rem}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-error{background:var(--red-l);color:var(--red)}
+.badge-millora{background:var(--green-l);color:var(--green)}
+.badge-altre{background:var(--amber-l);color:var(--amber)}
+.meta{font-size:12px;color:var(--muted)}
+.msg{margin-top:.4rem;font-size:14px;line-height:1.5;white-space:pre-wrap}
+.empty{text-align:center;padding:3rem;color:var(--muted);font-size:15px}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">Feedback</span>
+  <a href="/">Portal</a>
+  <a href="/calculadora">Calculadora</a>
+  <a href="/historial">Historial</a>
+  <a href="/admin">Admin</a>
+  <a href="/logout">Sortir</a>
+</nav>
+<div class="wrap">
+  <h1>Suggeriments i errors reportats</h1>
+  {% if feedbacks %}
+    {% for fb in feedbacks %}
+    <div class="card">
+      <div class="card-head">
+        <span class="badge badge-{{ fb.tipus }}">{{ fb.tipus|capitalize }}</span>
+        <span class="meta">{{ fb.usuari_nom }} &middot; {{ fb.data }} &middot; {{ fb.pagina }}</span>
+      </div>
+      <div class="msg">{{ fb.missatge }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Encara no hi ha feedback.</div>
+  {% endif %}
+</div>
+</body>
+</html>

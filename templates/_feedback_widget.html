@@ -1,0 +1,59 @@
+<!-- Feedback widget — include before </body> -->
+<button id="fb-toggle" onclick="document.getElementById('fb-modal').style.display='flex'" title="Envia suggeriment o error" style="position:fixed;bottom:1.2rem;right:1.2rem;z-index:9990;width:44px;height:44px;border-radius:50%;border:none;background:var(--nav,#1A6B45);color:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;transition:transform .15s">&#9993;</button>
+<div id="fb-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.35);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.2);width:92%;max-width:420px;font-family:'DM Sans',sans-serif;overflow:hidden">
+    <div style="padding:1.1rem 1.3rem;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between">
+      <strong style="font-size:15px">Envia un suggeriment</strong>
+      <button onclick="document.getElementById('fb-modal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1">&times;</button>
+    </div>
+    <div style="padding:1.1rem 1.3rem">
+      <div style="display:flex;gap:6px;margin-bottom:.8rem">
+        <button type="button" class="fb-pill fb-pill-active" data-val="millora" onclick="fbSetTipus(this)">Millora</button>
+        <button type="button" class="fb-pill" data-val="error" onclick="fbSetTipus(this)">Error</button>
+        <button type="button" class="fb-pill" data-val="altre" onclick="fbSetTipus(this)">Altre</button>
+      </div>
+      <textarea id="fb-msg" rows="4" placeholder="Descriu el que has trobat o el que milloraries..." style="width:100%;border:1px solid #ddd;border-radius:8px;padding:.6rem .8rem;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical"></textarea>
+      <div id="fb-status" style="font-size:12px;margin-top:.4rem;min-height:18px"></div>
+    </div>
+    <div style="padding:.7rem 1.3rem;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:.5rem">
+      <button onclick="document.getElementById('fb-modal').style.display='none'" style="padding:7px 16px;border:1px solid #ddd;border-radius:7px;background:#fff;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel·lar</button>
+      <button id="fb-send" onclick="fbEnviar()" style="padding:7px 18px;border:none;border-radius:7px;background:var(--nav,#1A6B45);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Enviar</button>
+    </div>
+  </div>
+</div>
+<style>
+.fb-pill{padding:5px 12px;border-radius:20px;border:1px solid #ddd;background:#f8f8f8;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .12s}
+.fb-pill-active{background:var(--nav,#1A6B45);color:#fff;border-color:var(--nav,#1A6B45)}
+#fb-toggle:hover{transform:scale(1.08)}
+</style>
+<script>
+var _fbTipus='millora';
+function fbSetTipus(btn){
+  _fbTipus=btn.dataset.val;
+  btn.parentNode.querySelectorAll('.fb-pill').forEach(function(p){p.classList.remove('fb-pill-active')});
+  btn.classList.add('fb-pill-active');
+}
+function fbEnviar(){
+  var msg=document.getElementById('fb-msg').value.trim();
+  if(!msg){document.getElementById('fb-status').textContent='Escriu un missatge';return}
+  var btn=document.getElementById('fb-send');
+  btn.disabled=true;btn.textContent='Enviant...';
+  fetch('/api/feedback',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tipus:_fbTipus,missatge:msg,pagina:location.pathname})
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      document.getElementById('fb-status').innerHTML='<span style="color:var(--nav,#1A6B45);font-weight:600">Enviat correctament. Gr&agrave;cies!</span>';
+      document.getElementById('fb-msg').value='';
+      setTimeout(function(){document.getElementById('fb-modal').style.display='none';document.getElementById('fb-status').textContent='';},1800);
+    } else {
+      document.getElementById('fb-status').textContent='Error: '+(d.error||'Error desconegut');
+    }
+    btn.disabled=false;btn.textContent='Enviar';
+  }).catch(function(){
+    document.getElementById('fb-status').textContent='Error de connexi\u00f3';
+    btn.disabled=false;btn.textContent='Enviar';
+  });
+}
+</script>

@@ -1473,6 +1473,43 @@ def api_pendents_albara():
     return jsonify({'n': row['n'] if row else 0})
 
 
+@app.route('/api/feedback', methods=['POST'])
+@login_required
+def api_feedback():
+    d = request.get_json(force=True) or {}
+    missatge = (d.get('missatge') or '').strip()
+    if not missatge:
+        return jsonify({'ok': False, 'error': 'Cal escriure un missatge'}), 400
+    tipus = d.get('tipus', 'millora')
+    if tipus not in ('error', 'millora', 'altre'):
+        tipus = 'millora'
+    pagina = (d.get('pagina') or '')[:200]
+    from datetime import datetime
+    execute("INSERT INTO feedback (user_id, tipus, missatge, pagina, data) VALUES (?,?,?,?,?)",
+            [session['user_id'], tipus, missatge[:2000], pagina, datetime.now().strftime('%Y-%m-%d %H:%M')])
+    return jsonify({'ok': True})
+
+
+@app.route('/admin/feedback')
+@admin_required
+def admin_feedback():
+    rows = query('''SELECT f.*, u.nom as usuari_nom FROM feedback f
+                    JOIN usuaris u ON f.user_id=u.id
+                    ORDER BY f.id DESC LIMIT 100''')
+    # Mark all as read
+    execute("UPDATE feedback SET llegit=1 WHERE llegit=0")
+    return render_template('admin_feedback.html', feedbacks=rows)
+
+
+@app.route('/api/feedback/count')
+@login_required
+def api_feedback_count():
+    if not session.get('is_admin'):
+        return jsonify({'n': 0})
+    row = query("SELECT COUNT(*) as n FROM feedback WHERE llegit=0", one=True)
+    return jsonify({'n': row['n'] if row else 0})
+
+
 @app.route('/api/moldura-options')
 @login_required
 def moldura_options():
@@ -4086,6 +4123,18 @@ def init_db():
                 )""")
             except Exception as e:
                 print("historial_preus_cost skip:", e)
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS feedback (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    tipus TEXT NOT NULL DEFAULT 'millora',
+                    missatge TEXT NOT NULL,
+                    pagina TEXT,
+                    data TEXT,
+                    llegit INTEGER DEFAULT 0
+                )""")
+            except Exception as e:
+                print("feedback table skip:", e)
             ddl_cur.close()
             ddl_conn.close()
             print("DDL done, checking admin...")
@@ -4254,6 +4303,15 @@ def init_db():
                 usuari_id INTEGER,
                 data TEXT,
                 notes TEXT
+            )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                tipus TEXT NOT NULL DEFAULT 'millora',
+                missatge TEXT NOT NULL,
+                pagina TEXT,
+                data TEXT,
+                llegit INTEGER DEFAULT 0
             )""")
             db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
