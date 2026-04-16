@@ -581,6 +581,20 @@ def _safe_float(value, default=0.0):
         return float(default)
 
 
+def get_config_value(clau, default=None):
+    """Read a single value from the config key-value table."""
+    r = query("SELECT valor FROM config WHERE clau=?", [clau], one=True)
+    return r['valor'] if r else default
+
+
+def calcular_pvd(preu_cost, categoria):
+    """cost × (1 + marge_admin_pct/100). categoria: 'moldures'|'vidres'|'passpartu'|'encolat'"""
+    if preu_cost is None:
+        return None
+    marge = float(get_config_value(f'marge_admin_{categoria}_pct', '60'))
+    return round(preu_cost * (1 + marge / 100), 4)
+
+
 def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None):
     data = raw if isinstance(raw, dict) else {}
     general_margin = max(_safe_float(data.get('general'), frame_margin if frame_margin is not None else COMMERCIAL_MARGIN_DEFAULTS['general']), 0.0)
@@ -1316,16 +1330,19 @@ def public_pricing():
     ]
 
     # Encolat professional i protter (taula encolat_pro, prefix ENC / PRO)
-    encolat_rows = query('SELECT referencia, preu FROM encolat_pro ORDER BY preu') or []
+    encolat_rows = query('SELECT referencia, preu, preu_cost FROM encolat_pro ORDER BY preu') or []
     encolat_pro = []
     for r in encolat_rows:
         ref = r['referencia'] or ''
         tipus = 'protter' if ref.upper().startswith('PRO') else 'encolat'
         mida = ref[3:] if ref.upper().startswith('PRO') or ref.upper().startswith('ENC') else ref
+        pc = _row_get(r, 'preu_cost')
+        pvd = calcular_pvd(pc, 'encolat') if pc is not None else None
         encolat_pro.append({
             'ref': ref,
             'mida': mida,
-            'preu': float(r['preu'] or 0),
+            'preu': pvd if pvd is not None else float(r['preu'] or 0),
+            'preu_cost': float(pc) if pc is not None else None,
             'tipus': tipus,
         })
 
@@ -1417,21 +1434,32 @@ def calculadora():
 def lookup():
     ref = request.args.get('ref', '').strip()
     tipus = request.args.get('tipus', 'moldura')
+    is_admin = session.get('is_admin')
     if tipus == 'moldura':
         try:
-            r = query('SELECT preu_taller, gruix, descripcio, foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+            r = query('SELECT preu_taller, preu_cost, gruix, descripcio, foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
             print(f"lookup moldura ref={ref} result={r}")
             if r:
-                return jsonify({'ok': True, 'preu': r['preu_taller'], 'gruix': r['gruix'],
-                                'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'], ref2=_row_get(r,'ref2',''))})
+                pvd = calcular_pvd(_row_get(r, 'preu_cost'), 'moldures')
+                preu = pvd if pvd is not None else r['preu_taller']
+                resp = {'ok': True, 'preu': preu, 'gruix': r['gruix'],
+                        'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'], ref2=_row_get(r,'ref2',''))}
+                if is_admin:
+                    resp['preu_cost'] = _row_get(r, 'preu_cost')
+                return jsonify(resp)
         except Exception as e:
             print(f"lookup ERROR: {e}")
             return jsonify({'ok': False, 'error': str(e)})
     elif tipus == 'vidre':
-        r = query('SELECT preu FROM vidres WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
-        if r: return jsonify({'ok': True, 'preu': r['preu']})
+        r = query('SELECT preu, preu_cost FROM vidres WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+        if r:
+            pvd = calcular_pvd(_row_get(r, 'preu_cost'), 'vidres')
+            preu = pvd if pvd is not None else r['preu']
+            resp = {'ok': True, 'preu': preu}
+            if is_admin: resp['preu_cost'] = _row_get(r, 'preu_cost')
+            return jsonify(resp)
     elif tipus == 'passpartout':
-        # El preu es calcula dinàmicament. La ref té format "EWxEH" (ex: "30x40").
+        # Preu dinàmic — multiplicadors ja codifiquen el PVD
         try:
             parts = ref.lower().replace('pas-','').split('x')
             ew, eh = float(parts[0]), float(parts[1])
@@ -1439,8 +1467,13 @@ def lookup():
         except Exception:
             return jsonify({'ok': False})
     elif tipus == 'encolat':
-        r = query('SELECT preu FROM encolat_pro WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
-        if r: return jsonify({'ok': True, 'preu': r['preu']})
+        r = query('SELECT preu, preu_cost FROM encolat_pro WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+        if r:
+            pvd = calcular_pvd(_row_get(r, 'preu_cost'), 'encolat')
+            preu = pvd if pvd is not None else r['preu']
+            resp = {'ok': True, 'preu': preu}
+            if is_admin: resp['preu_cost'] = _row_get(r, 'preu_cost')
+            return jsonify(resp)
     elif tipus == 'impressio':
         r = query('SELECT preu, descripcio FROM impressio WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
         if r: return jsonify({'ok': True, 'preu': r['preu'], 'descripcio': r['descripcio']})
@@ -3687,7 +3720,9 @@ def api_closest():
         uh = h_override if h_override is not None else h
         r = _find_closest(rows, uw, uh, prefix)
         if r:
-            return {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+            res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+            if r.get('preu_cost') is not None: res['preu_cost'] = r['preu_cost']
+            return res
         return None
 
     def ca(table, fw, fh, prefix=None, exclude_multi=None, preu_col='preu'):
@@ -3695,7 +3730,9 @@ def api_closest():
         rows = [dict(r) for r in query(f'SELECT * FROM {table}')]
         r = _find_closest_area(rows, fw, fh, prefix=prefix, exclude_multi=exclude_multi)
         if r:
-            return {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+            res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+            if r.get('preu_cost') is not None: res['preu_cost'] = r['preu_cost']
+            return res
         return None
 
     # Tots els productes físics (vidre, passpartú, encolat, protter) usen
@@ -3709,18 +3746,28 @@ def api_closest():
             rows = [r for r in rows if not any(r['referencia'].upper().startswith(e.upper()) for e in exclude_multi)]
         r = _find_closest(rows, cw, ch, prefix)
         if r:
-            return {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+            res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+            if r.get('preu_cost') is not None: res['preu_cost'] = r['preu_cost']
+            return res
         return None
 
+    def _pvd_result(res, categoria):
+        """Replace preu with PVD calculated from preu_cost if available."""
+        if res and res.get('preu_cost'):
+            pvd = calcular_pvd(res['preu_cost'], categoria)
+            if pvd is not None:
+                res['preu'] = pvd
+        return res
+
     result = {
-        'encolat':      cc('encolat_pro', w, h, prefix='ENC'),
-        'protter':      cc('encolat_pro', w, h, prefix='PRO'),
-        'vidre':        cc('vidres',      w, h, exclude_multi=['DV-','MIR-']),
-        'doble_vidre':  cc('vidres',      w, h, prefix='DV-'),
-        'mirall':       cc('vidres',      w, h, prefix='MIR-'),
+        'encolat':      _pvd_result(cc('encolat_pro', w, h, prefix='ENC'), 'encolat'),
+        'protter':      _pvd_result(cc('encolat_pro', w, h, prefix='PRO'), 'encolat'),
+        'vidre':        _pvd_result(cc('vidres',      w, h, exclude_multi=['DV-','MIR-']), 'vidres'),
+        'doble_vidre':  _pvd_result(cc('vidres',      w, h, prefix='DV-'), 'vidres'),
+        'mirall':       _pvd_result(cc('vidres',      w, h, prefix='MIR-'), 'vidres'),
         'passpartu':    {'ref': f'pas-{w}x{h}', 'preu': calcular_precio_passpartu(w, h)},
         'doble_pas':    {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 1.9, 2)},
-        'proeco':       cc('proeco', w, h),
+        'proeco':       cc('proeco', w, h),  # proeco no té preu_cost — sense canvi
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
