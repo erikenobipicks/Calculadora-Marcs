@@ -34,7 +34,13 @@ tr:hover{background:#faf8f4}
 .hist-link{font-size:11px;color:var(--nav);cursor:pointer;text-decoration:underline}
 .stat{display:inline-block;padding:6px 14px;background:var(--paper);border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:.5rem}
 .stat strong{color:var(--nav)}
-.notes-input{width:120px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:'DM Sans',sans-serif}
+.notes-input{width:180px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:'DM Sans',sans-serif}
+.btn-edit{background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:14px}
+.btn-edit:hover{background:var(--amber-l)}
+.btn-cancel{padding:3px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.edit-form{display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap}
+.edit-form label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-weight:600}
+.pvd-preview{font-size:11px;color:var(--muted);padding:5px 0}
 /* Historial modal */
 .modal-bg{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.35);align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
@@ -87,36 +93,44 @@ tr:hover{background:#faf8f4}
   <table>
     <thead>
       <tr>
-        <th>Ref</th>
-        {% if taula=='moldures' %}<th>Proveïdor</th><th>Descripció</th>{% endif %}
+        <th>Ref.</th>
+        {% if taula=='moldures' %}<th>Descripci&oacute;</th>{% endif %}
         <th>Cost actual</th>
-        <th>PVD (calculat)</th>
-        <th>Nou cost</th>
-        <th>Notes</th>
-        <th></th>
         <th>Verificat</th>
-        <th>Data</th>
+        <th>Editar</th>
       </tr>
     </thead>
     <tbody>
     {% for r in rows %}
     <tr id="row-{{ r.referencia }}">
-      <td class="ref">{{ r.referencia }}</td>
+      <td class="ref">{{ r.referencia }}{% if taula=='moldures' %}<div style="font-size:10px;color:var(--muted);font-family:sans-serif">{{ r.proveidor or '' }}</div>{% endif %}</td>
       {% if taula=='moldures' %}
-      <td style="font-size:11px">{{ r.proveidor or '—' }}</td>
-      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.descripcio or '' }}">{{ r.descripcio or '—' }}</td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.descripcio or '' }}">{{ r.descripcio or '—' }}</td>
       {% endif %}
-      <td class="cost-cell">{{ "%.4f"|format(r.preu_cost or 0) }}</td>
-      <td class="pvd">{{ "%.4f"|format(r.pvd or 0) }}</td>
-      <td><input class="cost-input" id="inp-{{ r.referencia }}" type="number" step="0.0001" value="{{ "%.4f"|format(r.preu_cost or 0) }}"></td>
-      <td><input class="notes-input" id="notes-{{ r.referencia }}" type="text" placeholder="motiu..."></td>
-      <td><button class="btn-save" onclick="saveRow('{{ r.referencia }}',this)">Desar</button></td>
+      <td class="cost-cell" id="cost-{{ r.referencia }}">{{ "%.4f"|format(r.preu_cost or 0) }} &euro;/m</td>
       <td>
         {% if r.cost_verificat %}<span class="badge-v yes">Verificat</span>
         {% else %}<span class="badge-v no">Estimat</span>{% endif %}
+        <div style="font-size:10px;color:var(--muted)">{{ r.data_cost or '' }}</div>
       </td>
-      <td style="font-size:11px;color:var(--muted)">{{ r.data_cost or '—' }}
-        <span class="hist-link" onclick="showHistorial('{{ r.referencia }}')">hist</span>
+      <td>
+        <button class="btn-edit" onclick="toggleEdit('{{ r.referencia }}')" title="Editar cost">&#9998;</button>
+        <span class="hist-link" onclick="showHistorial('{{ r.referencia }}')" title="Historial de canvis">hist</span>
+      </td>
+    </tr>
+    <tr id="edit-{{ r.referencia }}" class="edit-row" style="display:none">
+      <td colspan="{% if taula=='moldures' %}5{% else %}4{% endif %}" style="background:#faf8f4;padding:8px 10px">
+        <div class="edit-form">
+          <label>Nou cost (&euro;/m)
+            <input class="cost-input" id="inp-{{ r.referencia }}" type="number" step="0.0001" value="{{ "%.4f"|format(r.preu_cost or 0) }}">
+          </label>
+          <label>Notes
+            <input class="notes-input" id="notes-{{ r.referencia }}" type="text" placeholder="factura, proveïdor, data...">
+          </label>
+          <button class="btn-save" onclick="saveRow('{{ r.referencia }}',this)">Guardar</button>
+          <button class="btn-cancel" onclick="toggleEdit('{{ r.referencia }}')">Cancel&middot;lar</button>
+          <span class="pvd-preview" id="pvd-{{ r.referencia }}">PVD: {{ "%.4f"|format(r.pvd or 0) }} &euro;/m</span>
+        </div>
       </td>
     </tr>
     {% endfor %}
@@ -136,38 +150,49 @@ tr:hover{background:#faf8f4}
 </div>
 
 <script>
+function toggleEdit(ref){
+  var editRow = document.getElementById('edit-'+ref);
+  if(editRow.style.display==='none'){
+    // Close any other open edit rows first
+    document.querySelectorAll('.edit-row').forEach(function(r){ r.style.display='none'; });
+    editRow.style.display='';
+    var inp = document.getElementById('inp-'+ref);
+    if(inp) inp.focus();
+  } else {
+    editRow.style.display='none';
+  }
+}
+
 function saveRow(ref, btn){
   var inp = document.getElementById('inp-'+ref);
   var notes = document.getElementById('notes-'+ref);
   var nou = parseFloat(inp.value);
   if(isNaN(nou) || nou < 0){ alert('Preu no vàlid'); return; }
-  btn.disabled = true; btn.textContent = '...';
+  btn.disabled = true; var orig = btn.textContent; btn.textContent = '...';
   fetch('/admin/preus-cost/update', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({taula:'{{ taula }}', referencia:ref, preu_cost_nou:nou, notes:notes.value})
   }).then(function(r){return r.json()}).then(function(d){
-    btn.disabled = false; btn.textContent = 'Desar';
+    btn.disabled = false; btn.textContent = orig;
     if(d.ok){
-      btn.style.background='var(--green-l)'; btn.style.color='var(--green)';
-      btn.textContent = 'Desat';
-      setTimeout(function(){ btn.style.background=''; btn.style.color=''; btn.textContent='Desar'; }, 2000);
-      // Update the row visually
+      // Update main row
+      var costCell = document.getElementById('cost-'+ref);
+      if(costCell) costCell.textContent = nou.toFixed(4) + ' \u20ac/m';
       var row = document.getElementById('row-'+ref);
       if(row){
-        var cells = row.querySelectorAll('td');
-        // Find cost and pvd cells (after ref, and optionally proveidor+desc)
-        var costIdx = '{{ taula }}' === 'moldures' ? 3 : 1;
-        cells[costIdx].textContent = nou.toFixed(4);
-        cells[costIdx+1].textContent = d.pvd ? d.pvd.toFixed(4) : '—';
-        // Update badge
         var badge = row.querySelector('.badge-v');
         if(badge){ badge.className='badge-v yes'; badge.textContent='Verificat'; }
       }
+      // Update pvd preview
+      var pvdEl = document.getElementById('pvd-'+ref);
+      if(pvdEl && d.pvd) pvdEl.textContent = 'PVD: ' + d.pvd.toFixed(4) + ' \u20ac/m';
+      // Close edit row
       notes.value = '';
+      toggleEdit(ref);
     } else {
       alert('Error: '+(d.error||'Error desconegut'));
     }
-  }).catch(function(e){ btn.disabled=false; btn.textContent='Desar'; alert('Error: '+e); });
+  }).catch(function(e){ btn.disabled=false; btn.textContent=orig; alert('Error: '+e); });
 }
 
 function showHistorial(ref){
@@ -182,7 +207,9 @@ function showHistorial(ref){
       if(!rows.length){ body.innerHTML='<p style="color:var(--muted)">Sense canvis registrats.</p>'; return; }
       var html='<table class="hist-table"><thead><tr><th>Data</th><th>Antic</th><th>Nou</th><th>Usuari</th><th>Notes</th></tr></thead><tbody>';
       rows.forEach(function(r){
-        html+='<tr><td>'+r.data+'</td><td>'+(r.preu_cost_antic||'—').toFixed?r.preu_cost_antic.toFixed(4):(r.preu_cost_antic||'—')+'</td><td>'+(r.preu_cost_nou||0).toFixed(4)+'</td><td>'+(r.usuari_nom||'—')+'</td><td>'+(r.notes||'')+'</td></tr>';
+        var antic = (r.preu_cost_antic !== null && r.preu_cost_antic !== undefined) ? Number(r.preu_cost_antic).toFixed(4) : '\u2014';
+        var nou = (r.preu_cost_nou !== null && r.preu_cost_nou !== undefined) ? Number(r.preu_cost_nou).toFixed(4) : '\u2014';
+        html+='<tr><td>'+(r.data||'\u2014')+'</td><td>'+antic+'</td><td>'+nou+'</td><td>'+(r.usuari_nom||'\u2014')+'</td><td>'+(r.notes||'')+'</td></tr>';
       });
       html+='</tbody></table>';
       body.innerHTML=html;
