@@ -1562,6 +1562,126 @@ def api_feedback_count():
     return jsonify({'n': row['n'] if row else 0})
 
 
+@app.route('/admin/preus-cost')
+@admin_required
+def admin_preus_cost():
+    """Llistat de preus de cost amb filtres per taula, proveïdor i verificat."""
+    taula = request.args.get('taula', 'moldures')
+    if taula not in ('moldures', 'vidres', 'encolat_pro', 'passpartout'):
+        taula = 'moldures'
+    proveidor = request.args.get('proveidor', '').strip()
+    verificat = request.args.get('verificat', '')
+
+    if taula == 'moldures':
+        sql = 'SELECT referencia, preu_taller, preu_cost, proveidor, descripcio, cost_verificat, data_cost FROM moldures'
+        conditions, args = [], []
+        if proveidor:
+            conditions.append("LOWER(proveidor) LIKE LOWER(?)")
+            args.append(f'%{proveidor}%')
+        if verificat == '1':
+            conditions.append("cost_verificat = 1")
+        elif verificat == '0':
+            conditions.append("(cost_verificat = 0 OR cost_verificat IS NULL)")
+        if conditions:
+            sql += ' WHERE ' + ' AND '.join(conditions)
+        sql += ' ORDER BY referencia'
+        rows = query(sql, args)
+        proveidors = query("SELECT DISTINCT proveidor FROM moldures WHERE proveidor IS NOT NULL AND proveidor != '' ORDER BY proveidor")
+        proveidors = [r['proveidor'] for r in (proveidors or [])]
+    else:
+        sql = f'SELECT referencia, preu, preu_cost, cost_verificat, data_cost FROM {taula}'
+        conditions, args = [], []
+        if verificat == '1':
+            conditions.append("cost_verificat = 1")
+        elif verificat == '0':
+            conditions.append("(cost_verificat = 0 OR cost_verificat IS NULL)")
+        if conditions:
+            sql += ' WHERE ' + ' AND '.join(conditions)
+        sql += ' ORDER BY referencia'
+        rows = query(sql, args)
+        proveidors = []
+
+    # Compute PVD for each row
+    cat_map = {'moldures': 'moldures', 'vidres': 'vidres', 'encolat_pro': 'encolat', 'passpartout': 'passpartu'}
+    categoria = cat_map.get(taula, 'moldures')
+    for r in rows:
+        pc = _row_get(r, 'preu_cost')
+        r['pvd'] = calcular_pvd(pc, categoria) if pc is not None else None
+
+    return render_template('admin_preus_cost.html', rows=rows, taula=taula,
+                           proveidor=proveidor, verificat=verificat, proveidors=proveidors)
+
+
+@app.route('/admin/preus-cost/update', methods=['POST'])
+@admin_required
+def admin_preus_cost_update():
+    """Actualitza el preu de cost d'un producte i registra a l'historial."""
+    d = request.get_json(force=True) or {}
+    taula = d.get('taula', 'moldures')
+    if taula not in ('moldures', 'vidres', 'encolat_pro', 'passpartout'):
+        return jsonify({'ok': False, 'error': 'Taula no vàlida'}), 400
+    referencia = (d.get('referencia') or '').strip()
+    if not referencia:
+        return jsonify({'ok': False, 'error': 'Falta referència'}), 400
+    try:
+        preu_cost_nou = round(float(d.get('preu_cost_nou', 0)), 4)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Preu no vàlid'}), 400
+    notes = (d.get('notes') or '')[:500]
+
+    # Read current cost
+    row = query(f'SELECT preu_cost FROM {taula} WHERE referencia=?', [referencia], one=True)
+    if not row:
+        return jsonify({'ok': False, 'error': f'Referència {referencia} no trobada a {taula}'}), 404
+    preu_cost_ant = _row_get(row, 'preu_cost')
+
+    from datetime import datetime
+    avui = datetime.now().strftime('%Y-%m-%d')
+
+    # Update the product
+    execute(f'''UPDATE {taula} SET preu_cost_ant=?, preu_cost=?, data_cost=?,
+                usuari_cost_id=?, cost_verificat=1, notes_cost=?
+                WHERE referencia=?''',
+            [preu_cost_ant, preu_cost_nou, avui, session['user_id'], notes, referencia])
+
+    # Also update legacy preu/preu_taller to keep backward compat
+    cat_map = {'moldures': 'moldures', 'vidres': 'vidres', 'encolat_pro': 'encolat', 'passpartout': 'passpartu'}
+    pvd = calcular_pvd(preu_cost_nou, cat_map.get(taula, 'moldures'))
+    if taula == 'moldures':
+        execute('UPDATE moldures SET preu_taller=? WHERE referencia=?', [pvd, referencia])
+    else:
+        execute(f'UPDATE {taula} SET preu=? WHERE referencia=?', [pvd, referencia])
+
+    # Insert audit trail
+    execute('''INSERT INTO historial_preus_cost (taula, referencia, preu_cost_antic, preu_cost_nou, usuari_id, data, notes)
+               VALUES (?,?,?,?,?,?,?)''',
+            [taula, referencia, preu_cost_ant, preu_cost_nou, session['user_id'], avui, notes])
+
+    return jsonify({'ok': True, 'pvd': pvd, 'preu_cost_ant': preu_cost_ant})
+
+
+@app.route('/admin/preus-cost/historial')
+@admin_required
+def admin_preus_cost_historial():
+    """Historial de canvis de preu de cost per una referència."""
+    referencia = request.args.get('referencia', '').strip()
+    taula = request.args.get('taula', '')
+    conditions, args = [], []
+    if referencia:
+        conditions.append("referencia=?")
+        args.append(referencia)
+    if taula:
+        conditions.append("taula=?")
+        args.append(taula)
+    where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+    rows = query(f'''SELECT h.*, u.nom as usuari_nom
+                     FROM historial_preus_cost h
+                     LEFT JOIN usuaris u ON h.usuari_id=u.id
+                     {where}
+                     ORDER BY h.id DESC LIMIT 200''', args)
+    return jsonify([dict(r) for r in (rows or [])])
+
+
 @app.route('/api/moldura-options')
 @login_required
 def moldura_options():

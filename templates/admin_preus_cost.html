@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preus de cost — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f3ee;--paper:#fff;--text:#1d1b18;--muted:#6c675f;--border:#e5ded2;--green:#1A6B45;--green-l:#E8F3EE;--red:#C0392B;--red-l:#FDEDEC;--amber:#b45309;--amber-l:#FFF7ED;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#fff') }}}
+*{box-sizing:border-box}body{margin:0;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+nav{background:var(--nav);padding:.9rem 1.4rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+nav a{color:var(--nav-text);text-decoration:none;font-size:13px;font-weight:500;opacity:.8}nav a:hover{opacity:1}
+nav .brand{color:var(--nav-text);font-weight:700;font-size:16px;margin-right:auto}
+.wrap{max-width:1100px;margin:1.5rem auto;padding:0 1.2rem}
+h1{font-size:20px;margin:0 0 .6rem}
+.filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+.filters select,.filters input{padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:'DM Sans',sans-serif}
+.pill{padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif}
+.pill.active{background:var(--nav);color:#fff;border-color:var(--nav)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 6px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600}
+td{padding:7px 6px;border-bottom:1px solid #eee}
+tr:hover{background:#faf8f4}
+.ref{font-weight:600;font-family:monospace}
+.cost-cell{min-width:80px}
+.cost-input{width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right}
+.cost-input:focus{outline:none;border-color:var(--nav)}
+.btn-save{padding:3px 10px;border:none;border-radius:5px;background:var(--green);color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.btn-save:hover{filter:brightness(.9)}
+.btn-save:disabled{opacity:.5}
+.badge-v{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600}
+.badge-v.yes{background:var(--green-l);color:var(--green)}.badge-v.no{background:var(--amber-l);color:var(--amber)}
+.pvd{color:var(--muted);font-size:12px}
+.hist-link{font-size:11px;color:var(--nav);cursor:pointer;text-decoration:underline}
+.stat{display:inline-block;padding:6px 14px;background:var(--paper);border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:.5rem}
+.stat strong{color:var(--nav)}
+.notes-input{width:120px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:'DM Sans',sans-serif}
+/* Historial modal */
+.modal-bg{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.35);align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.2);width:92%;max-width:600px;max-height:80vh;overflow:auto}
+.modal-head{padding:1rem 1.2rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.modal-body{padding:1rem 1.2rem}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#999}
+.hist-table{width:100%;font-size:12px}
+.hist-table th{font-size:10px}
+@media(max-width:768px){.wrap{padding:0 .6rem}table{font-size:12px}.notes-input{width:80px}}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">Preus de cost</span>
+  <a href="/">Portal</a>
+  <a href="/calculadora">Calculadora</a>
+  <a href="/historial">Historial</a>
+  <a href="/admin">Admin</a>
+  <a href="/logout">Sortir</a>
+</nav>
+<div class="wrap">
+  <h1>Gestió de preus de cost</h1>
+  <div class="filters">
+    <div style="display:flex;gap:4px">
+      {% for t in ['moldures','vidres','encolat_pro','passpartout'] %}
+      <a href="/admin/preus-cost?taula={{ t }}" class="pill {% if taula==t %}active{% endif %}">{{ t|capitalize }}</a>
+      {% endfor %}
+    </div>
+    {% if proveidors %}
+    <select onchange="location.href='/admin/preus-cost?taula={{ taula }}&proveidor='+this.value+'&verificat={{ verificat }}'">
+      <option value="">Tots els proveïdors</option>
+      {% for p in proveidors %}
+      <option value="{{ p }}" {% if proveidor==p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <select onchange="location.href='/admin/preus-cost?taula={{ taula }}&proveidor={{ proveidor }}&verificat='+this.value">
+      <option value="">Tots</option>
+      <option value="0" {% if verificat=='0' %}selected{% endif %}>Pendents verificar</option>
+      <option value="1" {% if verificat=='1' %}selected{% endif %}>Verificats</option>
+    </select>
+  </div>
+
+  <div>
+    <span class="stat">{{ rows|length }} productes</span>
+    <span class="stat">Verificats: <strong>{{ rows|selectattr('cost_verificat')|list|length }}</strong> / {{ rows|length }}</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Ref</th>
+        {% if taula=='moldures' %}<th>Proveïdor</th><th>Descripció</th>{% endif %}
+        <th>Cost actual</th>
+        <th>PVD (calculat)</th>
+        <th>Nou cost</th>
+        <th>Notes</th>
+        <th></th>
+        <th>Verificat</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+    <tr id="row-{{ r.referencia }}">
+      <td class="ref">{{ r.referencia }}</td>
+      {% if taula=='moldures' %}
+      <td style="font-size:11px">{{ r.proveidor or '—' }}</td>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.descripcio or '' }}">{{ r.descripcio or '—' }}</td>
+      {% endif %}
+      <td class="cost-cell">{{ "%.4f"|format(r.preu_cost or 0) }}</td>
+      <td class="pvd">{{ "%.4f"|format(r.pvd or 0) }}</td>
+      <td><input class="cost-input" id="inp-{{ r.referencia }}" type="number" step="0.0001" value="{{ "%.4f"|format(r.preu_cost or 0) }}"></td>
+      <td><input class="notes-input" id="notes-{{ r.referencia }}" type="text" placeholder="motiu..."></td>
+      <td><button class="btn-save" onclick="saveRow('{{ r.referencia }}',this)">Desar</button></td>
+      <td>
+        {% if r.cost_verificat %}<span class="badge-v yes">Verificat</span>
+        {% else %}<span class="badge-v no">Estimat</span>{% endif %}
+      </td>
+      <td style="font-size:11px;color:var(--muted)">{{ r.data_cost or '—' }}
+        <span class="hist-link" onclick="showHistorial('{{ r.referencia }}')">hist</span>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Historial modal -->
+<div class="modal-bg" id="hist-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal">
+    <div class="modal-head">
+      <strong id="hist-title">Historial</strong>
+      <button class="modal-close" onclick="document.getElementById('hist-modal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="modal-body" id="hist-body">Carregant...</div>
+  </div>
+</div>
+
+<script>
+function saveRow(ref, btn){
+  var inp = document.getElementById('inp-'+ref);
+  var notes = document.getElementById('notes-'+ref);
+  var nou = parseFloat(inp.value);
+  if(isNaN(nou) || nou < 0){ alert('Preu no vàlid'); return; }
+  btn.disabled = true; btn.textContent = '...';
+  fetch('/admin/preus-cost/update', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({taula:'{{ taula }}', referencia:ref, preu_cost_nou:nou, notes:notes.value})
+  }).then(function(r){return r.json()}).then(function(d){
+    btn.disabled = false; btn.textContent = 'Desar';
+    if(d.ok){
+      btn.style.background='var(--green-l)'; btn.style.color='var(--green)';
+      btn.textContent = 'Desat';
+      setTimeout(function(){ btn.style.background=''; btn.style.color=''; btn.textContent='Desar'; }, 2000);
+      // Update the row visually
+      var row = document.getElementById('row-'+ref);
+      if(row){
+        var cells = row.querySelectorAll('td');
+        // Find cost and pvd cells (after ref, and optionally proveidor+desc)
+        var costIdx = '{{ taula }}' === 'moldures' ? 3 : 1;
+        cells[costIdx].textContent = nou.toFixed(4);
+        cells[costIdx+1].textContent = d.pvd ? d.pvd.toFixed(4) : '—';
+        // Update badge
+        var badge = row.querySelector('.badge-v');
+        if(badge){ badge.className='badge-v yes'; badge.textContent='Verificat'; }
+      }
+      notes.value = '';
+    } else {
+      alert('Error: '+(d.error||'Error desconegut'));
+    }
+  }).catch(function(e){ btn.disabled=false; btn.textContent='Desar'; alert('Error: '+e); });
+}
+
+function showHistorial(ref){
+  var modal = document.getElementById('hist-modal');
+  var body = document.getElementById('hist-body');
+  var title = document.getElementById('hist-title');
+  title.textContent = 'Historial: ' + ref;
+  body.innerHTML = 'Carregant...';
+  modal.classList.add('open');
+  fetch('/admin/preus-cost/historial?referencia='+encodeURIComponent(ref)+'&taula={{ taula }}')
+    .then(function(r){return r.json()}).then(function(rows){
+      if(!rows.length){ body.innerHTML='<p style="color:var(--muted)">Sense canvis registrats.</p>'; return; }
+      var html='<table class="hist-table"><thead><tr><th>Data</th><th>Antic</th><th>Nou</th><th>Usuari</th><th>Notes</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        html+='<tr><td>'+r.data+'</td><td>'+(r.preu_cost_antic||'—').toFixed?r.preu_cost_antic.toFixed(4):(r.preu_cost_antic||'—')+'</td><td>'+(r.preu_cost_nou||0).toFixed(4)+'</td><td>'+(r.usuari_nom||'—')+'</td><td>'+(r.notes||'')+'</td></tr>';
+      });
+      html+='</tbody></table>';
+      body.innerHTML=html;
+    }).catch(function(e){ body.innerHTML='Error: '+e; });
+}
+</script>
+</body>
+</html>
