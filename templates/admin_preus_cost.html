@@ -6,51 +6,60 @@
 <title>Preus de cost — Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f6f3ee;--paper:#fff;--text:#1d1b18;--muted:#6c675f;--border:#e5ded2;--green:#1A6B45;--green-l:#E8F3EE;--red:#C0392B;--red-l:#FDEDEC;--amber:#b45309;--amber-l:#FFF7ED;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#fff') }}}
+:root{--bg:#f6f3ee;--paper:#fff;--text:#1d1b18;--muted:#6c675f;--border:#e5ded2;--green:#1A6B45;--green-l:#E8F3EE;--red:#C0392B;--amber:#b45309;--amber-l:#FFF7ED;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#fff') }}}
 *{box-sizing:border-box}body{margin:0;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
 nav{background:var(--nav);padding:.9rem 1.4rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
 nav a{color:var(--nav-text);text-decoration:none;font-size:13px;font-weight:500;opacity:.8}nav a:hover{opacity:1}
 nav .brand{color:var(--nav-text);font-weight:700;font-size:16px;margin-right:auto}
 .wrap{max-width:1100px;margin:1.5rem auto;padding:0 1.2rem}
 h1{font-size:20px;margin:0 0 .6rem}
-.filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
-.filters select,.filters input{padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:'DM Sans',sans-serif}
-.pill{padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif}
-.pill.active{background:var(--nav);color:#fff;border-color:var(--nav)}
+
+/* Stat cards */
+.stat-cards{display:flex;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap}
+.stat-card{padding:.75rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--paper);text-decoration:none;color:inherit;min-width:130px;transition:border-color .15s}
+.stat-card:hover{border-color:var(--nav)}
+.stat-card.active{background:var(--green-l);border-color:var(--green)}
+.stat-label{font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.3px}
+.stat-val{font-size:18px;font-weight:600}
+.stat-val span{opacity:.4;font-weight:400}
+.stat-sub{font-size:11px;opacity:.6}
+
+/* Filters */
+.filters{display:flex;gap:.6rem;margin-bottom:1.25rem;flex-wrap:wrap}
+.filters select{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--paper)}
+
+/* Table */
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:8px 6px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600}
+th.r{text-align:right}
+th.c{text-align:center}
 td{padding:7px 6px;border-bottom:1px solid #eee}
 tr:hover{background:#faf8f4}
-.ref{font-weight:600;font-family:monospace}
-.cost-cell{min-width:80px}
-.cost-input{width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right}
-.cost-input:focus{outline:none;border-color:var(--nav)}
-.btn-save{padding:3px 10px;border:none;border-radius:5px;background:var(--green);color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.ref{font-weight:600;font-family:monospace;font-size:12px}
+.faded{opacity:.5}
+.pvd-col{color:var(--green);font-weight:500}
+.badge-ok{color:var(--green);font-size:12px}
+.badge-pend{color:var(--amber);font-size:12px}
+.btn-edit{padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px}
+.btn-edit:hover{background:var(--amber-l)}
+.hist-link{font-size:11px;color:var(--nav);opacity:.6;margin-left:4px}
+.hist-link:hover{opacity:1}
+
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--paper);border-radius:12px;padding:1.5rem;width:100%;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.2)}
+.modal h3{margin:0 0 1rem;font-size:16px}
+.modal label{display:block;margin-bottom:4px;font-size:12px;color:var(--muted);font-weight:600}
+.modal input[type="number"],.modal input[type="text"]{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:1rem}
+.modal input:focus{outline:none;border-color:var(--nav)}
+.modal-preview{font-size:13px;color:var(--muted);margin-bottom:1rem;padding:8px 10px;background:#faf8f4;border-radius:6px}
+.modal-actions{display:flex;gap:.6rem;justify-content:flex-end}
+.btn-cancel{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--paper);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.btn-save{padding:6px 14px;border-radius:6px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
 .btn-save:hover{filter:brightness(.9)}
 .btn-save:disabled{opacity:.5}
-.badge-v{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600}
-.badge-v.yes{background:var(--green-l);color:var(--green)}.badge-v.no{background:var(--amber-l);color:var(--amber)}
-.pvd{color:var(--muted);font-size:12px}
-.hist-link{font-size:11px;color:var(--nav);cursor:pointer;text-decoration:underline}
-.stat{display:inline-block;padding:6px 14px;background:var(--paper);border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:.5rem}
-.stat strong{color:var(--nav)}
-.notes-input{width:180px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:'DM Sans',sans-serif}
-.btn-edit{background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:14px}
-.btn-edit:hover{background:var(--amber-l)}
-.btn-cancel{padding:3px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.edit-form{display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap}
-.edit-form label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-weight:600}
-.pvd-preview{font-size:11px;color:var(--muted);padding:5px 0}
-/* Historial modal */
-.modal-bg{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.35);align-items:center;justify-content:center}
-.modal-bg.open{display:flex}
-.modal{background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.2);width:92%;max-width:600px;max-height:80vh;overflow:auto}
-.modal-head{padding:1rem 1.2rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
-.modal-body{padding:1rem 1.2rem}
-.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#999}
-.hist-table{width:100%;font-size:12px}
-.hist-table th{font-size:10px}
-@media(max-width:768px){.wrap{padding:0 .6rem}table{font-size:12px}.notes-input{width:80px}}
+@media(max-width:768px){.wrap{padding:0 .6rem}table{font-size:12px}.stat-cards{gap:.4rem}.stat-card{min-width:100px;padding:.5rem .7rem}}
 </style>
 </head>
 <body>
@@ -63,74 +72,68 @@ tr:hover{background:#faf8f4}
   <a href="/logout">Sortir</a>
 </nav>
 <div class="wrap">
-  <h1>Gestió de preus de cost</h1>
-  <div class="filters">
-    <div style="display:flex;gap:4px">
-      {% for t in ['moldures','vidres','encolat_pro','passpartout'] %}
-      <a href="/admin/preus-cost?taula={{ t }}" class="pill {% if taula==t %}active{% endif %}">{{ t|capitalize }} <span style="font-size:10px;opacity:.7">({{ stats[t].verificats }}/{{ stats[t].total }})</span></a>
-      {% endfor %}
-    </div>
-    {% if proveidors %}
-    <select onchange="location.href='/admin/preus-cost?taula={{ taula }}&proveidor='+this.value+'&verificat={{ verificat }}'">
-      <option value="">Tots els proveïdors</option>
+  <h1>Gesti&oacute; de preus de cost</h1>
+
+  <!-- Stat cards per taula -->
+  <div class="stat-cards">
+    {% for t, s in stats.items() %}
+    <a href="/admin/preus-cost?taula={{ t }}" class="stat-card {% if taula==t %}active{% endif %}">
+      <div class="stat-label">{{ t }}</div>
+      <div class="stat-val">{{ s.verificats }}<span>/{{ s.total }}</span></div>
+      <div class="stat-sub">verificats</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Filtres -->
+  <form method="GET" class="filters">
+    <input type="hidden" name="taula" value="{{ taula }}">
+    {% if taula == 'moldures' and proveidors %}
+    <select name="proveidor" onchange="this.form.submit()">
+      <option value="">Tots els prove&iuml;dors</option>
       {% for p in proveidors %}
       <option value="{{ p }}" {% if proveidor==p %}selected{% endif %}>{{ p }}</option>
       {% endfor %}
     </select>
     {% endif %}
-    <select onchange="location.href='/admin/preus-cost?taula={{ taula }}&proveidor={{ proveidor }}&verificat='+this.value">
+    <select name="verificat" onchange="this.form.submit()">
       <option value="">Tots</option>
       <option value="0" {% if verificat=='0' %}selected{% endif %}>Pendents verificar</option>
       <option value="1" {% if verificat=='1' %}selected{% endif %}>Verificats</option>
     </select>
-  </div>
+  </form>
 
-  <div>
-    <span class="stat">{{ rows|length }} productes mostrats</span>
-    <span class="stat">{{ taula|capitalize }}: <strong>{{ stats[taula].verificats }}</strong> / {{ stats[taula].total }} verificats</span>
-  </div>
-
+  <!-- Taula -->
   <table>
     <thead>
       <tr>
         <th>Ref.</th>
-        {% if taula=='moldures' %}<th>Descripci&oacute;</th>{% endif %}
-        <th>Cost actual</th>
-        <th>Verificat</th>
-        <th>Editar</th>
+        {% if taula=='moldures' %}<th>Prove&iuml;dor</th>{% endif %}
+        <th>Descripci&oacute;</th>
+        <th class="r">Preu original</th>
+        <th class="r">Cost actual</th>
+        <th class="r">PVD resultant</th>
+        <th class="c">Estat</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
     {% for r in rows %}
     <tr id="row-{{ r.referencia }}">
-      <td class="ref">{{ r.referencia }}{% if taula=='moldures' %}<div style="font-size:10px;color:var(--muted);font-family:sans-serif">{{ r.proveidor or '' }}</div>{% endif %}</td>
-      {% if taula=='moldures' %}
-      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.descripcio or '' }}">{{ r.descripcio or '—' }}</td>
-      {% endif %}
-      <td class="cost-cell" id="cost-{{ r.referencia }}">{{ "%.4f"|format(r.preu_cost or 0) }} &euro;/m</td>
-      <td>
-        {% if r.cost_verificat %}<span class="badge-v yes">Verificat</span>
-        {% else %}<span class="badge-v no">Estimat</span>{% endif %}
-        <div style="font-size:10px;color:var(--muted)">{{ r.data_cost or '' }}</div>
+      <td class="ref">{{ r.referencia }}</td>
+      {% if taula=='moldures' %}<td style="font-size:11px;opacity:.7">{{ r.proveidor or '' }}</td>{% endif %}
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.descripcio or '' }}">{{ r.descripcio or '—' }}</td>
+      <td class="r faded">{{ "%.4f"|format(r.preu_original or 0) }} &euro;</td>
+      <td class="r" id="cost-{{ r.referencia }}">{{ "%.4f"|format(r.preu_cost or 0) }} &euro;</td>
+      <td class="r pvd-col" id="pvd-{{ r.referencia }}">{% if r.pvd %}{{ "%.4f"|format(r.pvd) }} &euro;{% else %}&mdash;{% endif %}</td>
+      <td class="c">
+        {% if r.cost_verificat %}<span class="badge-ok">&check; verificat</span>
+        {% else %}<span class="badge-pend">&middot; estimat</span>{% endif %}
+        {% if r.data_cost %}<div style="font-size:10px;opacity:.5">{{ r.data_cost }}</div>{% endif %}
       </td>
-      <td>
-        <button class="btn-edit" onclick="toggleEdit('{{ r.referencia }}')" title="Editar cost">&#9998;</button>
-        <span class="hist-link" onclick="showHistorial('{{ r.referencia }}')" title="Historial de canvis">hist</span>
-      </td>
-    </tr>
-    <tr id="edit-{{ r.referencia }}" class="edit-row" style="display:none">
-      <td colspan="{% if taula=='moldures' %}5{% else %}4{% endif %}" style="background:#faf8f4;padding:8px 10px">
-        <div class="edit-form">
-          <label>Nou cost (&euro;/m)
-            <input class="cost-input" id="inp-{{ r.referencia }}" type="number" step="0.0001" value="{{ "%.4f"|format(r.preu_cost or 0) }}">
-          </label>
-          <label>Notes
-            <input class="notes-input" id="notes-{{ r.referencia }}" type="text" placeholder="factura, proveïdor, data...">
-          </label>
-          <button class="btn-save" onclick="saveRow('{{ r.referencia }}',this)">Guardar</button>
-          <button class="btn-cancel" onclick="toggleEdit('{{ r.referencia }}')">Cancel&middot;lar</button>
-          <span class="pvd-preview" id="pvd-{{ r.referencia }}">PVD: {{ "%.4f"|format(r.pvd or 0) }} &euro;/m</span>
-        </div>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-edit" onclick="obrirEdicio('{{ r.referencia }}', {{ r.preu_cost or 0 }})">&#9998; Editar</button>
+        <a class="hist-link" href="javascript:void(0)" onclick="showHistorial('{{ r.referencia }}')">historial</a>
       </td>
     </tr>
     {% endfor %}
@@ -138,83 +141,115 @@ tr:hover{background:#faf8f4}
   </table>
 </div>
 
-<!-- Historial modal -->
-<div class="modal-bg" id="hist-modal" onclick="if(event.target===this)this.classList.remove('open')">
+<!-- Modal d'edició -->
+<div class="modal-bg" id="modal-edicio" onclick="if(event.target===this)tancarModal()">
   <div class="modal">
-    <div class="modal-head">
-      <strong id="hist-title">Historial</strong>
-      <button class="modal-close" onclick="document.getElementById('hist-modal').classList.remove('open')">&times;</button>
+    <h3 id="modal-titol">Editar preu de cost</h3>
+    <input type="hidden" id="modal-ref">
+
+    <label>Nou preu de cost (&euro;/m per moldures, &euro; per la resta)</label>
+    <input type="number" id="modal-cost" step="0.0001" min="0">
+
+    <label>Notes (ex: &ldquo;factura Intermolduras abril 2026&rdquo;)</label>
+    <input type="text" id="modal-notes" placeholder="">
+
+    <div class="modal-preview" id="modal-preview"></div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="tancarModal()">Cancel&middot;lar</button>
+      <button class="btn-save" id="modal-btn-save" onclick="guardarCost()">Guardar i verificar</button>
     </div>
-    <div class="modal-body" id="hist-body">Carregant...</div>
+  </div>
+</div>
+
+<!-- Modal historial -->
+<div class="modal-bg" id="hist-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:600px;max-height:80vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+      <h3 id="hist-title" style="margin:0">Historial</h3>
+      <button onclick="document.getElementById('hist-modal').classList.remove('open')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999">&times;</button>
+    </div>
+    <div id="hist-body">Carregant...</div>
   </div>
 </div>
 
 <script>
-function toggleEdit(ref){
-  var editRow = document.getElementById('edit-'+ref);
-  if(editRow.style.display==='none'){
-    // Close any other open edit rows first
-    document.querySelectorAll('.edit-row').forEach(function(r){ r.style.display='none'; });
-    editRow.style.display='';
-    var inp = document.getElementById('inp-'+ref);
-    if(inp) inp.focus();
-  } else {
-    editRow.style.display='none';
-  }
+var MARGE_ADMIN = {{ config.get('marge_admin_' + taula + '_pct', '60') | tojson }};
+MARGE_ADMIN = parseFloat(MARGE_ADMIN) || 60;
+
+function obrirEdicio(ref, costActual) {
+  document.getElementById('modal-ref').value = ref;
+  document.getElementById('modal-cost').value = costActual.toFixed ? costActual.toFixed(4) : costActual;
+  document.getElementById('modal-titol').textContent = 'Editar: ' + ref;
+  document.getElementById('modal-notes').value = '';
+  actualitzarPreview();
+  document.getElementById('modal-edicio').classList.add('open');
+  document.getElementById('modal-cost').focus();
 }
 
-function saveRow(ref, btn){
-  var inp = document.getElementById('inp-'+ref);
-  var notes = document.getElementById('notes-'+ref);
-  var nou = parseFloat(inp.value);
-  if(isNaN(nou) || nou < 0){ alert('Preu no vàlid'); return; }
-  btn.disabled = true; var orig = btn.textContent; btn.textContent = '...';
+function tancarModal() {
+  document.getElementById('modal-edicio').classList.remove('open');
+}
+
+function actualitzarPreview() {
+  var cost = parseFloat(document.getElementById('modal-cost').value) || 0;
+  var pvd = (cost * (1 + MARGE_ADMIN / 100)).toFixed(4);
+  document.getElementById('modal-preview').textContent =
+    'Cost: ' + cost.toFixed(4) + ' \u20ac \u2192 PVD: ' + pvd + ' \u20ac (marge admin ' + MARGE_ADMIN + '%)';
+}
+
+document.getElementById('modal-cost').addEventListener('input', actualitzarPreview);
+
+function guardarCost() {
+  var ref = document.getElementById('modal-ref').value;
+  var cost = document.getElementById('modal-cost').value;
+  var notes = document.getElementById('modal-notes').value;
+  var btn = document.getElementById('modal-btn-save');
+  btn.disabled = true; btn.textContent = 'Desant...';
   fetch('/admin/preus-cost/update', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({taula:'{{ taula }}', referencia:ref, preu_cost_nou:nou, notes:notes.value})
+    body: JSON.stringify({taula:'{{ taula }}', referencia:ref, preu_cost_nou:parseFloat(cost), notes:notes})
   }).then(function(r){return r.json()}).then(function(d){
-    btn.disabled = false; btn.textContent = orig;
+    btn.disabled = false; btn.textContent = 'Guardar i verificar';
     if(d.ok){
-      // Update main row
-      var costCell = document.getElementById('cost-'+ref);
-      if(costCell) costCell.textContent = nou.toFixed(4) + ' \u20ac/m';
+      // Update row
+      var costEl = document.getElementById('cost-'+ref);
+      var pvdEl = document.getElementById('pvd-'+ref);
+      if(costEl) costEl.textContent = parseFloat(cost).toFixed(4)+' \u20ac';
+      if(pvdEl){ pvdEl.textContent = d.pvd.toFixed(4)+' \u20ac'; }
+      // Update badge
       var row = document.getElementById('row-'+ref);
       if(row){
-        var badge = row.querySelector('.badge-v');
-        if(badge){ badge.className='badge-v yes'; badge.textContent='Verificat'; }
+        var badge = row.querySelector('.badge-pend');
+        if(badge){ badge.className='badge-ok'; badge.innerHTML='\u2713 verificat'; }
       }
-      // Update pvd preview
-      var pvdEl = document.getElementById('pvd-'+ref);
-      if(pvdEl && d.pvd) pvdEl.textContent = 'PVD: ' + d.pvd.toFixed(4) + ' \u20ac/m';
-      // Close edit row
-      notes.value = '';
-      toggleEdit(ref);
+      tancarModal();
     } else {
       alert('Error: '+(d.error||'Error desconegut'));
     }
-  }).catch(function(e){ btn.disabled=false; btn.textContent=orig; alert('Error: '+e); });
+  }).catch(function(e){ btn.disabled=false; btn.textContent='Guardar i verificar'; alert('Error: '+e); });
 }
 
-function showHistorial(ref){
+function showHistorial(ref) {
   var modal = document.getElementById('hist-modal');
   var body = document.getElementById('hist-body');
-  var title = document.getElementById('hist-title');
-  title.textContent = 'Historial: ' + ref;
+  document.getElementById('hist-title').textContent = 'Historial: ' + ref;
   body.innerHTML = 'Carregant...';
   modal.classList.add('open');
   fetch('/admin/preus-cost/historial?referencia='+encodeURIComponent(ref)+'&taula={{ taula }}')
     .then(function(r){return r.json()}).then(function(rows){
       if(!rows.length){ body.innerHTML='<p style="color:var(--muted)">Sense canvis registrats.</p>'; return; }
-      var html='<table class="hist-table"><thead><tr><th>Data</th><th>Antic</th><th>Nou</th><th>Usuari</th><th>Notes</th></tr></thead><tbody>';
+      var html='<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:4px 6px;text-align:left">Data</th><th style="padding:4px 6px;text-align:right">Antic</th><th style="padding:4px 6px;text-align:right">Nou</th><th style="padding:4px 6px">Usuari</th><th style="padding:4px 6px">Notes</th></tr></thead><tbody>';
       rows.forEach(function(r){
-        var antic = (r.preu_cost_antic !== null && r.preu_cost_antic !== undefined) ? Number(r.preu_cost_antic).toFixed(4) : '\u2014';
-        var nou = (r.preu_cost_nou !== null && r.preu_cost_nou !== undefined) ? Number(r.preu_cost_nou).toFixed(4) : '\u2014';
-        html+='<tr><td>'+(r.data||'\u2014')+'</td><td>'+antic+'</td><td>'+nou+'</td><td>'+(r.usuari_nom||'\u2014')+'</td><td>'+(r.notes||'')+'</td></tr>';
+        var antic = (r.preu_cost_antic!=null) ? Number(r.preu_cost_antic).toFixed(4) : '\u2014';
+        var nou = (r.preu_cost_nou!=null) ? Number(r.preu_cost_nou).toFixed(4) : '\u2014';
+        html+='<tr style="border-bottom:1px solid #eee"><td style="padding:4px 6px">'+(r.data||'\u2014')+'</td><td style="padding:4px 6px;text-align:right">'+antic+'</td><td style="padding:4px 6px;text-align:right;font-weight:600">'+nou+'</td><td style="padding:4px 6px">'+(r.usuari_nom||'\u2014')+'</td><td style="padding:4px 6px;opacity:.7">'+(r.notes||'')+'</td></tr>';
       });
       html+='</tbody></table>';
       body.innerHTML=html;
     }).catch(function(e){ body.innerHTML='Error: '+e; });
 }
 </script>
+{% include '_feedback_widget.html' %}
 </body>
 </html>

@@ -1611,8 +1611,9 @@ def admin_preus_cost():
         s = query(f"SELECT COUNT(*) as total, SUM(CASE WHEN cost_verificat=1 THEN 1 ELSE 0 END) as verificats FROM {t}", one=True)
         stats[t] = {'total': s['total'] or 0, 'verificats': s['verificats'] or 0}
 
+    cfg = {r['clau']: r['valor'] for r in (query("SELECT clau, valor FROM config") or [])}
     return render_template('admin_preus_cost.html', rows=rows, taula=taula,
-                           proveidor=proveidor, verificat=verificat, proveidors=proveidors, stats=stats)
+                           proveidor=proveidor, verificat=verificat, proveidors=proveidors, stats=stats, config=cfg)
 
 
 @app.route('/admin/preus-cost/update', methods=['POST'])
