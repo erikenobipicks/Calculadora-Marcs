@@ -1568,50 +1568,51 @@ def api_feedback_count():
 @admin_required
 def admin_preus_cost():
     """Llistat de preus de cost amb filtres per taula, proveïdor i verificat."""
+    taules_valides = ['moldures', 'vidres', 'encolat_pro', 'passpartout']
     taula = request.args.get('taula', 'moldures')
-    if taula not in ('moldures', 'vidres', 'encolat_pro', 'passpartout'):
+    if taula not in taules_valides:
         taula = 'moldures'
     proveidor = request.args.get('proveidor', '').strip()
     verificat = request.args.get('verificat', '')
 
+    preu_orig = 'preu_taller' if taula == 'moldures' else 'preu'
+    cols = f'referencia, descripcio, preu_cost, preu_cost_ant, data_cost, cost_verificat, notes_cost, {preu_orig} as preu_original'
     if taula == 'moldures':
-        sql = 'SELECT referencia, preu_taller, preu_cost, proveidor, descripcio, cost_verificat, data_cost FROM moldures'
-        conditions, args = [], []
-        if proveidor:
-            conditions.append("LOWER(proveidor) LIKE LOWER(?)")
-            args.append(f'%{proveidor}%')
-        if verificat == '1':
-            conditions.append("cost_verificat = 1")
-        elif verificat == '0':
-            conditions.append("(cost_verificat = 0 OR cost_verificat IS NULL)")
-        if conditions:
-            sql += ' WHERE ' + ' AND '.join(conditions)
-        sql += ' ORDER BY referencia'
-        rows = query(sql, args)
-        proveidors = query("SELECT DISTINCT proveidor FROM moldures WHERE proveidor IS NOT NULL AND proveidor != '' ORDER BY proveidor")
-        proveidors = [r['proveidor'] for r in (proveidors or [])]
-    else:
-        sql = f'SELECT referencia, preu, preu_cost, cost_verificat, data_cost FROM {taula}'
-        conditions, args = [], []
-        if verificat == '1':
-            conditions.append("cost_verificat = 1")
-        elif verificat == '0':
-            conditions.append("(cost_verificat = 0 OR cost_verificat IS NULL)")
-        if conditions:
-            sql += ' WHERE ' + ' AND '.join(conditions)
-        sql += ' ORDER BY referencia'
-        rows = query(sql, args)
-        proveidors = []
+        cols += ', proveidor'
 
-    # Compute PVD for each row
+    conditions, args = [], []
+    if proveidor and taula == 'moldures':
+        conditions.append("LOWER(proveidor) LIKE LOWER(?)")
+        args.append(f'%{proveidor}%')
+    if verificat == '1':
+        conditions.append("cost_verificat = 1")
+    elif verificat == '0':
+        conditions.append("(cost_verificat = 0 OR cost_verificat IS NULL)")
+
+    where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
+    sql = f'SELECT {cols} FROM {taula}{where} ORDER BY cost_verificat ASC, referencia ASC'
+    rows = query(sql, args)
+
+    # Proveïdors per al filtre (només moldures)
+    proveidors = []
+    if taula == 'moldures':
+        prov_rows = query("SELECT DISTINCT proveidor FROM moldures WHERE proveidor IS NOT NULL AND proveidor != '' ORDER BY proveidor")
+        proveidors = [r['proveidor'] for r in (prov_rows or [])]
+
+    # Compute PVD + estadístiques per taula
     cat_map = {'moldures': 'moldures', 'vidres': 'vidres', 'encolat_pro': 'encolat', 'passpartout': 'passpartu'}
     categoria = cat_map.get(taula, 'moldures')
     for r in rows:
         pc = _row_get(r, 'preu_cost')
         r['pvd'] = calcular_pvd(pc, categoria) if pc is not None else None
 
+    stats = {}
+    for t in taules_valides:
+        s = query(f"SELECT COUNT(*) as total, SUM(CASE WHEN cost_verificat=1 THEN 1 ELSE 0 END) as verificats FROM {t}", one=True)
+        stats[t] = {'total': s['total'] or 0, 'verificats': s['verificats'] or 0}
+
     return render_template('admin_preus_cost.html', rows=rows, taula=taula,
-                           proveidor=proveidor, verificat=verificat, proveidors=proveidors)
+                           proveidor=proveidor, verificat=verificat, proveidors=proveidors, stats=stats)
 
 
 @app.route('/admin/preus-cost/update', methods=['POST'])

@@ -67,7 +67,7 @@ tr:hover{background:#faf8f4}
   <div class="filters">
     <div style="display:flex;gap:4px">
       {% for t in ['moldures','vidres','encolat_pro','passpartout'] %}
-      <a href="/admin/preus-cost?taula={{ t }}" class="pill {% if taula==t %}active{% endif %}">{{ t|capitalize }}</a>
+      <a href="/admin/preus-cost?taula={{ t }}" class="pill {% if taula==t %}active{% endif %}">{{ t|capitalize }} <span style="font-size:10px;opacity:.7">({{ stats[t].verificats }}/{{ stats[t].total }})</span></a>
       {% endfor %}
     </div>
     {% if proveidors %}
@@ -86,8 +86,8 @@ tr:hover{background:#faf8f4}
   </div>
 
   <div>
-    <span class="stat">{{ rows|length }} productes</span>
-    <span class="stat">Verificats: <strong>{{ rows|selectattr('cost_verificat')|list|length }}</strong> / {{ rows|length }}</span>
+    <span class="stat">{{ rows|length }} productes mostrats</span>
+    <span class="stat">{{ taula|capitalize }}: <strong>{{ stats[taula].verificats }}</strong> / {{ stats[taula].total }} verificats</span>
   </div>
 
   <table>
