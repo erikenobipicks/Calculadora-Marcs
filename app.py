@@ -595,6 +595,19 @@ def calcular_pvd(preu_cost, categoria):
     return round(preu_cost * (1 + marge / 100), 4)
 
 
+def calcular_preu_marc(amplada, alcada, gruix, preu_cost, merma_pct=10.0, minim_cm=100.0):
+    """Calcula cost i PVD d'un marc a partir de preu_cost per cm lineal.
+    Retorna dict {'cost': float, 'pvd': float} o None si dades insuficients."""
+    if not all([amplada, alcada, preu_cost]):
+        return None
+    perimetre = 2 * (amplada + alcada)
+    long_bruta = (perimetre + (gruix or 0) * 8) * (1 + (merma_pct or 10.0) / 100)
+    long_final = max(long_bruta, minim_cm or 100.0)
+    cost = round(long_final * preu_cost / 100, 4)
+    pvd = calcular_pvd(cost, 'moldures')
+    return {'cost': cost, 'pvd': pvd}
+
+
 def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None):
     data = raw if isinstance(raw, dict) else {}
     general_margin = max(_safe_float(data.get('general'), frame_margin if frame_margin is not None else COMMERCIAL_MARGIN_DEFAULTS['general']), 0.0)
@@ -1437,12 +1450,14 @@ def lookup():
     is_admin = session.get('is_admin')
     if tipus == 'moldura':
         try:
-            r = query('SELECT preu_taller, preu_cost, gruix, descripcio, foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+            r = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm, descripcio, foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
             print(f"lookup moldura ref={ref} result={r}")
             if r:
                 pvd = calcular_pvd(_row_get(r, 'preu_cost'), 'moldures')
                 preu = pvd if pvd is not None else r['preu_taller']
                 resp = {'ok': True, 'preu': preu, 'gruix': r['gruix'],
+                        'merma_pct': _row_get(r, 'merma_pct', 10.0),
+                        'minim_cm': _row_get(r, 'minim_cm', 100.0),
                         'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'], ref2=_row_get(r,'ref2',''))}
                 if is_admin:
                     resp['preu_cost'] = _row_get(r, 'preu_cost')
@@ -3710,6 +3725,13 @@ def api_closest():
     if w <= 0 or h <= 0:
         return jsonify({})
 
+    def _build_result(r, preu_col='preu'):
+        """Build a result dict with preu_cost if available."""
+        res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
+        if r.get('preu_cost') is not None:
+            res['preu_cost'] = float(r['preu_cost'])
+        return res
+
     def closest(table, prefix=None, preu_col='preu', exclude_prefix=None, exclude_multi=None, w_override=None, h_override=None):
         rows = [dict(r) for r in query(f'SELECT * FROM {table}')]
         if exclude_multi:
@@ -3719,21 +3741,13 @@ def api_closest():
         uw = w_override if w_override is not None else w
         uh = h_override if h_override is not None else h
         r = _find_closest(rows, uw, uh, prefix)
-        if r:
-            res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
-            if r.get('preu_cost') is not None: res['preu_cost'] = r['preu_cost']
-            return res
-        return None
+        return _build_result(r, preu_col) if r else None
 
     def ca(table, fw, fh, prefix=None, exclude_multi=None, preu_col='preu'):
         """Closest by surface area for all products"""
         rows = [dict(r) for r in query(f'SELECT * FROM {table}')]
         r = _find_closest_area(rows, fw, fh, prefix=prefix, exclude_multi=exclude_multi)
-        if r:
-            res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
-            if r.get('preu_cost') is not None: res['preu_cost'] = r['preu_cost']
-            return res
-        return None
+        return _build_result(r, preu_col) if r else None
 
     # Tots els productes físics (vidre, passpartú, encolat, protter) usen
     # min-contain: la mida ha de cobrir físicament el marc. Això garanteix
@@ -3745,18 +3759,15 @@ def api_closest():
         if exclude_multi:
             rows = [r for r in rows if not any(r['referencia'].upper().startswith(e.upper()) for e in exclude_multi)]
         r = _find_closest(rows, cw, ch, prefix)
-        if r:
-            res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
-            if r.get('preu_cost') is not None: res['preu_cost'] = r['preu_cost']
-            return res
-        return None
+        return _build_result(r, preu_col) if r else None
 
     def _pvd_result(res, categoria):
-        """Replace preu with PVD calculated from preu_cost if available."""
-        if res and res.get('preu_cost'):
+        """Add pvd field and update preu from preu_cost if available."""
+        if res and res.get('preu_cost') is not None:
             pvd = calcular_pvd(res['preu_cost'], categoria)
             if pvd is not None:
-                res['preu'] = pvd
+                res['pvd'] = pvd
+                res['preu'] = pvd  # backward compat: JS reads 'preu'
         return res
 
     result = {
