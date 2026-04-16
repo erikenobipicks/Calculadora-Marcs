@@ -4286,14 +4286,19 @@ def _run_v2_price_backfill(db):
     cfg = query("SELECT valor FROM config WHERE clau='marge_defecte'", one=True)
     divisor = 1 + float(cfg['valor'] if cfg else 60) / 100  # e.g. 1.60
 
+    # PG needs ::numeric cast for ROUND with precision; SQLite handles ROUND(real, int) natively
+    if USE_PG:
+        rnd = lambda col: f'ROUND(({col} / %s)::numeric, 4)'
+    else:
+        rnd = lambda col: f'ROUND({col} / ?, 4)'
     # Moldures: preu_cost = preu_taller / divisor
-    execute("UPDATE moldures SET preu_cost = ROUND(preu_taller / ?, 4) WHERE preu_cost IS NULL AND preu_taller IS NOT NULL", [divisor])
+    execute(f"UPDATE moldures SET preu_cost = {rnd('preu_taller')} WHERE preu_cost IS NULL AND preu_taller IS NOT NULL", [divisor])
     # Vidres
-    execute("UPDATE vidres SET preu_cost = ROUND(preu / ?, 4) WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
+    execute(f"UPDATE vidres SET preu_cost = {rnd('preu')} WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
     # Encolat
-    execute("UPDATE encolat_pro SET preu_cost = ROUND(preu / ?, 4) WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
+    execute(f"UPDATE encolat_pro SET preu_cost = {rnd('preu')} WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
     # Passpartout
-    execute("UPDATE passpartout SET preu_cost = ROUND(preu / ?, 4) WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
+    execute(f"UPDATE passpartout SET preu_cost = {rnd('preu')} WHERE preu_cost IS NULL AND preu IS NOT NULL", [divisor])
     # Copy existing margins to new alias columns (always overwrite defaults on first migration)
     execute("UPDATE usuaris SET marge_pro_pct = marge WHERE marge IS NOT NULL")
     execute("UPDATE usuaris SET marge_impressio_pro_pct = marge_impressio WHERE marge_impressio IS NOT NULL")
