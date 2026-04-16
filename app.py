@@ -1432,15 +1432,19 @@ def calculadora():
             return redirect(url_for('setup'))
     except:
         pass
-    user = query('SELECT brand_color FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio FROM usuaris WHERE id=?', [session['user_id']], one=True)
     brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
+    marge_pro = float(_row_get(user, 'marge_pro_pct') or _row_get(user, 'marge') or 60)
+    marge_imp_pro = float(_row_get(user, 'marge_impressio_pro_pct') or _row_get(user, 'marge_impressio') or 0)
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS,
                            brand_color=brand_color,
-                           brand_color_light=_mix_with_white(brand_color))
+                           brand_color_light=_mix_with_white(brand_color),
+                           marge_pro=marge_pro,
+                           marge_impressio_pro=marge_imp_pro)
 
 @app.route('/api/lookup')
 @login_required
