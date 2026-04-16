@@ -4347,7 +4347,12 @@ def init_db():
             for k, v in [('marge_admin_moldures_pct','60'), ('marge_admin_vidres_pct','60'),
                          ('marge_admin_passpartu_pct','60'), ('marge_admin_encolat_pct','60'),
                          ('marge_pvp_suggerit_pct','40'),
-                         ('marge_pro_actiu','1')]:
+                         ('marge_pro_actiu','1'),
+                         ('cost_hora_taller','25.00'),
+                         ('passpartu_temps_simple','9'),
+                         ('passpartu_temps_doble','16'),
+                         ('passpartu_temps_finestra','3.5'),
+                         ('passpartu_cost_cm2','0.000620')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -4518,7 +4523,12 @@ def init_db():
             for k, v in [('marge_admin_moldures_pct','60'), ('marge_admin_vidres_pct','60'),
                          ('marge_admin_passpartu_pct','60'), ('marge_admin_encolat_pct','60'),
                          ('marge_pvp_suggerit_pct','40'),
-                         ('marge_pro_actiu','1')]:
+                         ('marge_pro_actiu','1'),
+                         ('cost_hora_taller','25.00'),
+                         ('passpartu_temps_simple','9'),
+                         ('passpartu_temps_doble','16'),
+                         ('passpartu_temps_finestra','3.5'),
+                         ('passpartu_cost_cm2','0.000620')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
