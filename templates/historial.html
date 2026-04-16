@@ -69,6 +69,7 @@ tr:hover td{background:#FAFAF8}
 .btn-entregat{background:#EEF2FF;color:#4F46E5;border:1px solid #C7D2FE}.btn-entregat:hover{background:#E0E7FF}
 .btn-entregat-on{background:#4F46E5;color:#fff;border:1px solid #3730A3}
 .btn-albara{background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA}.btn-albara:hover{background:#FFEDD5}
+.btn-albara-ok{background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7;font-size:10px}
 .pagat-badge{display:inline-block;background:#1A6B45;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
 @media(max-width:920px){
   nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
@@ -88,10 +89,20 @@ tr:hover td{background:#FAFAF8}
     <a href="/calculadora">Calculadora</a>
     <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
+    {% if session.is_admin %}<a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara }}</span></a>{% endif %}
     {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
     <a href="/logout">Sortir</a>
   </div>
 </nav>
+{% if session.is_admin %}
+<style>
+.nav-pendents{position:relative}
+.nav-badge{background:var(--amber,#f59e0b);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;min-width:16px;text-align:center;display:inline-block;line-height:15px}
+</style>
+<script>
+(function(){var b=document.getElementById('nav-pendents-badge');if(!b)return;function u(){fetch('/api/pendents-albara').then(r=>r.json()).then(d=>{b.textContent=d.n;b.style.display=d.n?'inline-block':'none'}).catch(()=>{})}setInterval(u,60000)})();
+</script>
+{% endif %}
 
 <div class="wrap">
   <div class="ph">
@@ -168,6 +179,7 @@ tr:hover td{background:#FAFAF8}
               <th>Interior</th>
               <th>Impressió</th>
               <th>Total (€)</th>
+              {% if session.is_admin %}<th>Cost (€)</th>{% endif %}
               <th>Pendent</th>
               <th>PDF</th>
             </tr>
@@ -192,6 +204,11 @@ tr:hover td{background:#FAFAF8}
             <td style="font-size:12px">{{ op.passpartout or '—' }}</td>
             <td style="font-size:12px">{% if op.impressio %}<span style="color:var(--green)">✓</span>{% else %}—{% endif %}</td>
             <td><strong>{{ "%.2f"|format(op.preu_final) }} €</strong></td>
+            {% if session.is_admin %}
+            <td style="font-size:12px;color:var(--amber,#b45309);font-weight:600" title="Cost producció (sense marge ni IVA) × {{ op.quantitat|int }} uds + IVA 21%">
+              {{ "%.2f"|format((op.cost_produccio or 0) * 1.21) }} €
+            </td>
+            {% endif %}
             <td>
               {% if op.pendent and op.pendent > 0.01 %}
                 <span class="badge badge-pend">{{ "%.2f"|format(op.pendent) }} €</span>
@@ -201,6 +218,13 @@ tr:hover td{background:#FAFAF8}
             </td>
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
+              {% if session.is_admin %}
+              <button onclick="crearAlbaraIndividual({{ op.id }}, this)"
+                class="btn-sm {% if op.fd_albara %}btn-albara-ok{% else %}btn-albara{% endif %}"
+                title="{% if op.fd_albara %}Albarà: {{ op.fd_albara }}{% else %}Crear albarà FD{% endif %}">
+                {% if op.fd_albara %}✓ {{ op.fd_albara }}{% else %}FD{% endif %}
+              </button>
+              {% endif %}
               <button onclick="acceptarComanda({{ op.id }}, this)" class="btn-sm btn-acc" title="Marcar com acceptat">✓</button>
               <button onclick="eliminarComanda({{ op.id }}, this)" class="btn-sm btn-del" title="Eliminar">×</button>
             </td>
@@ -328,6 +352,38 @@ function crearAlbaraComanda(sessioId, btn) {
     alert('Error de connexió: ' + e);
     btn.disabled = false;
     btn.textContent = 'Crear albarà FD';
+  });
+}
+
+function crearAlbaraIndividual(comandaId, btn) {
+  if(btn.classList.contains('btn-albara-ok')) {
+    alert('Aquesta comanda ja té albarà: ' + btn.textContent.trim());
+    return;
+  }
+  if(!confirm('Crear albarà individual a Factura Directa per aquest pressupost?')) return;
+  btn.disabled = true;
+  var orig = btn.textContent;
+  btn.textContent = '...';
+  fetch('/api/albara-individual', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({comanda_id: comandaId})
+  }).then(r=>r.json()).then(function(d){
+    if(d.ok){
+      btn.classList.remove('btn-albara');
+      btn.classList.add('btn-albara-ok');
+      btn.style.background='#D1FAE5';btn.style.color='#065F46';btn.style.border='1px solid #6EE7B7';
+      btn.textContent = '✓ ' + (d.albara||'creat');
+      btn.title = 'Albarà: ' + (d.albara||'creat');
+    } else {
+      alert('Error: ' + (d.error||'Error desconegut'));
+      btn.textContent = orig;
+    }
+    btn.disabled = false;
+  }).catch(function(e){
+    alert('Error de connexió: ' + e);
+    btn.textContent = orig;
+    btn.disabled = false;
   });
 }
 
