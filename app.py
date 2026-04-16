@@ -1045,7 +1045,8 @@ def _peces_per_full(ew, eh):
     return max(1, n1, n2)
 
 def calcular_precio_passpartu(ew, eh):
-    # ew, eh: mesura exterior del passpartu en cm. Retorna preu arrodonit a 2 decimals.
+    """Legacy: retorna PVD directament (multiplicadors ja inclouen marge).
+    Mantingut per compatibilitat — nou codi hauria d'usar calcular_cost_passpartu()."""
     area = ew * eh
     n = _peces_per_full(ew, eh)
     coste_cm2  = area * _COST_CM2
@@ -1064,6 +1065,44 @@ def calcular_precio_passpartu(ew, eh):
     else:
         mult = _MULT_GRAN
     return round(max(coste_base * mult, _MIN_PRICE), 2)
+
+
+def _closest_passpartu_taula(amplada, alcada, prefix='1PAS'):
+    """Min-contain lookup on the passpartout table. Returns row dict or None."""
+    rows = [dict(r) for r in query('SELECT * FROM passpartout')]
+    return _find_closest(rows, amplada, alcada, prefix=prefix)
+
+
+def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
+    """Calcula cost i PVD del passpartú: primer busca a taula, si no, fórmula.
+    Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula'}."""
+    cost_hora    = float(get_config_value('cost_hora_taller', '25'))
+    temps_simple = float(get_config_value('passpartu_temps_simple', '9'))
+    temps_doble  = float(get_config_value('passpartu_temps_doble', '16'))
+    temps_extra  = float(get_config_value('passpartu_temps_finestra', '3.5'))
+    cost_cm2     = float(get_config_value('passpartu_cost_cm2', '0.000620'))
+    minim_mat    = float(get_config_value('passpartu_minim_material', '0.50'))
+    marge_pas    = float(get_config_value('marge_admin_passpartu_pct', '60'))
+
+    # 1. Min-contain sobre taula (mides estàndard)
+    prefix = '1PAS' if tipus == 'simple' else 'DOBPAS'
+    fila = _closest_passpartu_taula(amplada, alcada, prefix)
+    if fila:
+        pc = _row_get(fila, 'preu_cost')
+        if pc is not None:
+            cost = float(pc) + finestres_extra * (temps_extra * cost_hora / 60)
+            pvd = round(cost * (1 + marge_pas / 100), 4)
+            return {'cost': round(cost, 4), 'pvd': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+
+    # 2. Fallback fórmula per a mides fora de taula
+    area = amplada * alcada
+    cost_mat = max(area * cost_cm2, minim_mat)
+    minuts = temps_doble if tipus == 'doble' else temps_simple
+    cost_mo = minuts * cost_hora / 60
+    cost_extra = finestres_extra * (temps_extra * cost_hora / 60)
+    cost = round(cost_mat + cost_mo + cost_extra, 4)
+    pvd = round(cost * (1 + marge_pas / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'origen': 'formula', 'ref': f'pas-{amplada}x{alcada}'}
 
 # â"€â"€ Routes: Auth â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/login', methods=['GET', 'POST'])
@@ -1480,11 +1519,15 @@ def lookup():
             if is_admin: resp['preu_cost'] = _row_get(r, 'preu_cost')
             return jsonify(resp)
     elif tipus == 'passpartout':
-        # Preu dinàmic — multiplicadors ja codifiquen el PVD
         try:
             parts = ref.lower().replace('pas-','').split('x')
             ew, eh = float(parts[0]), float(parts[1])
-            return jsonify({'ok': True, 'preu': calcular_precio_passpartu(ew, eh)})
+            is_doble = 'doble' in ref.lower() or 'dob' in ref.lower()
+            r = calcular_cost_passpartu(ew, eh, tipus='doble' if is_doble else 'simple')
+            resp = {'ok': True, 'preu': r['pvd'], 'origen': r['origen']}
+            if is_admin:
+                resp['preu_cost'] = r['cost']
+            return jsonify(resp)
         except Exception:
             return jsonify({'ok': False})
     elif tipus == 'encolat':
@@ -3907,14 +3950,18 @@ def api_closest():
                 res['preu'] = pvd  # backward compat: JS reads 'preu'
         return res
 
+    def _pas_result(r):
+        """Format passpartout result for closest API."""
+        return {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'preu_cost': r['cost'], 'origen': r['origen']}
+
     result = {
         'encolat':      _pvd_result(cc('encolat_pro', w, h, prefix='ENC'), 'encolat'),
         'protter':      _pvd_result(cc('encolat_pro', w, h, prefix='PRO'), 'encolat'),
         'vidre':        _pvd_result(cc('vidres',      w, h, exclude_multi=['DV-','MIR-']), 'vidres'),
         'doble_vidre':  _pvd_result(cc('vidres',      w, h, prefix='DV-'), 'vidres'),
         'mirall':       _pvd_result(cc('vidres',      w, h, prefix='MIR-'), 'vidres'),
-        'passpartu':    {'ref': f'pas-{w}x{h}', 'preu': calcular_precio_passpartu(w, h)},
-        'doble_pas':    {'ref': f'pas-{w}x{h}', 'preu': round(calcular_precio_passpartu(w, h) * 1.9, 2)},
+        'passpartu':    _pas_result(calcular_cost_passpartu(w, h, tipus='simple')),
+        'doble_pas':    _pas_result(calcular_cost_passpartu(w, h, tipus='doble')),
         'proeco':       cc('proeco', w, h),  # proeco no té preu_cost — sense canvi
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
@@ -4352,7 +4399,8 @@ def init_db():
                          ('passpartu_temps_simple','9'),
                          ('passpartu_temps_doble','16'),
                          ('passpartu_temps_finestra','3.5'),
-                         ('passpartu_cost_cm2','0.000620')]:
+                         ('passpartu_cost_cm2','0.000620'),
+                         ('passpartu_minim_material','0.50')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -4528,7 +4576,8 @@ def init_db():
                          ('passpartu_temps_simple','9'),
                          ('passpartu_temps_doble','16'),
                          ('passpartu_temps_finestra','3.5'),
-                         ('passpartu_cost_cm2','0.000620')]:
+                         ('passpartu_cost_cm2','0.000620'),
+                         ('passpartu_minim_material','0.50')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
