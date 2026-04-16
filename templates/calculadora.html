@@ -167,6 +167,9 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#155c3a}
 .btn-d{background:var(--nav);color:var(--nav-text)}.btn-d:hover{filter:brightness(.94)}
 .btn-a{background:var(--amber-l);color:var(--amber);border:1px solid color-mix(in srgb, var(--amber) 34%, white)}.btn-a:hover{background:color-mix(in srgb, var(--amber-l) 74%, white)}
+.albara-btn{padding:8px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.albara-pvp{background:var(--amber-l);color:var(--amber);border:1px solid color-mix(in srgb, var(--amber) 34%, white)}.albara-pvp:hover{filter:brightness(.95)}
+.albara-cost{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}.albara-cost:hover{filter:brightness(.95)}
 .btn-o{background:transparent;border:1px solid #D4D0C8;color:var(--muted)}.btn-o:hover{background:var(--bg)}
 .btn-wa,.btn-wa2{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}
 .btn-wa:hover,.btn-wa2:hover{background:#ddeee5}
@@ -2147,17 +2150,14 @@ function obrirMailComanda(){
   document.getElementById('mail-cos').value = buildMailText();
   var clientMail = '';  // podria venir d'un camp futur
   document.getElementById('mail-destinatari').value = clientMail;
-  // Activa/desactiva el botó d'albarà segons si hi ha nom de client
+  // Activa/desactiva els botons d'albarà segons si hi ha nom de client
   var nomClient = (document.getElementById('client_nom').value||'').trim();
-  var btnAlbara = document.getElementById('mail-btn-albara');
-  if(nomClient){
-    btnAlbara.disabled = false;
-    btnAlbara.style.opacity = '1';
-    btnAlbara.title = '';
-  } else {
-    btnAlbara.disabled = true;
-    btnAlbara.style.opacity = '0.45';
-    btnAlbara.title = 'Cal omplir el nom del client primer';
+  var grpAlbara = document.getElementById('albara-btns');
+  if(grpAlbara){
+    grpAlbara.querySelectorAll('button').forEach(function(b){
+      if(nomClient){ b.disabled=false; b.style.opacity='1'; b.title=''; }
+      else { b.disabled=true; b.style.opacity='0.45'; b.title='Cal omplir el nom del client primer'; }
+    });
   }
   var overlay = document.getElementById('mail-overlay');
   overlay.style.display = 'flex';
@@ -2188,15 +2188,16 @@ function obrirMailClient(){
   window.location.href = mailto;
 }
 
-function crearAlbaraFD(){
+function crearAlbaraFD(modePreu){
   var c = window._c || {};
-  var btn = document.getElementById('mail-btn-albara');
-  var orig = btn.textContent;
-  btn.textContent = 'Creant...'; btn.disabled = true;
+  var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
+  var grp = document.getElementById('albara-btns');
+  if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
 
   var interior = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  var reversPeu = document.getElementById('chk-revers-peu') && document.getElementById('chk-revers-peu').checked;
   var partsOpcions = [];
   if(interior)  partsOpcions.push(interior);
   if(proteccio) partsOpcions.push(proteccio);
@@ -2212,6 +2213,9 @@ function crearAlbaraFD(){
     cost_produccio: c.cost_produccio||0,
     preu_net:       c.preu_net||0,
     preu_final:     c.preu_final||0,
+    quantitat:      parseFloat(document.getElementById('quantitat').value)||1,
+    revers_peu:     reversPeu,
+    mode_preu:      modePreu,
   };
 
   fetch('/api/crear-albara', {
@@ -2219,18 +2223,15 @@ function crearAlbaraFD(){
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(payload)
   }).then(function(r){return r.json();}).then(function(d){
-    btn.textContent = orig; btn.disabled = false;
+    if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
     if(d.ok){
-      btn.textContent = '✓ Albarà ' + d.albara;
-      btn.style.background = 'var(--green-l)';
-      btn.style.borderColor = 'var(--green)';
-      btn.style.color = 'var(--green)';
-      showAlert('Albarà ' + d.albara + ' creat a Factura Directa per ' + d.contact, 'ok');
+      if(grp) grp.innerHTML = '<span style="padding:8px 14px;border-radius:7px;background:var(--green-l);color:var(--green);border:1px solid var(--green);font-size:12px;font-weight:600">✓ Albarà ' + d.albara + ' (' + label + ')</span>';
+      showAlert('Albarà ' + d.albara + ' creat a Factura Directa (' + label + ') per ' + d.contact, 'ok');
     } else {
       showAlert('Error FD: ' + (d.error||'Error desconegut'), 'err');
     }
   }).catch(function(e){
-    btn.textContent = orig; btn.disabled = false;
+    if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
     showAlert('Error de connexió amb Factura Directa', 'err');
   });
 }
@@ -2639,7 +2640,7 @@ recalcMides();
     </div>
     <div style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
       <button type="button" id="mail-btn-copiar" onclick="copiarMailText()" style="padding:8px 16px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">Copiar text</button>
-      {% if session.is_admin %}<button type="button" id="mail-btn-albara" onclick="crearAlbaraFD()" style="padding:8px 16px;border:1px solid var(--amber);border-radius:7px;background:var(--amber-l);color:var(--amber);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Crear albarà FD</button>{% endif %}
+      {% if session.is_admin %}<span id="albara-btns" style="display:inline-flex;gap:4px"><button type="button" onclick="crearAlbaraFD('pvp')" class="albara-btn albara-pvp">Albarà PVP</button><button type="button" onclick="crearAlbaraFD('cost')" class="albara-btn albara-cost">Albarà Cost</button></span>{% endif %}
       <button type="button" onclick="obrirMailClient()" style="padding:8px 18px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Obrir gestor de correu →</button>
     </div>
   </div>

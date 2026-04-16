@@ -2237,6 +2237,7 @@ def api_crear_albara():
     num_pressupost = (d.get('num_pressupost') or '').strip()
     quantitat    = float(d.get('quantitat') or 1)
     revers_peu   = bool(d.get('revers_peu'))
+    mode_preu    = (d.get('mode_preu') or 'pvp').strip().lower()  # 'pvp' or 'cost'
 
     # Només l'admin (Reus Revela) pot crear albarans a FD
     user = query('SELECT nom, nom_empresa, nom_fiscal, fiscal_id, is_admin FROM usuaris WHERE id=?',
@@ -2275,12 +2276,13 @@ def api_crear_albara():
     if parts:
         desc_marc += f' · {", ".join(parts)}'
 
-    # cost_produccio is total for all units (cTot*qty), divide by qty for unit price
-    unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
+    # mode_preu: 'pvp' uses preu_net (PVP sense IVA), 'cost' uses cost_produccio
+    base_total = preu_net if mode_preu == 'pvp' else cost_prod
+    unit_price = round(base_total / quantitat, 2) if quantitat > 0 else round(base_total, 2)
     linies = [{
         'text':      desc_marc,
         'quantity':  float(quantitat),
-        'unitPrice': unit_cost,
+        'unitPrice': unit_price,
         'tax':       ['S_IVA_21'],
     }]
 
