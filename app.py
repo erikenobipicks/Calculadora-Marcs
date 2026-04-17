@@ -4486,7 +4486,11 @@ def init_db():
                          ('laminat_semibrillo_cost_cm2','0.000504'),
                          ('laminat_mate_cost_cm2','0.000685'),
                          ('laminat_temps_base_min','12'),
-                         ('laminat_temps_var_cm2','0.0012')]:
+                         ('laminat_temps_var_cm2','0.0012'),
+                         ('vidre_cost_cm2','0.002880'),
+                         ('vidre_temps_base_min','3'),
+                         ('vidre_temps_lineal_m','0.5'),
+                         ('vidre_dv_muntatge_min','5')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -4670,7 +4674,11 @@ def init_db():
                          ('laminat_semibrillo_cost_cm2','0.000504'),
                          ('laminat_mate_cost_cm2','0.000685'),
                          ('laminat_temps_base_min','12'),
-                         ('laminat_temps_var_cm2','0.0012')]:
+                         ('laminat_temps_var_cm2','0.0012'),
+                         ('vidre_cost_cm2','0.002880'),
+                         ('vidre_temps_base_min','3'),
+                         ('vidre_temps_lineal_m','0.5'),
+                         ('vidre_dv_muntatge_min','5')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
