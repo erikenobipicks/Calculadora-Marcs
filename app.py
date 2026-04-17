@@ -3971,6 +3971,7 @@ def api_closest():
     h = float(request.args.get('h', 0))
     foto_w = float(request.args.get('foto_w', w))
     foto_h = float(request.args.get('foto_h', h))
+    tipus_laminat = request.args.get('laminat', 'semibrillo')  # 'semibrillo' | 'mate'
     if w <= 0 or h <= 0:
         return jsonify({})
 
@@ -4023,16 +4024,24 @@ def api_closest():
         """Format foam/laminat/passpartu result for closest API."""
         return {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'preu_cost': r['cost'], 'origen': r['origen']}
 
+    # Foam (encolat) i ProEco comparteixen càlcul
+    foam = _fn_result(calcular_cost_foam(w, h))
+    # Laminat: retornem ambdós tipus perquè el JS pugui canviar sense nova crida
+    laminat_semi = _fn_result(calcular_cost_laminat(w, h, tipus='semibrillo'))
+    laminat_mate = _fn_result(calcular_cost_laminat(w, h, tipus='mate'))
+    protter_actual = laminat_mate if tipus_laminat == 'mate' else laminat_semi
+
     result = {
-        'encolat':      _fn_result(calcular_cost_foam(w, h)),
-        'protter':      _fn_result(calcular_cost_laminat(w, h, tipus='semibrillo')),
-        'laminat_mate': _fn_result(calcular_cost_laminat(w, h, tipus='mate')),
+        'encolat':      foam,
+        'proeco':       foam,  # àlies, mateix producte
+        'protter':      protter_actual,
+        'protter_semi': laminat_semi,
+        'protter_mate': laminat_mate,
         'vidre':        _pvd_result(cc('vidres',      w, h, exclude_multi=['DV-','MIR-']), 'vidres'),
         'doble_vidre':  _pvd_result(cc('vidres',      w, h, prefix='DV-'), 'vidres'),
         'mirall':       _pvd_result(cc('vidres',      w, h, prefix='MIR-'), 'vidres'),
         'passpartu':    _fn_result(calcular_cost_passpartu(w, h, tipus='simple')),
         'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
-        'proeco':       _fn_result(calcular_cost_foam(w, h)),  # proeco = foam (mateix producte)
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
