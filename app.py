@@ -1173,6 +1173,83 @@ def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
     return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'formula', 'ref': f'laminat-{tipus}-{amplada}x{alcada}'}
 
 
+def _closest_vidre_taula(amplada, alcada, prefix=''):
+    """Min-contain sobre taula vidres filtrat per prefix.
+    prefix: ''=vidre simple (exclou DV-/MIR-), 'DV-'=doble vidre, 'MIR-'=mirall."""
+    rows = [dict(r) for r in query('SELECT * FROM vidres')]
+    if prefix == '':
+        # Exclou DV- i MIR-
+        rows = [r for r in rows if not (r['referencia'].upper().startswith('DV-') or r['referencia'].upper().startswith('MIR-'))]
+        return _find_closest(rows, amplada, alcada)
+    return _find_closest(rows, amplada, alcada, prefix=prefix)
+
+
+def calcular_cost_vidre(amplada, alcada):
+    """Vidre simple tallat a mida.
+    1. Min-contain sobre vidres (exclou DV-/MIR-)
+    2. Fórmula fallback: material × cm² + temps tall (base + lineal × perímetre)"""
+    marge     = float(get_config_value('marge_admin_vidres_pct', '60'))
+    cost_cm2  = float(get_config_value('vidre_cost_cm2', '0.002880'))
+    t_base    = float(get_config_value('vidre_temps_base_min', '3'))
+    t_lineal  = float(get_config_value('vidre_temps_lineal_m', '0.5'))
+    cost_hora = float(get_config_value('cost_hora_taller', '25'))
+
+    fila = _closest_vidre_taula(amplada, alcada, prefix='')
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost = float(fila['preu_cost'])
+        pvd = round(cost * (1 + marge / 100), 4)
+        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+
+    # Fallback fórmula
+    area = amplada * alcada
+    perimetre_m = 2 * (amplada + alcada) / 100
+    mat = area * cost_cm2
+    temps = t_base + (t_lineal * perimetre_m)
+    mo = temps * cost_hora / 60
+    cost = round(mat + mo, 4)
+    pvd = round(cost * (1 + marge / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'vidre-{amplada}x{alcada}'}
+
+
+def calcular_cost_doble_vidre(amplada, alcada):
+    """Doble vidre: dos vidres simples + muntatge.
+    1. Min-contain sobre DV-
+    2. Fórmula: (cost_vidre_simple × 2) + cost_muntatge"""
+    marge     = float(get_config_value('marge_admin_vidres_pct', '60'))
+    t_muntat  = float(get_config_value('vidre_dv_muntatge_min', '5'))
+    cost_hora = float(get_config_value('cost_hora_taller', '25'))
+
+    fila = _closest_vidre_taula(amplada, alcada, prefix='DV-')
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost = float(fila['preu_cost'])
+        pvd = round(cost * (1 + marge / 100), 4)
+        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+
+    # Fallback: 2 × vidre simple + muntatge
+    simple = calcular_cost_vidre(amplada, alcada)
+    mo_muntat = t_muntat * cost_hora / 60
+    cost = round(simple['cost'] * 2 + mo_muntat, 4)
+    pvd = round(cost * (1 + marge / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'dv-{amplada}x{alcada}'}
+
+
+def calcular_cost_mirall(amplada, alcada):
+    """Mirall: min-contain sobre MIR-, fallback a 2× cost vidre simple."""
+    marge = float(get_config_value('marge_admin_vidres_pct', '60'))
+
+    fila = _closest_vidre_taula(amplada, alcada, prefix='MIR-')
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost = float(fila['preu_cost'])
+        pvd = round(cost * (1 + marge / 100), 4)
+        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula_estimat', 'ref': fila['referencia']}
+
+    # Fallback: 2× vidre simple (estimació provisional fins que hi hagi factura)
+    simple = calcular_cost_vidre(amplada, alcada)
+    cost = round(simple['cost'] * 2.0, 4)
+    pvd = round(cost * (1 + marge / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'estimat_x2', 'ref': f'mir-{amplada}x{alcada}'}
+
+
 # â"€â"€ Routes: Auth â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -4037,9 +4114,9 @@ def api_closest():
         'protter':      protter_actual,
         'protter_semi': laminat_semi,
         'protter_mate': laminat_mate,
-        'vidre':        _pvd_result(cc('vidres',      w, h, exclude_multi=['DV-','MIR-']), 'vidres'),
-        'doble_vidre':  _pvd_result(cc('vidres',      w, h, prefix='DV-'), 'vidres'),
-        'mirall':       _pvd_result(cc('vidres',      w, h, prefix='MIR-'), 'vidres'),
+        'vidre':        _fn_result(calcular_cost_vidre(w, h)),
+        'doble_vidre':  _fn_result(calcular_cost_doble_vidre(w, h)),
+        'mirall':       _fn_result(calcular_cost_mirall(w, h)),
         'passpartu':    _fn_result(calcular_cost_passpartu(w, h, tipus='simple')),
         'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
         'impressio':    _imp_closest(foto_w, foto_h),
