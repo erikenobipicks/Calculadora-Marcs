@@ -1104,6 +1104,75 @@ def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     pvd = round(cost * (1 + marge_pas / 100), 4)
     return {'cost': cost, 'pvd': pvd, 'origen': 'formula', 'ref': f'pas-{amplada}x{alcada}'}
 
+
+def _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var_cm2):
+    """Base function shared by foam and laminat. Returns workshop cost (material + labor)."""
+    cost_hora = float(get_config_value('cost_hora_taller', '25'))
+    area = amplada * alcada
+    mat = area * cost_cm2
+    temps = temps_base + (area * temps_var_cm2)
+    mo = temps * cost_hora / 60
+    return round(mat + mo, 4)
+
+
+def _closest_encolat_taula(amplada, alcada, prefix):
+    """Min-contain on encolat_pro filtered by prefix (ENC or PRO).
+    Returns cheapest row whose dimensions physically cover (amplada, alcada)."""
+    rows = [dict(r) for r in query('SELECT * FROM encolat_pro')]
+    return _find_closest(rows, amplada, alcada, prefix=prefix)
+
+
+def calcular_cost_foam(amplada, alcada):
+    """Encolat en foam adhesiu (ProEco és àlies del mateix producte).
+    1. Min-contain sobre encolat_pro (refs ENC%)
+    2. Fórmula fallback per mides fora de taula"""
+    marge = float(get_config_value('marge_admin_encolat_pct', '60'))
+
+    fila = _closest_encolat_taula(amplada, alcada, prefix='ENC')
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost = float(fila['preu_cost'])
+        pvd = round(cost * (1 + marge / 100), 4)
+        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+
+    # Fallback fórmula
+    cost_cm2   = float(get_config_value('foam_cost_cm2', '0.001143'))
+    temps_base = float(get_config_value('foam_temps_base_min', '9'))
+    temps_var  = float(get_config_value('foam_temps_var_cm2', '0.0015'))
+    cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+    pvd = round(cost * (1 + marge / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'foam-{amplada}x{alcada}'}
+
+
+def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
+    """Laminat Protter. tipus: 'semibrillo' | 'mate'
+    1. Min-contain sobre encolat_pro (refs PRO%) — usa preu_cost com a base semibrillo
+       i aplica diferencial per mate
+    2. Fórmula fallback per mides fora de taula"""
+    marge = float(get_config_value('marge_admin_encolat_pct', '60'))
+    cost_cm2_semi = float(get_config_value('laminat_semibrillo_cost_cm2', '0.000504'))
+    cost_cm2_mate = float(get_config_value('laminat_mate_cost_cm2', '0.000685'))
+    temps_base    = float(get_config_value('laminat_temps_base_min', '12'))
+    temps_var     = float(get_config_value('laminat_temps_var_cm2', '0.0012'))
+    cost_cm2 = cost_cm2_mate if tipus == 'mate' else cost_cm2_semi
+
+    fila = _closest_encolat_taula(amplada, alcada, prefix='PRO')
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost_base = float(fila['preu_cost'])
+        if tipus == 'mate':
+            area = amplada * alcada
+            extra_mat = area * (cost_cm2_mate - cost_cm2_semi)
+            cost = round(cost_base + extra_mat, 4)
+        else:
+            cost = cost_base
+        pvd = round(cost * (1 + marge / 100), 4)
+        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'taula', 'ref': fila['referencia']}
+
+    # Fallback fórmula
+    cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+    pvd = round(cost * (1 + marge / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'formula', 'ref': f'laminat-{tipus}-{amplada}x{alcada}'}
+
+
 # â"€â"€ Routes: Auth â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -3950,19 +4019,20 @@ def api_closest():
                 res['preu'] = pvd  # backward compat: JS reads 'preu'
         return res
 
-    def _pas_result(r):
-        """Format passpartout result for closest API."""
+    def _fn_result(r):
+        """Format foam/laminat/passpartu result for closest API."""
         return {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'preu_cost': r['cost'], 'origen': r['origen']}
 
     result = {
-        'encolat':      _pvd_result(cc('encolat_pro', w, h, prefix='ENC'), 'encolat'),
-        'protter':      _pvd_result(cc('encolat_pro', w, h, prefix='PRO'), 'encolat'),
+        'encolat':      _fn_result(calcular_cost_foam(w, h)),
+        'protter':      _fn_result(calcular_cost_laminat(w, h, tipus='semibrillo')),
+        'laminat_mate': _fn_result(calcular_cost_laminat(w, h, tipus='mate')),
         'vidre':        _pvd_result(cc('vidres',      w, h, exclude_multi=['DV-','MIR-']), 'vidres'),
         'doble_vidre':  _pvd_result(cc('vidres',      w, h, prefix='DV-'), 'vidres'),
         'mirall':       _pvd_result(cc('vidres',      w, h, prefix='MIR-'), 'vidres'),
-        'passpartu':    _pas_result(calcular_cost_passpartu(w, h, tipus='simple')),
-        'doble_pas':    _pas_result(calcular_cost_passpartu(w, h, tipus='doble')),
-        'proeco':       cc('proeco', w, h),  # proeco no té preu_cost — sense canvi
+        'passpartu':    _fn_result(calcular_cost_passpartu(w, h, tipus='simple')),
+        'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
+        'proeco':       _fn_result(calcular_cost_foam(w, h)),  # proeco = foam (mateix producte)
         'impressio':    _imp_closest(foto_w, foto_h),
         'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
