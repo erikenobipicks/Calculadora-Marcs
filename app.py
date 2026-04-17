@@ -4400,7 +4400,14 @@ def init_db():
                          ('passpartu_temps_doble','16'),
                          ('passpartu_temps_finestra','3.5'),
                          ('passpartu_cost_cm2','0.000620'),
-                         ('passpartu_minim_material','0.50')]:
+                         ('passpartu_minim_material','0.50'),
+                         ('foam_cost_cm2','0.001143'),
+                         ('foam_temps_base_min','9'),
+                         ('foam_temps_var_cm2','0.0015'),
+                         ('laminat_semibrillo_cost_cm2','0.000504'),
+                         ('laminat_mate_cost_cm2','0.000685'),
+                         ('laminat_temps_base_min','12'),
+                         ('laminat_temps_var_cm2','0.0012')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -4577,7 +4584,14 @@ def init_db():
                          ('passpartu_temps_doble','16'),
                          ('passpartu_temps_finestra','3.5'),
                          ('passpartu_cost_cm2','0.000620'),
-                         ('passpartu_minim_material','0.50')]:
+                         ('passpartu_minim_material','0.50'),
+                         ('foam_cost_cm2','0.001143'),
+                         ('foam_temps_base_min','9'),
+                         ('foam_temps_var_cm2','0.0015'),
+                         ('laminat_semibrillo_cost_cm2','0.000504'),
+                         ('laminat_mate_cost_cm2','0.000685'),
+                         ('laminat_temps_base_min','12'),
+                         ('laminat_temps_var_cm2','0.0012')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
