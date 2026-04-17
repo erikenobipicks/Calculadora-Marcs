@@ -395,6 +395,16 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <span class="opt-text">Protter</span>
               <span class="opt-preu" id="preu-protter">—</span>
             </label>
+            <div id="protter-subtipus" style="display:none;flex-basis:100%;padding:6px 0 0 14px;display:none">
+              <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;margin-right:12px;cursor:pointer">
+                <input type="radio" name="protter-tipus" value="semibrillo" checked onchange="canviarTipusLaminat('semibrillo')">
+                <span>SemiBrillo</span>
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
+                <input type="radio" name="protter-tipus" value="mate" onchange="canviarTipusLaminat('mate')">
+                <span>Mate</span>
+              </label>
+            </div>
             <label class="opt-btn" id="opt-laminat" title="Laminat al buit sense foam">
               <input type="radio" name="muntatge" value="laminat" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Laminat</span>
@@ -1757,10 +1767,29 @@ function onGrupChange(grup){
   var targetId = val===''?('opt-'+grup+'-cap'):(val==='conservar'?'opt-conservar-vidre':('opt-'+(valToId[val]||val)));
   var targetEl=document.getElementById(targetId); if(targetEl) targetEl.classList.add('selected');
 
+  // Mostrar/amagar subtipus Protter
+  if(grup==='muntatge'){
+    var sub=document.getElementById('protter-subtipus');
+    if(sub) sub.style.display = (val==='protter')?'block':'none';
+  }
+
   applyIncompatibilities();
   if(grup==='interior') recalcMides();
   enforceMaterialLimits(true);
   updateGrupPreu(grup,val);
+  calcular();
+}
+
+function canviarTipusLaminat(tipus){
+  var dades = tipus==='mate' ? (CLOSEST && CLOSEST.protter_mate) : (CLOSEST && CLOSEST.protter_semi);
+  if(!dades) return;
+  // Actualitzar CLOSEST.protter perquè costGrup() llegeixi el nou preu
+  CLOSEST.protter = dades;
+  PREUS.muntatge = dades.preu || dades.pvd || 0;
+  var preuEl = document.getElementById('preu-protter');
+  if(preuEl) preuEl.textContent = preuDisplay(dades.preu || dades.pvd || 0, false);
+  var hid = document.getElementById('ref-muntatge');
+  if(hid) hid.value = dades.ref || '';
   calcular();
 }
 
