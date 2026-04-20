@@ -1,0 +1,96 @@
+/* ============================================================
+   Reus Revela — Brand unification CSS
+   ---
+   Sobreescriu les variables globals i les fonts de tots els
+   templates perquè la calculadora compartizi la mateixa marca
+   visual que reusrevela.cat.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+    /* Paleta alineada amb reusrevela.cat */
+    --ink: #1d1b18;
+    --ink-muted: #5c564c;
+    --muted-soft: #8c857b;
+    --sand: #f4efe7;
+    --sand-strong: #ece4d7;
+    --paper: #fbf8f3;
+    --paper-strong: #fffdf9;
+    --line: #ddd3c4;
+
+    /* Accent principals (daurat editorial + verd fosc) */
+    --accent: #a67843;
+    --accent-soft: #f0e1cc;
+    --success: #1c6a4b;
+    --success-soft: #e7f4ee;
+
+    /* Sobreescriu colors existents de la calculadora per uniformitzar */
+    --green: var(--success);
+    --green-l: var(--success-soft);
+    --amber: var(--accent);
+    --amber-l: var(--accent-soft);
+    --nav: var(--success);
+    --nav-text: #fff;
+    --bg: var(--paper);
+    --paper: var(--paper);
+    --text: var(--ink);
+    --muted: var(--ink-muted);
+    --border: var(--line);
+    --border2: var(--line);
+    --hint: var(--muted-soft);
+
+    /* Formes i ombres */
+    --r: 18px;
+    --radius: 18px;
+    --shadow: 0 20px 60px rgba(18, 16, 12, 0.08);
+
+    /* Tipografia unificada */
+    --serif: "Cormorant Garamond", Georgia, serif;
+    --sans: "Manrope", "DM Sans", system-ui, sans-serif;
+}
+
+/* Aplicar Manrope a tot el body i hereus (override del DM Sans inline) */
+body {
+    font-family: var(--sans) !important;
+    background:
+        radial-gradient(circle at top left, rgba(166, 120, 67, 0.07), transparent 32%),
+        linear-gradient(180deg, #fcfaf6 0%, #f7f1e8 100%) !important;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Titulars editorials amb serif — només h1/h2 per mantenir UX densa a la resta */
+h1, .display, .brand-name {
+    font-family: var(--serif) !important;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+}
+
+/* Nav amb glassmorphism subtle (com reusrevela.cat) */
+nav.site-nav {
+    background: rgba(28, 106, 75, 0.94) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(221, 211, 196, 0.15);
+}
+
+/* Botons i cards amb el nou radius */
+button, .btn, .btn-sm, input, select, textarea {
+    border-radius: 10px;
+}
+.card, .sessio-card, .section, .hero, .surface, .section-card {
+    border-radius: var(--radius);
+}
+
+/* Accent més editorial als enllaços principals */
+a.brand-link:hover,
+a.nav-cta:hover {
+    color: var(--accent);
+}
+
+/* Feedback widget color alineat */
+#fb-toggle {
+    background: var(--success) !important;
+}
