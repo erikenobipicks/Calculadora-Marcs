@@ -1,7 +1,7 @@
 import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from urllib.parse import urlencode, quote as urllib_quote
 from urllib import error as urllib_error
@@ -23,6 +23,16 @@ import io
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
+# Cookie compartida amb reusrevela.cat per SSO entre subdominis
+# (.reusrevela.cat permet compartir entre reusrevela.cat i calculadora.reusrevela.cat)
+_COOKIE_DOMAIN = os.environ.get('SESSION_COOKIE_DOMAIN', '').strip() or None
+if _COOKIE_DOMAIN:
+    app.config['SESSION_COOKIE_DOMAIN'] = _COOKIE_DOMAIN
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 MOLDURA_COLOR_FILTERS = [
@@ -1000,6 +1010,37 @@ def _seed_admin_if_configured(db):
             print(f"Admin creat des de variables d'entorn: usuari={admin_user}")
 
 # â"€â"€ Auth decorators â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+@app.before_request
+def _sso_from_shared_cookie():
+    """SSO fallback: si ve una sessió del Repo B (reusrevela.cat) via cookie
+    compartida amb 'private_professional' però sense 'user_id' (sessió de A),
+    carregar l'usuari automàticament perquè no hagi de tornar a loguejar-se."""
+    if session.get('user_id'):
+        return
+    pp = session.get('private_professional') or {}
+    username = (pp.get('username') or '').strip().lower()
+    if not username:
+        return
+    try:
+        user = query('SELECT * FROM usuaris WHERE username=?', [username], one=True)
+    except Exception:
+        return
+    if not user:
+        return
+    try:
+        if not _user_is_allowed(user):
+            return
+    except Exception:
+        pass
+    # Activar la sessió del Repo A reusant les dades de B
+    try:
+        _start_user_session(user)
+    except Exception:
+        session['user_id'] = user['id']
+        session['is_admin'] = bool(user.get('is_admin', 0))
+        session['nom'] = user.get('nom') or ''
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
