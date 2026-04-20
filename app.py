@@ -24,6 +24,12 @@ import io
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
+# Railway (i altres proxies) envien HTTPS al client però HTTP cap al Flask.
+# ProxyFix fa que Flask respecti X-Forwarded-Proto/Host per detectar HTTPS.
+# Imprescindible si SESSION_COOKIE_SECURE=True, sinó les cookies no es creen.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 # Cookie compartida amb reusrevela.cat per SSO entre subdominis
 # (.reusrevela.cat permet compartir entre reusrevela.cat i calculadora.reusrevela.cat)
 _COOKIE_DOMAIN = os.environ.get('SESSION_COOKIE_DOMAIN', '').strip() or None
