@@ -1488,12 +1488,14 @@ def public_professional_summary():
             return jsonify({'ok': False, 'error': 'not_found'}), 404
 
         user = query(
-            'SELECT id, nom, nom_empresa, profile_type, access_status FROM usuaris WHERE lower(username)=?',
+            'SELECT id, nom, nom_empresa, profile_type, access_status, marge, marge_impressio, margins_json FROM usuaris WHERE lower(username)=?',
             [username],
             one=True,
         )
         if not user:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+
+        margins = _load_user_commercial_margins(user)
 
         recent_quotes_rows = query(
             '''SELECT id, data, num_pressupost, client_nom, preu_final, pagat, entregat, pendent
@@ -1524,6 +1526,11 @@ def public_professional_summary():
             'profile_type': _clean_profile_type(user['profile_type']),
             'access_status': _user_access_status(user),
             'recent_quotes': recent_quotes,
+            # Marges del calc (font autoritativa). El web hauria de mostrar aquests
+            # valors en lloc del JSON local, que ara fa només de cache.
+            'margins': margins,
+            'marge': float(user['marge']) if user['marge'] is not None else 60.0,
+            'marge_impressio': float(user['marge_impressio']) if user['marge_impressio'] is not None else 0.0,
         })
     except Exception as exc:
         print(f'professional-summary error: {exc}')
