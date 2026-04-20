@@ -1010,6 +1010,32 @@ def _seed_admin_if_configured(db):
             print(f"Admin creat des de variables d'entorn: usuari={admin_user}")
 
 # â"€â"€ Auth decorators â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+_CANONICAL_HOST = os.environ.get('CANONICAL_HOST', '').strip().lower()
+
+
+@app.before_request
+def _redirect_legacy_host():
+    """Redirigeix 301 qualsevol host no canònic (p.ex. calculadora.objectiufotografs.com)
+    cap a CANONICAL_HOST (p.ex. calculadora.reusrevela.cat). Opt-in via env var.
+    Preserva path i query string. Només actua amb GET/HEAD."""
+    if not _CANONICAL_HOST:
+        return
+    if request.method not in ('GET', 'HEAD'):
+        return
+    current_host = (request.host or '').lower()
+    # No redirigim si ja estem al host canònic
+    if current_host == _CANONICAL_HOST:
+        return
+    # No redirigim localhost/127.0.0.1/railway.app internal domains
+    if current_host.startswith(('localhost', '127.', '0.0.0.0')) or 'railway' in current_host:
+        return
+    target = f'https://{_CANONICAL_HOST}{request.full_path}'
+    # full_path acaba amb '?' si no hi ha query → netegem
+    if target.endswith('?'):
+        target = target[:-1]
+    return redirect(target, code=301)
+
+
 @app.before_request
 def _sso_from_shared_cookie():
     """SSO fallback: si ve una sessió del Repo B (reusrevela.cat) via cookie
