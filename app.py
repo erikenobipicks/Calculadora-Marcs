@@ -1609,11 +1609,12 @@ def public_pricing():
         mida = ref[3:] if ref.upper().startswith('PRO') or ref.upper().startswith('ENC') else ref
         pc = _row_get(r, 'preu_cost')
         pvd = calcular_pvd(pc, 'encolat') if pc is not None else None
+        # NO exposar preu_cost al Repo B — és dada interna de l'admin.
+        # Només enviem el PVD (preu "taller" que paga el professional).
         encolat_pro.append({
             'ref': ref,
             'mida': mida,
             'preu': pvd if pvd is not None else float(r['preu'] or 0),
-            'preu_cost': float(pc) if pc is not None else None,
             'tipus': tipus,
         })
 
