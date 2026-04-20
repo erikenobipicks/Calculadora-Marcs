@@ -1039,7 +1039,9 @@ def _redirect_legacy_host():
     # full_path acaba amb '?' si no hi ha query → netegem
     if target.endswith('?'):
         target = target[:-1]
-    return redirect(target, code=301)
+    # 302 (temporal) en lloc de 301 perquè els navegadors no el cachegin
+    # permanentment i puguin reintentar si la configuració canvia.
+    return redirect(target, code=302)
 
 
 @app.before_request
