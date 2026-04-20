@@ -1552,6 +1552,128 @@ def public_pricing():
     })
 
 
+@app.route('/api/public/compute', methods=['GET'])
+def public_compute():
+    """Calcula un preu base (sense marge del client, sense IVA) per un producte concret.
+
+    Auth: X-Bridge-Token (mateix que la resta de bridge endpoints).
+
+    Query params:
+      kind        = 'impressio' | 'laminate' | 'protter' | 'frame'
+      width_cm    = int (obligatori)
+      height_cm   = int (obligatori)
+      paper       = string opcional (impressió: 'lustre','silk','fine_art',...)
+      finish      = string opcional ('none','laminate','protter','foam')
+      moldura_id  = string opcional (només si kind=frame)
+      qty         = int opcional, defecte 1
+
+    Resposta: {ok, kind, width_cm, height_cm, base_price, vat_rate, breakdown}
+    """
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    kind = (request.args.get('kind') or '').strip().lower()
+    if kind not in ('impressio', 'laminate', 'protter', 'frame'):
+        return jsonify({'ok': False, 'error': 'unknown_kind'}), 400
+
+    try:
+        w = float(request.args.get('width_cm', 0))
+        h = float(request.args.get('height_cm', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid_size'}), 400
+    if w <= 0 or h <= 0:
+        return jsonify({'ok': False, 'error': 'invalid_size'}), 400
+
+    try:
+        qty = max(1, int(request.args.get('qty', 1)))
+    except (TypeError, ValueError):
+        qty = 1
+
+    paper = (request.args.get('paper') or '').strip().lower()
+    finish = (request.args.get('finish') or 'none').strip().lower()
+    moldura_id = (request.args.get('moldura_id') or '').strip()
+
+    breakdown = {}
+    base_price = 0.0
+
+    if kind == 'impressio':
+        # Impressió: usa la taula amb min-contain (no té preu_cost, ja porta marge)
+        imp = _imp_closest(w, h)
+        if not imp:
+            return jsonify({'ok': False, 'error': 'impressio_not_found'}), 404
+        base_price = float(imp.get('preu', 0))
+        breakdown['impressio'] = base_price
+        # Acabats opcionals
+        if finish == 'laminate':
+            lam = _laminate_only_closest(w, h)
+            if lam:
+                breakdown['finish'] = float(lam.get('preu', 0))
+                base_price += breakdown['finish']
+        elif finish == 'protter':
+            prot = calcular_cost_laminat(w, h, tipus='semibrillo')
+            breakdown['finish'] = prot['pvd']
+            base_price += prot['pvd']
+        elif finish == 'foam':
+            foam = calcular_cost_foam(w, h)
+            breakdown['finish'] = foam['pvd']
+            base_price += foam['pvd']
+
+    elif kind == 'laminate':
+        lam = _laminate_only_closest(w, h)
+        if not lam:
+            return jsonify({'ok': False, 'error': 'laminate_not_found'}), 404
+        base_price = float(lam.get('preu', 0))
+        breakdown['laminate'] = base_price
+
+    elif kind == 'protter':
+        r = calcular_cost_laminat(w, h, tipus='semibrillo')
+        base_price = r['pvd']
+        breakdown['protter'] = r['pvd']
+        breakdown['origen'] = r['origen']
+
+    elif kind == 'frame':
+        if not moldura_id:
+            return jsonify({'ok': False, 'error': 'missing_moldura_id'}), 400
+        m = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_id], one=True)
+        if not m:
+            return jsonify({'ok': False, 'error': 'moldura_not_found'}), 404
+        pc = _row_get(m, 'preu_cost')
+        gruix = float(_row_get(m, 'gruix') or 0)
+        merma = float(_row_get(m, 'merma_pct') or 10.0)
+        minim = float(_row_get(m, 'minim_cm') or 100.0)
+        if pc is not None:
+            marc = calcular_preu_marc(w, h, gruix, float(pc), merma_pct=merma, minim_cm=minim)
+            if not marc:
+                return jsonify({'ok': False, 'error': 'compute_failed'}), 500
+            base_price = marc['pvd']
+            breakdown['moldura'] = marc['pvd']
+            breakdown['cost'] = marc['cost']
+        else:
+            # Fallback a preu_taller com €/cm lineal
+            preu_cm = float(_row_get(m, 'preu_taller') or 0)
+            perimetre = 2 * (w + h)
+            longitud = (perimetre + gruix * 8) * (1 + merma / 100)
+            longitud = max(longitud, minim)
+            base_price = round(longitud * preu_cm / 100, 4)
+            breakdown['moldura'] = base_price
+
+    # Apply quantity
+    total = round(base_price * qty, 4)
+
+    return jsonify({
+        'ok': True,
+        'kind': kind,
+        'width_cm': w,
+        'height_cm': h,
+        'qty': qty,
+        'base_price': total,
+        'vat_rate': 0.21,
+        'breakdown': breakdown,
+    })
+
+
 @app.route('/auth/bridge')
 def bridge_auth():
     payload = _read_bridge_token(request.args.get('token'))
