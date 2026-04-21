@@ -677,6 +677,10 @@ def _sync_private_commercial_settings(frame_margin, print_margin, margins=None):
         headers={
             'Content-Type': 'application/json',
             'X-Bridge-Token': api_token,
+            # Cloudflare davant de reusrevela.cat pot bloquejar el UA per
+            # defecte de Python-urllib. Enviar un UA propi permet whitelist
+            # i fa visibles els hits de sortida.
+            'User-Agent': 'calculadora-marcs-bridge/1.0 (+https://calculadora.reusrevela.cat)',
         },
         method='POST',
     )
