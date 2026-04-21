@@ -793,12 +793,14 @@ def _needs_setup(user_id):
 
 
 def _start_user_session(user):
-    session['user_id'] = user['id']
-    session['username'] = user['username']
-    session['is_admin'] = bool(user['is_admin'])
-    session['nom'] = user['nom']
+    # Usem _row_get per a TOTS els camps: si el schema no té una columna (p.ex.
+    # brand_color en bases antigues) no volem un 500 durant el login.
+    session['user_id'] = _row_get(user, 'id')
+    session['username'] = _row_get(user, 'username', '')
+    session['is_admin'] = bool(_row_get(user, 'is_admin', 0))
+    session['nom'] = _row_get(user, 'nom', '') or ''
     session['access_status'] = _user_access_status(user)
-    session['profile_type'] = _row_get(user, 'profile_type', 'professional') if user else 'professional'
+    session['profile_type'] = _clean_profile_type(_row_get(user, 'profile_type', 'professional'))
     session['empresa_nom'] = _load_empresa_nom_for_session(user)
     session['brand_color'] = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
     session['brand_color_secondary'] = _normalize_hex_color(
@@ -1337,9 +1339,25 @@ def login():
     )
     web_return_url = _current_web_return_url()
     if request.method == 'POST':
-        user = query('SELECT * FROM usuaris WHERE username=?',
-                     [request.form['username']], one=True)
-        if user and user['password'] == hash_pw(request.form['password']):
+        # Els usuaris es desen sempre en minúscules (signup + bridge). Normalitzem
+        # aquí per evitar que "Juan@X.com" o " juan@x.com " fallin per case/espais.
+        username = (request.form.get('username') or '').strip().lower()
+        password = request.form.get('password') or ''
+        try:
+            user = query('SELECT * FROM usuaris WHERE lower(username)=?',
+                         [username], one=True)
+            credentials_ok = bool(user) and user['password'] == hash_pw(password)
+        except Exception as exc:
+            app.logger.exception('login_db_error user=%s detail=%s', username[:3] + '***', exc)
+            flash("No hem pogut validar l'accés ara mateix. Torna-ho a provar en uns segons.", 'error')
+            return render_template(
+                'login.html',
+                web_return_url=web_return_url,
+                login_next=next_path,
+                login_source=login_source,
+                login_lang=login_lang,
+            )
+        if credentials_ok:
             if not _user_is_allowed(user):
                 status = _user_access_status(user)
                 if status == 'pending':
@@ -1353,10 +1371,23 @@ def login():
                     login_source=login_source,
                     login_lang=login_lang,
                 )
-            _start_user_session(user)
-            session['bridge_source'] = login_source
-            session['bridge_lang'] = login_lang
-            if _needs_setup(user['id']):
+            try:
+                _start_user_session(user)
+                session['bridge_source'] = login_source
+                session['bridge_lang'] = login_lang
+                needs_setup = _needs_setup(user['id'])
+            except Exception as exc:
+                app.logger.exception('login_session_error user_id=%s detail=%s', _row_get(user, 'id'), exc)
+                session.clear()
+                flash("Hi ha hagut un error iniciant la sessió. Si continua, contacta amb el taller.", 'error')
+                return render_template(
+                    'login.html',
+                    web_return_url=web_return_url,
+                    login_next=next_path,
+                    login_source=login_source,
+                    login_lang=login_lang,
+                )
+            if needs_setup:
                 return redirect(url_for('setup'))
             return redirect(next_path)
         flash('Usuari o contrasenya incorrectes.', 'error')
@@ -1455,6 +1486,56 @@ def public_bridge_login():
     user = query('SELECT * FROM usuaris WHERE username=?', [username], one=True)
     if not user or user['password'] != hash_pw(password):
         return jsonify({'ok': False, 'error': 'invalid_credentials'}), 401
+
+    if not _user_is_allowed(user):
+        return jsonify({'ok': False, 'error': _user_access_status(user)}), 403
+
+    token = _build_bridge_token({
+        'uid': user['id'],
+        'next': next_path,
+        'lang': lang,
+        'source': source,
+        'service': service,
+        'iat': int(time.time()),
+    })
+    host = request.host_url.rstrip('/')
+    return jsonify({
+        'ok': True,
+        'redirect_url': f'{host}{url_for("bridge_auth")}?token={token}',
+        'next': next_path,
+    })
+
+
+@app.route('/api/public/bridge-refresh', methods=['POST'])
+def public_bridge_refresh():
+    """Emet un token de bridge curt de durada per a un usuari que ja ha
+    validat credencials a la web pública (reusrevela-web).
+
+    Es protegeix amb X-Bridge-Token (el mateix que bridge-login): si algú
+    té aquest secret, ja pot emetre tokens a lliure voluntat via
+    bridge-login. Per tant aquest endpoint no obre cap superfície nova,
+    només permet refrescar el token d'SSO (p.ex. per entrar a la
+    calculadora des de l'àrea privada passats els 120s de vida del token
+    original) sense demanar la contrasenya una altra vegada.
+    """
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or data.get('email') or '').strip().lower()
+    lang = (data.get('lang') or 'ca').strip().lower()
+    source = (data.get('source') or 'web_private').strip().lower()
+    service = (data.get('service') or '').strip().lower()
+    next_path = _safe_next_path(data.get('next') or '', '/calculadora' if service == 'frames' else '/')
+
+    if not username:
+        return jsonify({'ok': False, 'error': 'missing_username'}), 400
+
+    user = query('SELECT id, is_admin, access_status FROM usuaris WHERE lower(username)=?', [username], one=True)
+    if not user:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
 
     if not _user_is_allowed(user):
         return jsonify({'ok': False, 'error': _user_access_status(user)}), 403
