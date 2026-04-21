@@ -22,7 +22,19 @@ pdfmetrics.registerFont(TTFont('DejaVu-Bold', _os.path.join(_FONT_DIR, 'DejaVuSa
 import io
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+# SECRET_KEY és obligatori. Abans hi havia un fallback a
+# secrets.token_hex(32), cosa que feia que cada restart generés un secret
+# nou i descarregués totes les sessions existents. Ara exigim que estigui
+# a l'env i fallem a l'arrencada si falta. És preferible un crash
+# explícit a la fase de deploy que un funcionament inestable.
+_SECRET_KEY = (os.environ.get('SECRET_KEY') or '').strip()
+if not _SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY env var is required. Set it on the deploy "
+        "(Railway → Variables → SECRET_KEY) with a long random string, "
+        "e.g. `python3 -c 'import secrets; print(secrets.token_urlsafe(64))'`."
+    )
+app.secret_key = _SECRET_KEY
 
 # Railway (i altres proxies) envien HTTPS al client però HTTP cap al Flask.
 # ProxyFix fa que Flask respecti X-Forwarded-Proto/Host per detectar HTTPS.
@@ -30,15 +42,20 @@ app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
+# Flags de cookie bàsics, sempre. Abans només s'activaven quan hi havia
+# SESSION_COOKIE_DOMAIN, deixant configuracions sense subdomini amb
+# cookies sense Secure. ProxyFix (vegeu dalt) ja garanteix que Flask
+# detecta HTTPS correctament darrere del proxy.
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+
 # Cookie compartida amb reusrevela.cat per SSO entre subdominis
 # (.reusrevela.cat permet compartir entre reusrevela.cat i calculadora.reusrevela.cat)
 _COOKIE_DOMAIN = os.environ.get('SESSION_COOKIE_DOMAIN', '').strip() or None
 if _COOKIE_DOMAIN:
     app.config['SESSION_COOKIE_DOMAIN'] = _COOKIE_DOMAIN
-    app.config['SESSION_COOKIE_SECURE'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 MOLDURA_COLOR_FILTERS = [
@@ -1487,7 +1504,10 @@ def public_bridge_login():
     if not username or not password:
         return jsonify({'ok': False, 'error': 'missing_credentials'}), 400
 
-    user = query('SELECT * FROM usuaris WHERE username=?', [username], one=True)
+    # lower(username) per consistència amb /login i bridge-refresh: un
+    # usuari antic desat amb majúscules a la BD podia fallar aquí tot
+    # entrant bé per la resta d'endpoints.
+    user = query('SELECT * FROM usuaris WHERE lower(username)=?', [username], one=True)
     if not user or user['password'] != hash_pw(password):
         return jsonify({'ok': False, 'error': 'invalid_credentials'}), 401
 
