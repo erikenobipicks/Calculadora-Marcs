@@ -560,7 +560,60 @@ def execute(sql, args=()):
         db.commit()
         return cur.lastrowid
 
-def hash_pw(pw): return hashlib.sha256(pw.encode()).hexdigest()
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+def hash_pw(pw):
+    """Hash d'una contrasenya amb pbkdf2-sha256 + sal aleatòria (werkzeug).
+    Els hashes resultants comencen per 'pbkdf2:sha256:...' i contenen '$'
+    separant els camps, cosa que els distingeix dels hashes legacy (64
+    chars hex).
+    """
+    return generate_password_hash(pw or '', method='pbkdf2:sha256', salt_length=16)
+
+
+def _hash_pw_legacy(pw):
+    """SHA-256 sense sal. Només per verificar hashes antics que encara no
+    han migrat. Cap ruta hauria d'escriure res nou amb això."""
+    return hashlib.sha256((pw or '').encode()).hexdigest()
+
+
+def _is_legacy_hash(stored):
+    """Un hash legacy és un string de 64 caràcters hex (SHA-256 sense sal
+    emmagatzemat com a hexdigest). Els hashes werkzeug sempre contenen
+    el separador '$'."""
+    if not isinstance(stored, str) or not stored:
+        return False
+    return '$' not in stored
+
+
+def verify_pw(stored, provided):
+    """True si la contrasenya 'provided' és correcta per al hash 'stored',
+    independentment de si és un hash legacy (SHA-256) o un de werkzeug."""
+    if not stored or provided is None:
+        return False
+    if _is_legacy_hash(stored):
+        return hmac.compare_digest(stored, _hash_pw_legacy(provided))
+    try:
+        return check_password_hash(stored, provided)
+    except Exception:
+        return False
+
+
+def maybe_upgrade_hash(user_id, stored, provided):
+    """Si l'usuari acaba de passar un login amb un hash legacy, aprofitem
+    per rehashejar amb el format nou i desar-ho a la BD. Migració
+    progressiva: no cal cap operació massiva, simplement a cada login
+    correcte es moderniza un usuari més.
+
+    No fa fallar el login si l'UPDATE falla — només registra warning.
+    """
+    if not _is_legacy_hash(stored) or not user_id:
+        return
+    try:
+        execute('UPDATE usuaris SET password=? WHERE id=?', [hash_pw(provided), user_id])
+    except Exception as exc:
+        app.logger.warning('password_rehash_failed user_id=%s detail=%s', user_id, exc)
 
 
 def _is_admin_session():
@@ -1367,7 +1420,7 @@ def login():
         try:
             user = query('SELECT * FROM usuaris WHERE lower(username)=?',
                          [username], one=True)
-            credentials_ok = bool(user) and user['password'] == hash_pw(password)
+            credentials_ok = bool(user) and verify_pw(user['password'], password)
         except Exception as exc:
             app.logger.exception('login_db_error user=%s detail=%s', username[:3] + '***', exc)
             flash("No hem pogut validar l'accés ara mateix. Torna-ho a provar en uns segons.", 'error')
@@ -1392,6 +1445,10 @@ def login():
                     login_source=login_source,
                     login_lang=login_lang,
                 )
+            # Migració progressiva del hash: si aquest usuari encara tenia
+            # un SHA-256 legacy, aprofitem aquest login correcte per
+            # rehashejar-lo amb pbkdf2. Silenciós si falla.
+            maybe_upgrade_hash(user['id'], user['password'], password)
             try:
                 _start_user_session(user)
                 session['bridge_source'] = login_source
@@ -1508,11 +1565,15 @@ def public_bridge_login():
     # usuari antic desat amb majúscules a la BD podia fallar aquí tot
     # entrant bé per la resta d'endpoints.
     user = query('SELECT * FROM usuaris WHERE lower(username)=?', [username], one=True)
-    if not user or user['password'] != hash_pw(password):
+    if not user or not verify_pw(user['password'], password):
         return jsonify({'ok': False, 'error': 'invalid_credentials'}), 401
 
     if not _user_is_allowed(user):
         return jsonify({'ok': False, 'error': _user_access_status(user)}), 403
+
+    # Migració progressiva del hash: aprofitem aquest login via bridge
+    # per rehashejar si encara era un SHA-256 legacy.
+    maybe_upgrade_hash(user['id'], user['password'], password)
 
     token = _build_bridge_token({
         'uid': user['id'],
