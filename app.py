@@ -2585,6 +2585,21 @@ def cataleg():
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS)
 
+@app.route('/admin/run-migrations')
+@admin_required
+def admin_run_migrations():
+    """TEMPORAL: re-executa init_db() per aplicar ALTER TABLE pendents a producció.
+    init_db() és idempotent (CREATE TABLE IF NOT EXISTS + ALTER TABLE ADD COLUMN
+    IF NOT EXISTS per PG), així que es pot cridar múltiples vegades sense efectes
+    destructius. Eliminar aquesta ruta un cop PG estigui migrat."""
+    try:
+        init_db()
+        return "Migracions executades correctament"
+    except Exception as e:
+        import traceback
+        return f"Error: {e}\n\n{traceback.format_exc()}", 500
+
+
 @app.route('/admin/debug-fotos')
 @admin_required
 def admin_debug_fotos():
