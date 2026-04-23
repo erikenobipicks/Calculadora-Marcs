@@ -1385,20 +1385,41 @@ def calcular_cost_doble_vidre(amplada, alcada):
 
 
 def calcular_cost_mirall(amplada, alcada):
-    """Mirall: min-contain sobre MIR-, fallback a 2× cost vidre simple."""
-    marge = float(get_config_value('marge_admin_vidres_pct', '60'))
+    """Mirall tallat a mida pel proveïdor (Cristaleria Abrio).
+    Preu 5mm amb recàrrec energètic: 31,53 €/m² (= 0.003153 €/cm²).
+    Facturació en múltiples de 6 dm². Sense MO de tall (el talla el proveïdor).
 
+    1. Fórmula real sobre cost de factura (primer)
+    2. Min-contain sobre taula MIR- com a fallback si la fórmula no aplica."""
+    marge     = float(get_config_value('marge_admin_vidres_pct', '60'))
+    cost_cm2  = float(get_config_value('mirall_cost_cm2', '0.003153'))
+    multiplo  = float(get_config_value('mirall_multiplo_dm2', '6'))
+
+    if amplada > 0 and alcada > 0 and cost_cm2 > 0 and multiplo > 0:
+        # Àrea facturada (arrodonida al múltiple de dm² superior)
+        area_real_dm2 = (amplada * alcada) / 100.0
+        area_fact_dm2 = math.ceil(area_real_dm2 / multiplo) * multiplo
+        area_fact_cm2 = area_fact_dm2 * 100.0
+        cost = round(area_fact_cm2 * cost_cm2, 4)
+        pvd = round(cost * (1 + marge / 100), 4)
+        return {
+            'cost': cost,
+            'pvd': pvd,
+            'preu': pvd,
+            'area_real_cm2': round(amplada * alcada, 2),
+            'area_fact_cm2': round(area_fact_cm2, 2),
+            'origen': 'formula',
+            'ref': f'mir-{amplada}x{alcada}',
+        }
+
+    # Fallback: min-contain sobre taula MIR-
     fila = _closest_vidre_taula(amplada, alcada, prefix='MIR-')
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost = float(fila['preu_cost'])
         pvd = round(cost * (1 + marge / 100), 4)
         return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula_estimat', 'ref': fila['referencia']}
 
-    # Fallback: 2× vidre simple (estimació provisional fins que hi hagi factura)
-    simple = calcular_cost_vidre(amplada, alcada)
-    cost = round(simple['cost'] * 2.0, 4)
-    pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'estimat_x2', 'ref': f'mir-{amplada}x{alcada}'}
+    return {'cost': 0.0, 'pvd': 0.0, 'preu': 0.0, 'origen': 'no_data', 'ref': f'mir-{amplada}x{alcada}'}
 
 
 # â"€â"€ Routes: Auth â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -4938,7 +4959,9 @@ def init_db():
                          ('vidre_cost_cm2','0.002880'),
                          ('vidre_temps_base_min','3'),
                          ('vidre_temps_lineal_m','0.5'),
-                         ('vidre_dv_muntatge_min','5')]:
+                         ('vidre_dv_muntatge_min','5'),
+                         ('mirall_cost_cm2','0.003153'),
+                         ('mirall_multiplo_dm2','6')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -5126,7 +5149,9 @@ def init_db():
                          ('vidre_cost_cm2','0.002880'),
                          ('vidre_temps_base_min','3'),
                          ('vidre_temps_lineal_m','0.5'),
-                         ('vidre_dv_muntatge_min','5')]:
+                         ('vidre_dv_muntatge_min','5'),
+                         ('mirall_cost_cm2','0.003153'),
+                         ('mirall_multiplo_dm2','6')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
