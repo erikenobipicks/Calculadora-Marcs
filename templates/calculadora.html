@@ -1452,6 +1452,11 @@ function fetchClosest(){
   fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH)
     .then(function(r){return r.json();}).then(function(d){
       CLOSEST=d;
+      // Reset selector de subtipus Protter a SemiBrillo quan canvia la mida
+      var radioSemi = document.querySelector('input[name="protter-tipus"][value="semibrillo"]');
+      if(radioSemi) radioSemi.checked = true;
+      // Si Protter està seleccionat, reassigna el seu valor a semi (no mate)
+      if(CLOSEST.protter_semi) CLOSEST.protter = CLOSEST.protter_semi;
       updateBtnPreus();
       // Update PREUS for currently selected options
       ['muntatge','proteccio','interior'].forEach(function(g){
