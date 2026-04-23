@@ -391,26 +391,26 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <span class="opt-text">Encolat</span>
               <span class="opt-preu" id="preu-encolat">—</span>
             </label>
-            <label class="opt-btn" id="opt-protter" title="No disponible amb marc (usa ProEco)">
+            <label class="opt-btn" id="opt-protter" title="Foam + laminat">
               <input type="radio" name="muntatge" value="protter" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Protter</span>
               <span class="opt-preu" id="preu-protter">—</span>
             </label>
-            <div id="protter-subtipus" style="display:none;flex-basis:100%;padding:6px 0 0 14px;display:none">
-              <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;margin-right:12px;cursor:pointer">
-                <input type="radio" name="protter-tipus" value="semibrillo" checked onchange="canviarTipusLaminat('semibrillo')">
-                <span>SemiBrillo</span>
-              </label>
-              <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
-                <input type="radio" name="protter-tipus" value="mate" onchange="canviarTipusLaminat('mate')">
-                <span>Mate</span>
-              </label>
-            </div>
             <label class="opt-btn" id="opt-laminat" title="Laminat al buit sense foam">
               <input type="radio" name="muntatge" value="laminat" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Laminat</span>
               <span class="opt-preu" id="preu-laminat">—</span>
             </label>
+            <div id="laminat-subtipus" style="display:none;flex-basis:100%;padding:6px 0 0 14px">
+              <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;margin-right:12px;cursor:pointer">
+                <input type="radio" name="laminat-tipus" value="semibrillo" checked onchange="canviarTipusLaminat('semibrillo')">
+                <span>SemiBrillo</span>
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
+                <input type="radio" name="laminat-tipus" value="mate" onchange="canviarTipusLaminat('mate')">
+                <span>Mate</span>
+              </label>
+            </div>
             <label class="opt-btn opt-none" id="opt-muntatge-cap">
               <input type="radio" name="muntatge" value="" checked onchange="onGrupChange('muntatge')">
               <span class="opt-text">Cap</span>
@@ -462,11 +462,6 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <input type="radio" name="interior" value="doble_pas" onchange="onGrupChange('interior')">
               <span class="opt-text">Doble passpartú</span>
               <span class="opt-preu" id="preu-doble_pas">—</span>
-            </label>
-            <label class="opt-btn" id="opt-proeco">
-              <input type="radio" name="interior" value="proeco" onchange="onGrupChange('interior')">
-              <span class="opt-text">ProEco</span>
-              <span class="opt-preu" id="preu-proeco">—</span>
             </label>
             <label class="opt-btn opt-none" id="opt-interior-cap">
               <input type="radio" name="interior" value="" checked onchange="onGrupChange('interior')">
@@ -621,6 +616,7 @@ var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
 var GRUIX   = {pre:0, marc:0};
 var MERMA   = {pre:{pct:10, min:100}, marc:{pct:10, min:100}};
 var CLOSEST = {};
+var muntatge_actiu = 'cap';
 var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid = null;
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
@@ -828,17 +824,17 @@ var empresa_nom = 'Reus Revela', empresa_adreca = '', empresa_tel = '';
 var valToId = {
   encolat:'encolat', protter:'protter', laminat:'laminat',
   vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar-vidre',
-  passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'
+  passpartu:'passpartu', doble_pas:'doble_pas'
 };
 var allKeys = {
   muntatge:  ['encolat','protter','laminat','muntatge-cap'],
   proteccio: ['vidre','doble_vidre','mirall','conservar-vidre','proteccio-cap'],
-  interior:  ['passpartu','doble_pas','proeco','interior-cap']
+  interior:  ['passpartu','doble_pas','interior-cap']
 };
 var _tipusGrupMap = {
   muntatge:  {encolat:'encolat', protter:'protter', laminat:'laminat'},
   proteccio: {vidre:'vidre', doble_vidre:'doble_vidre', mirall:'mirall', conservar:'conservar'},
-  interior:  {passpartu:'passpartu', doble_pas:'doble_pas', proeco:'proeco'}
+  interior:  {passpartu:'passpartu', doble_pas:'doble_pas'}
 };
 var REVERS_PREUS = {
   '10x15': 1.25,
@@ -1284,7 +1280,7 @@ function resetMolduraFilters(){
 
 // ── Preus als botons ──────────────────────────────────────────────────────
 function updateBtnPreus(){
-  ['encolat','protter','laminat','vidre','doble_vidre','mirall','passpartu','doble_pas','proeco'].forEach(function(k){
+  ['encolat','protter','laminat','vidre','doble_vidre','mirall','passpartu','doble_pas'].forEach(function(k){
     var el = document.getElementById('preu-'+k); if(!el) return;
     if(CLOSEST[k] && CLOSEST[k].preu) el.textContent = preuDisplay(CLOSEST[k].preu, false);
     else el.textContent = '—';
@@ -1452,11 +1448,12 @@ function fetchClosest(){
   fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH)
     .then(function(r){return r.json();}).then(function(d){
       CLOSEST=d;
-      // Reset selector de subtipus Protter a SemiBrillo quan canvia la mida
-      var radioSemi = document.querySelector('input[name="protter-tipus"][value="semibrillo"]');
+      // Reset selector de subtipus a SemiBrillo quan canvia la mida
+      var radioSemi = document.querySelector('input[name="laminat-tipus"][value="semibrillo"]');
       if(radioSemi) radioSemi.checked = true;
-      // Si Protter està seleccionat, reassigna el seu valor a semi (no mate)
+      // Reassigna valors per defecte (semi) a les claus actives
       if(CLOSEST.protter_semi) CLOSEST.protter = CLOSEST.protter_semi;
+      if(CLOSEST.laminat_semi) CLOSEST.laminat = CLOSEST.laminat_semi;
       updateBtnPreus();
       // Update PREUS for currently selected options
       ['muntatge','proteccio','interior'].forEach(function(g){
@@ -1773,10 +1770,19 @@ function onGrupChange(grup){
   var targetId = val===''?('opt-'+grup+'-cap'):(val==='conservar'?'opt-conservar-vidre':('opt-'+(valToId[val]||val)));
   var targetEl=document.getElementById(targetId); if(targetEl) targetEl.classList.add('selected');
 
-  // Mostrar/amagar subtipus Protter
+  // Mostrar/amagar subtipus SemiBrillo/Mate (compartit per Protter i Laminat)
   if(grup==='muntatge'){
-    var sub=document.getElementById('protter-subtipus');
-    if(sub) sub.style.display = (val==='protter')?'block':'none';
+    muntatge_actiu = val || 'cap';
+    var sub=document.getElementById('laminat-subtipus');
+    if(sub){
+      var show = (val==='protter' || val==='laminat');
+      sub.style.display = show ? 'block' : 'none';
+      if(show){
+        var radioSemi = document.querySelector('input[name="laminat-tipus"][value="semibrillo"]');
+        if(radioSemi) radioSemi.checked = true;
+        aplicarTipusLaminat('semibrillo');
+      }
+    }
   }
 
   applyIncompatibilities();
@@ -1786,13 +1792,24 @@ function onGrupChange(grup){
   calcular();
 }
 
+function aplicarTipusLaminat(tipus){
+  if(!CLOSEST) return;
+  if(muntatge_actiu === 'protter'){
+    var p = tipus==='mate' ? CLOSEST.protter_mate : CLOSEST.protter_semi;
+    if(p) CLOSEST.protter = p;
+  } else if(muntatge_actiu === 'laminat'){
+    var l = tipus==='mate' ? CLOSEST.laminat_mate : CLOSEST.laminat_semi;
+    if(l) CLOSEST.laminat = l;
+  }
+}
+
 function canviarTipusLaminat(tipus){
-  var dades = tipus==='mate' ? (CLOSEST && CLOSEST.protter_mate) : (CLOSEST && CLOSEST.protter_semi);
+  aplicarTipusLaminat(tipus);
+  var key = muntatge_actiu;
+  var dades = CLOSEST && CLOSEST[key];
   if(!dades) return;
-  // Actualitzar CLOSEST.protter perquè costGrup() llegeixi el nou preu
-  CLOSEST.protter = dades;
   PREUS.muntatge = dades.preu || dades.pvd || 0;
-  var preuEl = document.getElementById('preu-protter');
+  var preuEl = document.getElementById('preu-' + key);
   if(preuEl) preuEl.textContent = preuDisplay(dades.preu || dades.pvd || 0, false);
   var hid = document.getElementById('ref-muntatge');
   if(hid) hid.value = dades.ref || '';
