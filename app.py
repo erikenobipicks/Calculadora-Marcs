@@ -1324,6 +1324,19 @@ def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
     return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'formula', 'ref': f'laminat-{tipus}-{amplada}x{alcada}'}
 
 
+def calcular_cost_protter(amplada, alcada, tipus='semibrillo'):
+    """Protter = foam adhesiu + laminat.
+    Suma els costs independents de foam i laminat.
+    tipus: 'semibrillo' | 'mate'"""
+    marge = float(get_config_value('marge_admin_encolat_pct', '60'))
+    c_foam = calcular_cost_foam(amplada, alcada)['cost']
+    c_lam = calcular_cost_laminat(amplada, alcada, tipus=tipus)['cost']
+    cost = round(c_foam + c_lam, 4)
+    pvd = round(cost * (1 + marge / 100), 4)
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus,
+            'origen': 'composicio', 'ref': f'protter-{tipus}-{amplada}x{alcada}'}
+
+
 def _closest_vidre_taula(amplada, alcada, prefix=''):
     """Min-contain sobre taula vidres filtrat per prefix.
     prefix: ''=vidre simple (exclou DV-/MIR-), 'DV-'=doble vidre, 'MIR-'=mirall."""
@@ -4493,26 +4506,32 @@ def api_closest():
         """Format foam/laminat/passpartu result for closest API."""
         return {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'preu_cost': r['cost'], 'origen': r['origen']}
 
-    # Foam (encolat) i ProEco comparteixen càlcul
+    # Foam (encolat simple). ProEco: àlies de compatibilitat històrica.
     foam = _fn_result(calcular_cost_foam(w, h))
-    # Laminat: retornem ambdós tipus perquè el JS pugui canviar sense nova crida
+    # Laminat sol (sense foam): retornem ambdós acabats
     laminat_semi = _fn_result(calcular_cost_laminat(w, h, tipus='semibrillo'))
     laminat_mate = _fn_result(calcular_cost_laminat(w, h, tipus='mate'))
-    protter_actual = laminat_mate if tipus_laminat == 'mate' else laminat_semi
+    # Protter = foam + laminat: retornem ambdós acabats
+    protter_semi = _fn_result(calcular_cost_protter(w, h, tipus='semibrillo'))
+    protter_mate = _fn_result(calcular_cost_protter(w, h, tipus='mate'))
+    protter_actual = protter_mate if tipus_laminat == 'mate' else protter_semi
+    laminat_actual = laminat_mate if tipus_laminat == 'mate' else laminat_semi
 
     result = {
         'encolat':      foam,
-        'proeco':       foam,  # àlies, mateix producte
+        'proeco':       foam,  # àlies històric, mateix cost
         'protter':      protter_actual,
-        'protter_semi': laminat_semi,
-        'protter_mate': laminat_mate,
+        'protter_semi': protter_semi,
+        'protter_mate': protter_mate,
+        'laminat':      laminat_actual,
+        'laminat_semi': laminat_semi,
+        'laminat_mate': laminat_mate,
         'vidre':        _fn_result(calcular_cost_vidre(w, h)),
         'doble_vidre':  _fn_result(calcular_cost_doble_vidre(w, h)),
         'mirall':       _fn_result(calcular_cost_mirall(w, h)),
         'passpartu':    _fn_result(calcular_cost_passpartu(w, h, tipus='simple')),
         'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
         'impressio':    _imp_closest(foto_w, foto_h),
-        'laminat':      _laminate_only_closest(foto_w, foto_h),
     }
     return jsonify(result)
 
