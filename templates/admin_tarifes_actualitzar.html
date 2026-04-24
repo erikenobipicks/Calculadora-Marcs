@@ -54,10 +54,18 @@ td{padding:.4rem;border-bottom:.5px solid var(--border)}
 
     <label for="categoria">Categoria</label>
     <select id="categoria">
-      <option value="moldures">Moldures</option>
-      <option value="vidres">Vidres</option>
-      <option value="encolat_pro">Encolat / Laminat</option>
-      <option value="passpartout">Passpartú</option>
+      <optgroup label="Taules (preu per referència)">
+        <option value="moldures">Moldures</option>
+        <option value="vidres">Vidres</option>
+        <option value="passpartout">Passpartú</option>
+      </optgroup>
+      <optgroup label="Config (cost/cm²)">
+        <option value="mirall">Mirall (estimat)</option>
+        <option value="encolat_foam">Foam / Encolat</option>
+        <option value="laminat_semibrillo">Laminat SemiBrillo</option>
+        <option value="laminat_mate">Laminat Mate</option>
+        <option value="protter">Protter+Foam (foam + laminat semibrillo)</option>
+      </optgroup>
     </select>
 
     <label>Mètode</label>
@@ -171,10 +179,13 @@ function previsualitzar(){
     var tbody = document.getElementById('taula-previsualitzar');
     tbody.innerHTML = '';
     _previsualitzacio.forEach(function(p){
+      // Valors de config (cost_cm2) són molt petits → mostrem 6 decimals;
+      // els preus de taula mantenen 4.
+      var dec = (Math.abs(p.cost_actual) < 0.1) ? 6 : 4;
       var tr = '<tr>'+
         '<td class="mono">'+p.referencia+'</td>'+
-        '<td class="r">'+p.cost_actual.toFixed(4)+' €</td>'+
-        '<td class="r" style="font-weight:500">'+p.cost_nou.toFixed(4)+' €</td>'+
+        '<td class="r">'+p.cost_actual.toFixed(dec)+' €</td>'+
+        '<td class="r" style="font-weight:500">'+p.cost_nou.toFixed(dec)+' €</td>'+
         '<td class="r">'+formatDiff(p.diff_pct)+'</td>'+
       '</tr>';
       tbody.insertAdjacentHTML('beforeend', tr);
