@@ -2612,16 +2612,69 @@ def cataleg():
 @app.route('/admin/run-migrations')
 @admin_required
 def admin_run_migrations():
-    """TEMPORAL: re-executa init_db() per aplicar ALTER TABLE pendents a producció.
-    init_db() és idempotent (CREATE TABLE IF NOT EXISTS + ALTER TABLE ADD COLUMN
-    IF NOT EXISTS per PG), així que es pot cridar múltiples vegades sense efectes
-    destructius. Eliminar aquesta ruta un cop PG estigui migrat."""
-    try:
-        init_db()
-        return "Migracions executades correctament"
-    except Exception as e:
-        import traceback
-        return f"Error: {e}\n\n{traceback.format_exc()}", 500
+    """TEMPORAL: aplica només els ALTER TABLE / CREATE TABLE estrictament necessaris
+    per al v2 price model. NO crida init_db() perquè a Postgres entra en bucle
+    (DDL + seeds + backfill no acaben). Eliminar la ruta un cop PG estigui migrat."""
+    alteracions = [
+        # Moldures
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS merma_pct DECIMAL(4,2) DEFAULT 10.00",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS minim_cm DECIMAL(6,1) DEFAULT 100.0",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        # Vidres
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        # Encolat
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        # Passpartout
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        # Comandes
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS cost_unitari DECIMAL(8,4)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS pvd_unitari DECIMAL(8,4)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_admin_snap DECIMAL(5,2)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_pro_snap DECIMAL(5,2)",
+        # Usuaris
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_pro_pct DECIMAL(5,2)",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_impressio_pro_pct DECIMAL(5,2)",
+        # Historial de preus de cost
+        """CREATE TABLE IF NOT EXISTS historial_preus_cost (
+            id SERIAL PRIMARY KEY,
+            taula_origen VARCHAR(50) NOT NULL,
+            referencia VARCHAR(50) NOT NULL,
+            preu_cost_ant DECIMAL(8,4) NOT NULL,
+            preu_cost_nou DECIMAL(8,4) NOT NULL,
+            data_canvi TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            usuari_id INTEGER NOT NULL,
+            motiu TEXT
+        )""",
+    ]
+
+    resultats = []
+    for sql in alteracions:
+        try:
+            execute(sql)
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            resultats.append(f"SKIP: {str(e)[:120]}")
+    return "<br>".join(resultats)
 
 
 @app.route('/admin/debug-fotos')
