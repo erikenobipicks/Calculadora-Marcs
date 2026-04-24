@@ -1,21 +1,27 @@
 {# Shared admin-only grouped links, included inside each page's <nav>.
-   Respects session.is_admin — intended to replace the old two admin links
-   (Pendents albarà + Admin) with the new grouped structure. #}
+   Mateixos grups que els cards del panell /admin perquè la navegació
+   sigui coherent en ambdós llocs. #}
 {% if session.is_admin %}
-  <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
+  <span class="nav-label">Pressupostos</span>
+  <a href="/historial">Pressupostos</a>
+  <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Gestió</span>
   <a href="/admin#clients">Clients</a>
   <a href="/admin/feedback">Feedback</a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Tarifes</span>
-  <a href="/admin/preus-cost">Preus cost</a>
+  <a href="/admin/preus-cost">Preus de cost</a>
   <a href="/admin/tarifes/actualitzar">Actualització</a>
+  <a href="/ajustos">Marges</a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Catàleg</span>
-  <a href="/admin/cataleg">Admin</a>
+  <a href="/admin/cataleg">Catàleg admin</a>
+  <a href="/cataleg">Catàleg públic</a>
   <a href="/admin/passpartous">Passpartú</a>
   <a href="/admin/impressio">Impressió</a>
   <span class="nav-sep" aria-hidden="true">|</span>
+  <span class="nav-label">Sistema</span>
   <a href="/admin#config">Configuració</a>
+  <a href="/admin/db-status">Estat BD</a>
 {% endif %}
