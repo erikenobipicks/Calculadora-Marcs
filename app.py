@@ -2629,28 +2629,28 @@ def admin_run_migrations():
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS data_cost DATE",
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
         # Vidres
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS data_cost DATE",
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
         # Encolat
         "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
         "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
         "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS data_cost DATE",
         "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
         "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
         # Passpartout
         "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
         "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
         "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS data_cost DATE",
         "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
         "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS cost_verificat BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
         # Comandes
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS cost_unitari DECIMAL(8,4)",
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS pvd_unitari DECIMAL(8,4)",
@@ -2659,41 +2659,52 @@ def admin_run_migrations():
         # Usuaris
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_pro_pct DECIMAL(5,2)",
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_impressio_pro_pct DECIMAL(5,2)",
-        # Historial de preus de cost
+        # Historial de preus de cost — noms de columna alineats amb el codi
+        # existent (taula, preu_cost_antic, data, notes).
         """CREATE TABLE IF NOT EXISTS historial_preus_cost (
             id SERIAL PRIMARY KEY,
-            taula_origen VARCHAR(50) NOT NULL,
+            taula VARCHAR(50) NOT NULL,
             referencia VARCHAR(50) NOT NULL,
-            preu_cost_ant DECIMAL(8,4) NOT NULL,
+            preu_cost_antic DECIMAL(8,4) NOT NULL,
             preu_cost_nou DECIMAL(8,4) NOT NULL,
-            data_canvi TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            data TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             usuari_id INTEGER NOT NULL,
-            motiu TEXT
+            notes TEXT
         )""",
     ]
 
     resultats = []
+    db = get_db()
     for sql in alteracions:
         try:
             execute(sql)
             resultats.append(f"OK: {sql[:80].strip()}…")
         except Exception as e:
+            # A PG, una sentència fallida deixa la transacció en estat aborted
+            # i tota la resta del loop fallaria. Rollback explícit per recuperar.
+            try:
+                db.rollback()
+            except Exception:
+                pass
             resultats.append(f"SKIP: {str(e)[:120]}")
 
-    # Heavy seeds: moguts fora de init_db() per no penjar l'arrencada dels
-    # workers a PG. Aquí els disparem manualment, amb el statement_timeout
-    # de la connexió com a xarxa de seguretat.
-    db = get_db()
-    try:
-        _seed_proeco_preus(db, use_pg=USE_PG)
-        resultats.append("OK: _seed_proeco_preus")
-    except Exception as e:
-        resultats.append(f"SKIP _seed_proeco_preus: {str(e)[:120]}")
-    try:
-        _run_v2_price_backfill(db)
-        resultats.append("OK: _run_v2_price_backfill")
-    except Exception as e:
-        resultats.append(f"SKIP _run_v2_price_backfill: {str(e)[:120]}")
+    # Operacions pesades: totes mogudes aquí des de init_db() per no penjar
+    # l'arrencada dels workers a PG. Cadascuna amb el seu try/except + rollback.
+    for nom, fn in [
+        ("_seed_proeco_preus",      lambda: _seed_proeco_preus(db, use_pg=USE_PG)),
+        ("_seed_intermol_moldures", lambda: _seed_intermol_moldures(db, use_pg=USE_PG)),
+        ("_fix_ref2_errors",        lambda: _fix_ref2_errors(db, use_pg=USE_PG)),
+        ("_run_v2_price_backfill",  lambda: _run_v2_price_backfill(db)),
+    ]:
+        try:
+            fn()
+            resultats.append(f"OK: {nom}")
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP {nom}: {str(e)[:120]}")
 
     return "<br>".join(resultats)
 
@@ -5102,11 +5113,10 @@ def init_db():
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
-            # NOTA: _seed_proeco_preus i _run_v2_price_backfill s'invoquen ara
-            # només des de /admin/run-migrations per evitar que penjuin
-            # l'arrencada dels workers a PG.
-            _seed_intermol_moldures(db, use_pg=True)
-            _fix_ref2_errors(db, use_pg=True)
+            # NOTA: tota operació pesada (_seed_proeco_preus, _seed_intermol_moldures,
+            # _fix_ref2_errors, _run_v2_price_backfill) s'invoca ara només des de
+            # /admin/run-migrations. init_db() es queda amb CREATE/ALTER + config seeds
+            # + admin bootstrap perquè l'arrencada del worker no penji a PG.
             db.commit()
         else:
             db.executescript('''
@@ -5294,10 +5304,8 @@ def init_db():
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
-            # Veure nota a la branca PG: _seed_proeco_preus i el backfill v2
-            # s'executen ara només via /admin/run-migrations.
-            _seed_intermol_moldures(db, use_pg=False)
-            _fix_ref2_errors(db, use_pg=False)
+            # Veure nota a la branca PG: tota operació pesada s'executa ara només
+            # via /admin/run-migrations.
             db.commit()
 
 
