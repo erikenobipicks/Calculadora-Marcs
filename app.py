@@ -3343,6 +3343,16 @@ def admin():
     impressio = query('SELECT * FROM impressio ORDER BY preu') or []
     return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio)
 
+@app.route('/admin/usuaris')
+@admin_required
+def admin_usuaris():
+    """Pàgina dedicada a gestió d'usuaris (clients professionals). El POST
+    continua a /admin/usuari (singular) per compatibilitat amb els forms
+    existents — aquí només renderitzem el llistat."""
+    usuaris = query('SELECT * FROM usuaris ORDER BY nom')
+    return render_template('admin_usuaris.html', usuaris=usuaris)
+
+
 @app.route('/admin/usuari', methods=['POST'])
 @admin_required
 def admin_usuari():
@@ -3375,25 +3385,29 @@ def admin_usuari():
                  request.form.get('notes_validacio', '').strip(),
                  request.form['uid']])
         flash('Perfil professional actualitzat.', 'ok')
-    return redirect(url_for('admin'))
+    return redirect(url_for('admin_usuaris'))
 
-@app.route('/admin/config', methods=['POST'])
+@app.route('/admin/config', methods=['GET', 'POST'])
 @admin_required
 def admin_config():
-    execute("UPDATE config SET valor=? WHERE clau='marge_defecte'",
-            [request.form.get('marge', 60)])
-    # Toggle marge pro
-    mpa = '1' if request.form.get('marge_pro_actiu') else '0'
-    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('marge_pro_actiu', ?)", [mpa])
-    if request.form.get('save_gmail'):
-        gu = request.form.get('gmail_user','').strip()
-        gp = request.form.get('gmail_pass','').strip().replace(' ','')
-        if gu:
-            execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_user", ?)', [gu])
-        if gp:
-            execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
-    flash('Configuració desada.', 'ok')
-    return redirect(url_for('admin'))
+    if request.method == 'POST':
+        execute("UPDATE config SET valor=? WHERE clau='marge_defecte'",
+                [request.form.get('marge', 60)])
+        # Toggle marge pro
+        mpa = '1' if request.form.get('marge_pro_actiu') else '0'
+        execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('marge_pro_actiu', ?)", [mpa])
+        if request.form.get('save_gmail'):
+            gu = request.form.get('gmail_user','').strip()
+            gp = request.form.get('gmail_pass','').strip().replace(' ','')
+            if gu:
+                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_user", ?)', [gu])
+            if gp:
+                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
+        flash('Configuració desada.', 'ok')
+        return redirect(url_for('admin_config'))
+
+    config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
+    return render_template('admin_config.html', config=config)
 
 # ── Factura Directa ───────────────────────────────────────────────────────
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
