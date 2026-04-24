@@ -2293,11 +2293,12 @@ def moldura_options():
 @app.route('/api/marge')
 @login_required
 def get_marge():
-    u = query('SELECT marge, marge_impressio, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    u = query('SELECT marge, marge_pro_pct, marge_impressio, marge_impressio_pro_pct, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
     marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
-    marge = float(u['marge']) if u and u['marge'] is not None else 60
-    marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
-    if not marge_pro_actiu:
+    if marge_pro_actiu:
+        marge = float(_row_get(u, 'marge_pro_pct') or _row_get(u, 'marge') or 60)
+        marge_imp = float(_row_get(u, 'marge_impressio_pro_pct') or _row_get(u, 'marge_impressio') or 0)
+    else:
         marge = 0.0
         marge_imp = 0.0
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
@@ -2437,6 +2438,25 @@ def guardar():
     d = request.json
     comanda_id = d.get('comanda_id')  # if set → UPDATE existing row
 
+    # Snapshot dels marges del professional en el moment de guardar.
+    # marge_pro_snap congela el % aplicat perquè futurs canvis a usuaris.marge_pro_pct
+    # no alterin la reimpressió de pressupostos antics.
+    marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
+    usuari = query('SELECT marge_pro_pct, marge FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    if marge_pro_actiu:
+        marge_pro_snap = float(_row_get(usuari, 'marge_pro_pct') or _row_get(usuari, 'marge') or 0)
+    else:
+        marge_pro_snap = 0.0
+
+    qty = float(d.get('quantitat') or 1) or 1.0
+    cost_produccio = float(d.get('cost_produccio') or 0)
+    # pvd_unitari: cost per unit amb marge admin aplicat (el que retorna /api/closest com a 'pvd').
+    # cost_produccio ja ve amb marge admin aplicat (suma de CLOSEST[k].preu × qty), per tant:
+    pvd_unitari = round(cost_produccio / qty, 4) if qty else 0.0
+    # cost_unitari: cost workshop sense marge admin. Requereix desglòs per categoria que el
+    # payload actual no envia; queda NULL fins que el frontend enviï el detall.
+    cost_unitari = None
+
     # Common field values
     vals_comuns = [
         d.get('client_nom',''), d.get('client_tel',''),
@@ -2449,9 +2469,10 @@ def guardar():
         d.get('final_amplada',0), d.get('final_alcada',0),
         d.get('marge',60), d.get('descompte',0), d.get('quantitat',1),
         d.get('preu_net',0), d.get('preu_final',0),
-        float(d.get('cost_produccio') or 0),
+        cost_produccio,
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''), d.get('opcio_nom','Opció A'), d.get('lang','ca'),
+        cost_unitari, pvd_unitari, marge_pro_snap,
     ]
 
     if comanda_id:
@@ -2467,7 +2488,8 @@ def guardar():
                 tipus_peca=?, tipus_peca_detall=?, final_amplada=?, final_alcada=?,
                 marge=?, descompte=?, quantitat=?,
                 preu_net=?, preu_final=?, cost_produccio=?,
-                entrega=?, pendent=?, observacions=?, opcio_nom=?, lang=?
+                entrega=?, pendent=?, observacions=?, opcio_nom=?, lang=?,
+                cost_unitari=?, pvd_unitari=?, marge_pro_snap=?
                 WHERE id=? AND user_id=?''',
                 vals_comuns + [comanda_id, session['user_id']])
             return jsonify({'ok': True, 'id': existing['id'],
@@ -2485,10 +2507,12 @@ def guardar():
          tipus_peca, tipus_peca_detall, final_amplada, final_alcada,
          marge, descompte, quantitat,
          preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
-         sessio_id, opcio_nom, num_pressupost, lang)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+         sessio_id, opcio_nom, num_pressupost, lang,
+         cost_unitari, pvd_unitari, marge_pro_snap)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
         [session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M')] +
-        vals_comuns[:27] + [sessio_id] + [vals_comuns[27]] + [num_pressupost] + [vals_comuns[28]]
+        vals_comuns[:27] + [sessio_id] + [vals_comuns[27]] + [num_pressupost] + [vals_comuns[28]] +
+        vals_comuns[29:32]
     )
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
