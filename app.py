@@ -2299,13 +2299,26 @@ def moldura_options():
 @login_required
 def get_marge():
     u = query('SELECT marge, marge_pro_pct, marge_impressio, marge_impressio_pro_pct, nom_empresa, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?', [session['user_id']], one=True)
-    marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
+    # Prioritat clara: marge_pro_pct > marge (legacy) > 60.
+    # margins_json NO s'ha de fer servir per al marge general — només per a
+    # categories específiques (albums, canvas…) si se n'afegeixen en el futur.
+    marge_pro_actiu = get_config_value('marge_pro_actiu', '0') == '1'
     if marge_pro_actiu:
-        marge = float(_row_get(u, 'marge_pro_pct') or _row_get(u, 'marge') or 60)
-        marge_imp = float(_row_get(u, 'marge_impressio_pro_pct') or _row_get(u, 'marge_impressio') or 0)
+        marge = float(
+            _row_get(u, 'marge_pro_pct') or
+            _row_get(u, 'marge') or
+            60
+        )
     else:
         marge = 0.0
-        marge_imp = 0.0
+    # marge_impressio es calcula sempre, independentment del flag, perquè
+    # marge_impressio_pro_pct és un valor específic de la impressió que no
+    # hauria de quedar a 0 només pel fet que el flag d'overrides està off.
+    marge_imp = float(
+        _row_get(u, 'marge_impressio_pro_pct') or
+        _row_get(u, 'marge_impressio') or
+        0
+    )
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
     brand_color_secondary = _normalize_hex_color(
@@ -2783,10 +2796,22 @@ def admin_run_migrations():
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
-    Sense @admin_required perquè necessitem poder-lo usar quan auth està
-    trencat; només requereix sessió d'admin al cookie. Eliminar la ruta
-    un cop la BD estigui estable."""
-    if not session.get('is_admin'):
+
+    Accés permès si es compleix qualsevol de les dues condicions:
+      1. Sessió d'admin al cookie (funcionament normal).
+      2. Paràmetre ?token=<valor> que coincideixi amb l'env var DB_STATUS_TOKEN.
+
+    La via 2 existeix per poder usar la ruta quan l'auth o la BD estan
+    trencades. Configura DB_STATUS_TOKEN a Railway i visita-la així:
+        /admin/db-status?token=<valor>
+
+    Si DB_STATUS_TOKEN no està definida, només serveix via admin session.
+    Eliminar aquesta ruta un cop la BD estigui estable."""
+    token_env = (os.environ.get('DB_STATUS_TOKEN') or '').strip()
+    token_req = (request.args.get('token') or '').strip()
+    is_admin  = bool(session.get('is_admin'))
+    token_ok  = bool(token_env) and hmac.compare_digest(token_env, token_req)
+    if not (is_admin or token_ok):
         return 'No autoritzat', 403
 
     import traceback
