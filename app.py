@@ -2301,11 +2301,14 @@ def admin_preus_cost_update():
 @admin_required
 def admin_tarifes_actualitzar():
     """Eina d'actualització global de tarifes per categoria.
-    GET  → renderitza el formulari.
-    POST → accio='previsualitzar' retorna JSON amb el càlcul sense aplicar;
-           accio='aplicar' escriu els nous preus a la taula i registra cada
-           canvi a historial_preus_cost. Usa statement_timeout com a xarxa
-           de seguretat (get_db() ja l'aplica per defecte)."""
+    Dues famílies de categories:
+      - Taules (moldures, vidres, passpartout) → UPDATE de la columna preu_cost
+        per cada fila amb preu_cost no nul, amb snapshot (preu_cost_ant) i
+        entrada a historial_preus_cost.
+      - Config (mirall, encolat_foam, laminat_semibrillo, laminat_mate, protter) →
+        UPDATE de les claus corresponents a la taula config. El protter és un
+        composite i actualitza dues claus (foam + laminat_semibrillo), de manera
+        que incrementar protter un N% equival a incrementar les dues materials."""
     if request.method == 'GET':
         return render_template('admin_tarifes_actualitzar.html')
 
@@ -2317,32 +2320,56 @@ def admin_tarifes_actualitzar():
     except ValueError:
         return jsonify({'error': 'Valor no numèric'}), 400
 
-    categories_valides = ['moldures', 'vidres', 'encolat_pro', 'passpartout']
-    if categoria not in categories_valides:
+    # Categories sobre taules físiques (cada fila té preu_cost propi).
+    TAULES_CATEGORIES = ['moldures', 'vidres', 'passpartout']
+    # Categories sobre claus de config (un cost per cm2 global per categoria).
+    CONFIG_CATEGORIES = {
+        'mirall':             ['mirall_cost_cm2'],
+        'encolat_foam':       ['foam_cost_cm2'],
+        'laminat_semibrillo': ['laminat_semibrillo_cost_cm2'],
+        'laminat_mate':       ['laminat_mate_cost_cm2'],
+        # Protter = foam + laminat semibrillo → incrementar les dues claus.
+        'protter':            ['foam_cost_cm2', 'laminat_semibrillo_cost_cm2'],
+    }
+
+    if categoria not in TAULES_CATEGORIES and categoria not in CONFIG_CATEGORIES:
         return jsonify({'error': 'Categoria no vàlida'}), 400
     if accio not in ('previsualitzar', 'aplicar'):
         return jsonify({'error': "Acció ha de ser 'previsualitzar' o 'aplicar'"}), 400
 
-    # Llegir preus actuals (només referències amb preu_cost no nul)
-    rows = query(
-        f"SELECT referencia, preu_cost FROM {categoria} "
-        f"WHERE preu_cost IS NOT NULL ORDER BY referencia"
-    ) or []
-
     previsualitzacio = []
-    for r in rows:
-        cost_actual = float(r['preu_cost'])
-        # Tant 'percent' com 'material' apliquen el mateix càlcul proporcional:
-        # cost_nou = cost_actual × (1 + valor/100). La diferència és semàntica
-        # (en mode 'material' el valor representa la pujada del material font).
-        cost_nou = round(cost_actual * (1 + valor / 100), 4)
-        diff_pct = round((cost_nou / cost_actual - 1) * 100, 1) if cost_actual else 0.0
-        previsualitzacio.append({
-            'referencia':  r['referencia'],
-            'cost_actual': cost_actual,
-            'cost_nou':    cost_nou,
-            'diff_pct':    diff_pct,
-        })
+    if categoria in TAULES_CATEGORIES:
+        rows = query(
+            f"SELECT referencia, preu_cost FROM {categoria} "
+            f"WHERE preu_cost IS NOT NULL ORDER BY referencia"
+        ) or []
+        for r in rows:
+            cost_actual = float(r['preu_cost'])
+            cost_nou = round(cost_actual * (1 + valor / 100), 4)
+            diff_pct = round((cost_nou / cost_actual - 1) * 100, 1) if cost_actual else 0.0
+            previsualitzacio.append({
+                'referencia':  r['referencia'],
+                'cost_actual': cost_actual,
+                'cost_nou':    cost_nou,
+                'diff_pct':    diff_pct,
+            })
+    else:
+        # CONFIG_CATEGORIES: cada entrada és una clau de config (cost_cm2).
+        # Tractem cada clau com una "referència" i mantenim 6 decimals
+        # perquè els cost_cm2 són valors petits (~0.00x).
+        for clau in CONFIG_CATEGORIES[categoria]:
+            val_actual_str = get_config_value(clau, None)
+            if val_actual_str is None:
+                continue
+            cost_actual = float(val_actual_str)
+            cost_nou = round(cost_actual * (1 + valor / 100), 6)
+            diff_pct = round((cost_nou / cost_actual - 1) * 100, 1) if cost_actual else 0.0
+            previsualitzacio.append({
+                'referencia':  clau,
+                'cost_actual': cost_actual,
+                'cost_nou':    cost_nou,
+                'diff_pct':    diff_pct,
+            })
 
     if accio == 'previsualitzar':
         import hashlib
@@ -2361,24 +2388,44 @@ def admin_tarifes_actualitzar():
     notes = f'Actualització global {metode} {"+" if valor >= 0 else ""}{valor}%'
     aplicats = 0
     errors = []
-    for p in previsualitzacio:
-        try:
-            execute(
-                f"UPDATE {categoria} SET "
-                f"preu_cost_ant = preu_cost, preu_cost = ?, data_cost = ?, "
-                f"usuari_cost_id = ?, notes_cost = ?, cost_verificat = 1 "
-                f"WHERE referencia = ?",
-                [p['cost_nou'], ara, admin_id, notes, p['referencia']],
-            )
-            execute(
-                "INSERT INTO historial_preus_cost "
-                "(taula, referencia, preu_cost_antic, preu_cost_nou, usuari_id, notes) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                [categoria, p['referencia'], p['cost_actual'], p['cost_nou'], admin_id, notes],
-            )
-            aplicats += 1
-        except Exception as e:
-            errors.append({'referencia': p['referencia'], 'error': str(e)[:120]})
+
+    if categoria in TAULES_CATEGORIES:
+        for p in previsualitzacio:
+            try:
+                execute(
+                    f"UPDATE {categoria} SET "
+                    f"preu_cost_ant = preu_cost, preu_cost = ?, data_cost = ?, "
+                    f"usuari_cost_id = ?, notes_cost = ?, cost_verificat = 1 "
+                    f"WHERE referencia = ?",
+                    [p['cost_nou'], ara, admin_id, notes, p['referencia']],
+                )
+                execute(
+                    "INSERT INTO historial_preus_cost "
+                    "(taula, referencia, preu_cost_antic, preu_cost_nou, usuari_id, notes) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    [categoria, p['referencia'], p['cost_actual'], p['cost_nou'], admin_id, notes],
+                )
+                aplicats += 1
+            except Exception as e:
+                errors.append({'referencia': p['referencia'], 'error': str(e)[:120]})
+    else:
+        # Config categories: UPDATE config SET valor per cada clau.
+        for p in previsualitzacio:
+            try:
+                execute(
+                    "UPDATE config SET valor = ? WHERE clau = ?",
+                    [str(p['cost_nou']), p['referencia']],
+                )
+                execute(
+                    "INSERT INTO historial_preus_cost "
+                    "(taula, referencia, preu_cost_antic, preu_cost_nou, usuari_id, notes) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    ['config', p['referencia'], p['cost_actual'], p['cost_nou'], admin_id, notes],
+                )
+                aplicats += 1
+            except Exception as e:
+                errors.append({'referencia': p['referencia'], 'error': str(e)[:120]})
+
     return jsonify({'ok': True, 'aplicats': aplicats, 'errors': errors})
 
 
