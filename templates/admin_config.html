@@ -51,28 +51,52 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
   <div class="page-title">Configuració global</div>
   <div class="page-subtitle">Paràmetres compartits per a tots els usuaris i totes les categories. Els canvis aquí afecten la lògica de càlcul de costos i PVP.</div>
 
+  <div class="section" style="background:#F5F3EC">
+    <div class="section-title" style="border:none;margin-bottom:.5rem">Com funcionen els marges</div>
+    <div class="muted" style="line-height:1.75">
+      Hi ha <strong>tres tipus de marges</strong> diferents a l'app:<br>
+      <b>1. Marge admin per categoria</b> — cost del material → PVD (preu al distribuïdor/professional). Es gestiona <strong>en aquesta mateixa pàgina</strong>.<br>
+      <b>2. Marge professional</b> — PVD → PVP client final. Un valor per cada usuari professional. Es gestiona a <a href="/admin/usuaris">Clients</a>.<br>
+      <b>3. Marges personals (overrides)</b> — cada professional pot ajustar els seus propis marges per categoria des de la seva pàgina <code>/ajustos</code> (només afecta els seus pressupostos).
+    </div>
+  </div>
+
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}
       <div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>
     {% endfor %}
   {% endwith %}
 
-  <div class="section">
-    <div class="section-title">Marge per defecte</div>
-    <form method="post" action="/admin/config">
+  <form method="post" action="/admin/config">
+
+    <div class="section">
+      <div class="section-title">Marges admin per categoria (cost → PVD)</div>
+      <p class="muted" style="margin-bottom:1rem">Percentatge que s'afegeix al preu de cost de cada material per obtenir el PVD (preu al professional).</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:1rem">
+        {% for key, label in admin_marges %}
+        <div>
+          <label>{{ label }} (%)</label>
+          <input type="number" name="marge_admin_{{ key }}_pct" value="{{ config.get('marge_admin_' ~ key ~ '_pct', '60') }}" min="0" max="500" step="0.1">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Marge professional per defecte i flag global</div>
       <label>Marge de benefici per defecte (%)</label>
-      <p class="hint">Aplicat als comptes nous i a l'operativa general del taller. Recomanació: 60.</p>
+      <p class="hint">S'aplica als comptes nous. Recomanació: 60. Per editar el marge d'un usuari concret, vés a <a href="/admin/usuaris">Clients</a>.</p>
       <input type="number" name="marge" value="{{ config.get('marge_defecte', 60) }}" min="0" max="200">
 
       <label class="check-row">
         <input type="checkbox" name="marge_pro_actiu" value="1" {% if config.get('marge_pro_actiu','1')=='1' %}checked{% endif %}>
         <span>Marge professional actiu</span>
       </label>
-      <p class="hint">Si es desactiva, els professionals veuen preus PVD (preu de cost + marge admin) sense el seu marge aplicat.</p>
+      <p class="hint">Si es desactiva, els professionals veuen preus PVD (preu de cost + marge admin) sense el seu marge personal aplicat.</p>
+    </div>
 
-      <button type="submit" class="btn btn-primary" style="margin-top:.5rem">Desar</button>
-    </form>
-  </div>
+    <button type="submit" class="btn btn-primary" style="margin-bottom:1rem">Desar configuració</button>
+  </form>
 
   <div class="section">
     <div class="section-title">Claus de configuració actuals</div>

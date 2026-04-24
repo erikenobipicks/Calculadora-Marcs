@@ -3337,11 +3337,21 @@ def generar_pdf(comanda_id):
 def admin():
     usuaris = query('SELECT * FROM usuaris ORDER BY nom')
     config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
-    # Passpartú, ProEco (obsolet) i Impressió ja no es llisten al panell
-    # principal — tenen pàgines dedicades (/admin/passpartous, /admin/impressio).
-    # El comptador de tarifes d'impressió encara surt a les stats d'aquí.
-    impressio = query('SELECT * FROM impressio ORDER BY preu') or []
-    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio)
+
+    # Stats operatives per al panell. data a comandes es guarda com a text
+    # 'dd/mm/YYYY HH:MM', així que filtrem per substring del mes+any.
+    now = datetime.now()
+    pat_mes = f"%/{now.strftime('%m')}/{now.strftime('%Y')}%"
+    row = query('SELECT COUNT(*) AS n FROM comandes WHERE data LIKE ?', [pat_mes], one=True)
+    def _estat(u):
+        return (_row_get(u, 'access_status', '') or 'active').lower()
+    stats = {
+        'pressupostos_mes':   row['n'] if row else 0,
+        'usuaris_total':      len(usuaris) if usuaris else 0,
+        'usuaris_pendents':   sum(1 for u in (usuaris or []) if _estat(u) == 'pending'),
+        'usuaris_bloquejats': sum(1 for u in (usuaris or []) if _estat(u) == 'blocked'),
+    }
+    return render_template('admin.html', usuaris=usuaris, config=config, stats=stats)
 
 @app.route('/admin/usuaris')
 @admin_required
@@ -3387,6 +3397,14 @@ def admin_usuari():
         flash('Perfil professional actualitzat.', 'ok')
     return redirect(url_for('admin_usuaris'))
 
+ADMIN_MARGE_CATEGORIES = [
+    ('moldures',  'Moldures'),
+    ('vidres',    'Vidres'),
+    ('encolat',   'Encolat / Laminat'),
+    ('passpartu', 'Passpartú'),
+]
+
+
 @app.route('/admin/config', methods=['GET', 'POST'])
 @admin_required
 def admin_config():
@@ -3396,6 +3414,14 @@ def admin_config():
         # Toggle marge pro
         mpa = '1' if request.form.get('marge_pro_actiu') else '0'
         execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('marge_pro_actiu', ?)", [mpa])
+        # Marges admin per categoria (cost → PVD).
+        for cat, _ in ADMIN_MARGE_CATEGORIES:
+            val = request.form.get(f'marge_admin_{cat}_pct')
+            if val is not None and val != '':
+                execute(
+                    "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                    [f'marge_admin_{cat}_pct', str(val)],
+                )
         if request.form.get('save_gmail'):
             gu = request.form.get('gmail_user','').strip()
             gp = request.form.get('gmail_pass','').strip().replace(' ','')
@@ -3407,7 +3433,11 @@ def admin_config():
         return redirect(url_for('admin_config'))
 
     config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
-    return render_template('admin_config.html', config=config)
+    return render_template(
+        'admin_config.html',
+        config=config,
+        admin_marges=ADMIN_MARGE_CATEGORIES,
+    )
 
 # ── Factura Directa ───────────────────────────────────────────────────────
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')

@@ -80,17 +80,10 @@ tr:last-child td{border-bottom:none}
 (function(){var b=document.getElementById('nav-pendents-badge');if(!b)return;function u(){fetch('/api/pendents-albara').then(r=>r.json()).then(d=>{b.textContent=d.n;b.style.display=d.n?'inline-block':'none'}).catch(()=>{})}setInterval(u,60000)})();
 </script>
 <div class="container">
-  {% set ns = namespace(admins=0, pendents=0, bloquejats=0) %}
-  {% for u in usuaris %}
-    {% if u.is_admin %}{% set ns.admins = ns.admins + 1 %}{% endif %}
-    {% if (u.access_status or 'active') == 'pending' %}{% set ns.pendents = ns.pendents + 1 %}{% endif %}
-    {% if (u.access_status or 'active') == 'blocked' %}{% set ns.bloquejats = ns.bloquejats + 1 %}{% endif %}
-  {% endfor %}
-
   <div class="hero">
     <div>
       <div class="page-title">Panell d'administració</div>
-      <div class="page-subtitle">Centralitza des d'aquí usuaris, configuració general i tarifes d'impressió.</div>
+      <div class="page-subtitle">Resum operatiu i accessos a totes les eines d'administració.</div>
     </div>
   </div>
 
@@ -204,10 +197,10 @@ tr:last-child td{border-bottom:none}
   {% endwith %}
 
   <div class="stats">
-    <div class="stat"><span>Usuaris</span><strong>{{ usuaris|length }}</strong><small>{{ ns.admins }} admins i {{ usuaris|length - ns.admins }} professionals</small></div>
-    <div class="stat"><span>Validació pendent</span><strong>{{ ns.pendents }}</strong><small>Comptes pendents de revisió</small></div>
-    <div class="stat"><span>Bloquejats</span><strong>{{ ns.bloquejats }}</strong><small>Usuaris sense accés actiu</small></div>
-    <div class="stat"><span>Tarifes impressió</span><strong>{{ impressio|length }}</strong><small>Formats de cost carregats</small></div>
+    <div class="stat"><span>Pressupostos aquest mes</span><strong>{{ stats.pressupostos_mes }}</strong><small>Comandes creades al mes en curs</small></div>
+    <div class="stat"><span>Pendents albarà</span><strong>{{ nav_pendents_albara }}</strong><small>Acceptats sense número d'albarà</small></div>
+    <div class="stat"><span>Usuaris actius</span><strong>{{ stats.usuaris_total }}</strong><small>{{ stats.usuaris_pendents }} pendents · {{ stats.usuaris_bloquejats }} bloquejats</small></div>
+    <div class="stat"><span>Validació pendent</span><strong>{{ stats.usuaris_pendents }}</strong><small>Comptes per revisar</small></div>
   </div>
 
   <div class="section">

@@ -1,26 +1,26 @@
 {# Shared admin-only grouped links, included inside each page's <nav>.
-   Mateixos grups que els cards del panell /admin perquè la navegació
-   sigui coherent en ambdós llocs. #}
+   Els icones emoji van embed-ats als textos. Són subtils i ajuden al
+   reconeixement ràpid dels grups sense fer la nav massa sorollosa. #}
 {% if session.is_admin %}
   <span class="nav-label">Pressupostos</span>
-  <a href="/historial">Pressupostos</a>
-  <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
+  <a href="/historial">📄 Pressupostos</a>
+  <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">⏳ Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Gestió</span>
-  <a href="/admin/usuaris">Clients</a>
-  <a href="/admin/feedback">Feedback</a>
+  <a href="/admin/usuaris">👥 Clients</a>
+  <a href="/admin/feedback">💬 Feedback</a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Tarifes</span>
-  <a href="/admin/preus-cost">Preus de cost</a>
-  <a href="/admin/tarifes/actualitzar">Actualització</a>
-  <a href="/ajustos">Marges</a>
+  <a href="/admin/preus-cost">💰 Preus de cost</a>
+  <a href="/admin/tarifes/actualitzar">🔄 Actualització</a>
+  <a href="/ajustos">📊 Marges</a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Catàleg</span>
-  <a href="/admin/cataleg">Catàleg admin</a>
-  <a href="/cataleg">Catàleg públic</a>
-  <a href="/admin/passpartous">Passpartú</a>
-  <a href="/admin/impressio">Impressió</a>
+  <a href="/admin/cataleg">📚 Catàleg admin</a>
+  <a href="/cataleg">🔍 Catàleg públic</a>
+  <a href="/admin/passpartous">🖼️ Passpartú</a>
+  <a href="/admin/impressio">🖨️ Impressió</a>
   <span class="nav-sep" aria-hidden="true">|</span>
   <span class="nav-label">Sistema</span>
-  <a href="/admin/config">Configuració</a>
+  <a href="/admin/config">⚙️ Configuració</a>
 {% endif %}
