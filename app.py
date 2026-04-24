@@ -643,6 +643,32 @@ def _user_access_status(user):
     return status or 'active'
 
 
+def _get_marge_value(u):
+    """Marge professional efectiu. Prioritat: marge_pro_pct > marge > 60.
+    Fa servir 'is not None' en lloc de 'or' perquè un valor explícit de 0
+    és legítim (admin, col·laborador intern) i no hauria de caure al
+    fallback de 60."""
+    val = _row_get(u, 'marge_pro_pct')
+    if val is not None:
+        return float(val)
+    val = _row_get(u, 'marge')
+    if val is not None:
+        return float(val)
+    return 60.0
+
+
+def _get_marge_impressio_value(u):
+    """Marge d'impressió. Prioritat: marge_impressio_pro_pct > marge_impressio > 0.
+    Mateix raonament que _get_marge_value — 0 és legítim."""
+    val = _row_get(u, 'marge_impressio_pro_pct')
+    if val is not None:
+        return float(val)
+    val = _row_get(u, 'marge_impressio')
+    if val is not None:
+        return float(val)
+    return 0.0
+
+
 def _user_is_allowed(user):
     return bool(user) and (bool(_row_get(user, 'is_admin', 0)) or _user_access_status(user) == 'active')
 
@@ -2030,8 +2056,8 @@ def calculadora():
     user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio FROM usuaris WHERE id=?', [session['user_id']], one=True)
     brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
     marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
-    marge_pro = float(_row_get(user, 'marge_pro_pct') or _row_get(user, 'marge') or 60) if marge_pro_actiu else 0.0
-    marge_imp_pro = float(_row_get(user, 'marge_impressio_pro_pct') or _row_get(user, 'marge_impressio') or 0) if marge_pro_actiu else 0.0
+    marge_pro = _get_marge_value(user) if marge_pro_actiu else 0.0
+    marge_imp_pro = _get_marge_impressio_value(user) if marge_pro_actiu else 0.0
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
@@ -2304,21 +2330,13 @@ def get_marge():
     # categories específiques (albums, canvas…) si se n'afegeixen en el futur.
     marge_pro_actiu = get_config_value('marge_pro_actiu', '0') == '1'
     if marge_pro_actiu:
-        marge = float(
-            _row_get(u, 'marge_pro_pct') or
-            _row_get(u, 'marge') or
-            60
-        )
+        marge = _get_marge_value(u)
     else:
         marge = 0.0
     # marge_impressio es calcula sempre, independentment del flag, perquè
     # marge_impressio_pro_pct és un valor específic de la impressió que no
     # hauria de quedar a 0 només pel fet que el flag d'overrides està off.
-    marge_imp = float(
-        _row_get(u, 'marge_impressio_pro_pct') or
-        _row_get(u, 'marge_impressio') or
-        0
-    )
+    marge_imp = _get_marge_impressio_value(u)
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
     brand_color_secondary = _normalize_hex_color(
@@ -2462,7 +2480,7 @@ def guardar():
     marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
     usuari = query('SELECT marge_pro_pct, marge FROM usuaris WHERE id=?', [session['user_id']], one=True)
     if marge_pro_actiu:
-        marge_pro_snap = float(_row_get(usuari, 'marge_pro_pct') or _row_get(usuari, 'marge') or 0)
+        marge_pro_snap = _get_marge_value(usuari)
     else:
         marge_pro_snap = 0.0
 
