@@ -261,6 +261,45 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   <div class="cols">
     <!-- COL ESQUERRA -->
     <div class="left-col">
+      {% if is_admin %}
+      <!-- Selector de mode pressupost (només visible per a admin) -->
+      <div id="admin-mode-toggle" style="margin-bottom:.75rem">
+        <button type="button" onclick="toggleAdminMode()"
+                style="font-size:.8rem; padding:.3rem .7rem;
+                       border-radius:6px; border:1px solid var(--border);
+                       background:transparent; cursor:pointer; opacity:.7">
+          ⚙ Mode pressupost
+        </button>
+        <div id="admin-mode-selector" style="display:none;
+             margin-top:.5rem; padding:.75rem;
+             border:1px solid var(--border);
+             border-radius:8px; background:var(--card)">
+          <div style="font-size:.8rem; opacity:.6; margin-bottom:.5rem">
+            Mode de pressupost (només visible per admin)
+          </div>
+          <div style="display:flex; gap:1rem">
+            <label style="display:flex; align-items:center;
+                          gap:.4rem; cursor:pointer; font-size:.9rem">
+              <input type="radio" name="admin-mode"
+                     value="taller" checked
+                     onchange="canviarModeAdmin('taller')">
+              Taller
+            </label>
+            <label style="display:flex; align-items:center;
+                          gap:.4rem; cursor:pointer; font-size:.9rem">
+              <input type="radio" name="admin-mode"
+                     value="client"
+                     onchange="canviarModeAdmin('client')">
+              Client
+            </label>
+          </div>
+          <div id="admin-mode-desc"
+               style="font-size:.75rem; opacity:.5; margin-top:.4rem">
+            Mostrant PVD — preu al distribuïdor
+          </div>
+        </div>
+      </div>
+      {% endif %}
       <div class="card client-card">
         <div class="card-t">Dades del client</div>
         <div class="client-grid">
@@ -597,6 +636,26 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 <script>
 var MARGE_PRO = {{ marge_pro | tojson }};
 var MARGE_IMPRESSIO_PRO = {{ marge_impressio_pro | tojson }};
+var IS_ADMIN = {{ is_admin | tojson }};
+var adminModeExtra = 0.0;  // % extra aplicat al PVP final en mode client (només admin)
+
+function toggleAdminMode(){
+  var sel = document.getElementById('admin-mode-selector');
+  if(!sel) return;
+  sel.style.display = (sel.style.display === 'none' || !sel.style.display) ? 'block' : 'none';
+}
+
+function canviarModeAdmin(mode){
+  var desc = document.getElementById('admin-mode-desc');
+  if(mode === 'client'){
+    adminModeExtra = 60.0;
+    if(desc) desc.textContent = 'Mostrant PVP — preu al client final (+60%)';
+  } else {
+    adminModeExtra = 0.0;
+    if(desc) desc.textContent = 'Mostrant PVD — preu al distribuïdor';
+  }
+  if(typeof calcular === 'function') calcular();
+}
 
 function toggleMobileNav(btn){
   var nav = btn.closest('nav');
@@ -1921,7 +1980,10 @@ function calcular(){
   var pvpMarc = cMol*(1+marge/100);
   var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra)*(1+marge/100);
   var pvpImp  = cImpressio*(1+(marge_impressio||marge)/100);
-  var pNet    = (pvpMarc+pvpExt+pvpImp)*qty;
+  // Mode admin: si l'admin escull "client", aplica un +60% extra sobre el PVP
+  // per simular el preu al client final. Usuaris no-admin mai toquen aquest factor.
+  var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
+  var pNet    = (pvpMarc+pvpExt+pvpImp)*qty*factorModeAdmin;
 
   // Descompte sobre PVP, mai sobre cost
   var descEur  = pNet*(desc/100);
