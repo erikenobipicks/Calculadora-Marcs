@@ -3290,11 +3290,11 @@ def generar_pdf(comanda_id):
 def admin():
     usuaris = query('SELECT * FROM usuaris ORDER BY nom')
     config = {r['clau']: r['valor'] for r in query('SELECT * FROM config')}
-    impressio = query('SELECT * FROM impressio ORDER BY preu')
-    passpartous = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
-    proeco_rows = query('SELECT referencia, preu FROM proeco ORDER BY referencia') or []
-    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio,
-                           passpartous=passpartous, proeco_rows=proeco_rows)
+    # Passpartú, ProEco (obsolet) i Impressió ja no es llisten al panell
+    # principal — tenen pàgines dedicades (/admin/passpartous, /admin/impressio).
+    # El comptador de tarifes d'impressió encara surt a les stats d'aquí.
+    impressio = query('SELECT * FROM impressio ORDER BY preu') or []
+    return render_template('admin.html', usuaris=usuaris, config=config, impressio=impressio)
 
 @app.route('/admin/usuari', methods=['POST'])
 @admin_required
@@ -3751,24 +3751,28 @@ def api_passpartous():
     } for r in rows])
 
 
-@app.route('/admin/passpartous', methods=['POST'])
+@app.route('/admin/passpartous', methods=['GET', 'POST'])
 @admin_required
 def admin_passpartous():
-    action = request.form.get('action')
-    if action == 'crear':
-        ref = request.form.get('referencia', '').strip().upper()
-        color = request.form.get('color', '').strip()
-        textura = request.form.get('textura', '').strip()
-        descripcio = request.form.get('descripcio', '').strip()
-        if ref:
-            execute('INSERT OR REPLACE INTO passpartout (referencia, color, textura, descripcio) VALUES (?,?,?,?)',
-                    [ref, color, textura, descripcio])
-            flash(f'Referència {ref} desada.', 'ok')
-    elif action == 'eliminar':
-        ref = request.form.get('ref', '').strip()
-        execute('DELETE FROM passpartout WHERE referencia=?', [ref])
-        flash('Referència eliminada.', 'ok')
-    return redirect(url_for('admin'))
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'crear':
+            ref = request.form.get('referencia', '').strip().upper()
+            color = request.form.get('color', '').strip()
+            textura = request.form.get('textura', '').strip()
+            descripcio = request.form.get('descripcio', '').strip()
+            if ref:
+                execute('INSERT OR REPLACE INTO passpartout (referencia, color, textura, descripcio) VALUES (?,?,?,?)',
+                        [ref, color, textura, descripcio])
+                flash(f'Referència {ref} desada.', 'ok')
+        elif action == 'eliminar':
+            ref = request.form.get('ref', '').strip()
+            execute('DELETE FROM passpartout WHERE referencia=?', [ref])
+            flash('Referència eliminada.', 'ok')
+        return redirect(url_for('admin_passpartous'))
+
+    passpartous = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    return render_template('admin_passpartous.html', passpartous=passpartous)
 
 
 @app.route('/admin/proeco', methods=['POST'])
@@ -3792,20 +3796,24 @@ def admin_proeco():
     return redirect(url_for('admin'))
 
 
-@app.route('/admin/impressio', methods=['POST'])
+@app.route('/admin/impressio', methods=['GET', 'POST'])
 @admin_required
 def admin_impressio():
-    action = request.form.get('action')
-    if action == 'crear':
-        ref = request.form.get('referencia','').strip().upper()
-        desc = request.form.get('descripcio','').strip()
-        preu = float(request.form.get('preu', 0))
-        execute('INSERT OR REPLACE INTO impressio VALUES (?,?,?)', [ref, desc, preu])
-        flash(f'Format {ref} desat.', 'ok')
-    elif action == 'eliminar':
-        execute('DELETE FROM impressio WHERE referencia=?', [request.form.get('ref')])
-        flash('Format eliminat.', 'ok')
-    return redirect(url_for('admin'))
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'crear':
+            ref = request.form.get('referencia','').strip().upper()
+            desc = request.form.get('descripcio','').strip()
+            preu = float(request.form.get('preu', 0))
+            execute('INSERT OR REPLACE INTO impressio VALUES (?,?,?)', [ref, desc, preu])
+            flash(f'Format {ref} desat.', 'ok')
+        elif action == 'eliminar':
+            execute('DELETE FROM impressio WHERE referencia=?', [request.form.get('ref')])
+            flash('Format eliminat.', 'ok')
+        return redirect(url_for('admin_impressio'))
+
+    impressio = query('SELECT referencia, descripcio, preu FROM impressio ORDER BY referencia') or []
+    return render_template('admin_impressio.html', impressio=impressio)
 
 @app.route('/admin/foto', methods=['POST'])
 @admin_required
