@@ -2067,7 +2067,8 @@ def calculadora():
                            brand_color_light=_mix_with_white(brand_color),
                            marge_pro_actiu=marge_pro_actiu,
                            marge_pro=marge_pro,
-                           marge_impressio_pro=marge_imp_pro)
+                           marge_impressio_pro=marge_imp_pro,
+                           is_admin=1 if session.get('is_admin') else 0)
 
 @app.route('/api/lookup')
 @login_required
