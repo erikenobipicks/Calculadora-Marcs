@@ -2780,6 +2780,83 @@ def admin_run_migrations():
     return "<br>".join(resultats)
 
 
+@app.route('/admin/db-status')
+def admin_db_status():
+    """TEMPORAL: diagnòstic complet de l'estat de la BD.
+    Sense @admin_required perquè necessitem poder-lo usar quan auth està
+    trencat; només requereix sessió d'admin al cookie. Eliminar la ruta
+    un cop la BD estigui estable."""
+    if not session.get('is_admin'):
+        return 'No autoritzat', 403
+
+    import traceback
+    try:
+        result = {}
+
+        if USE_PG:
+            taules_sql = (
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='public' ORDER BY table_name"
+            )
+        else:
+            taules_sql = (
+                "SELECT name AS table_name FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        taules_rows = query(taules_sql) or []
+        result['taules'] = [r['table_name'] for r in taules_rows]
+
+        # Comptar files per taula (protegit per si alguna fa error)
+        counts = {}
+        for t in result['taules']:
+            try:
+                r = query(f"SELECT COUNT(*) AS n FROM {t}", one=True)
+                counts[t] = r['n'] if r else 0
+            except Exception as e:
+                counts[t] = f'error: {str(e)[:60]}'
+        result['counts'] = counts
+
+        def _cols(taula):
+            if USE_PG:
+                rows = query(
+                    "SELECT column_name, data_type FROM information_schema.columns "
+                    "WHERE table_name=%s ORDER BY ordinal_position",
+                    [taula],
+                ) or []
+                return [{'nom': r['column_name'], 'tipus': r['data_type']} for r in rows]
+            else:
+                rows = query(f'PRAGMA table_info({taula})') or []
+                return [{'nom': r['name'], 'tipus': r['type']} for r in rows]
+
+        result['usuaris_columnes']  = _cols('usuaris')
+        result['moldures_columnes'] = _cols('moldures')
+        result['comandes_columnes'] = _cols('comandes')
+        result['historial_columnes'] = _cols('historial_preus_cost')
+
+        try:
+            result['usuaris_mostra'] = query(
+                'SELECT id, username, nom, is_admin, marge, '
+                'marge_pro_pct, marge_impressio_pro_pct FROM usuaris LIMIT 3'
+            ) or []
+        except Exception as e:
+            result['usuaris_mostra'] = f'error: {str(e)[:120]}'
+
+        try:
+            cfg_rows = query(
+                "SELECT clau, valor FROM config WHERE clau IN ("
+                "'marge_pro_actiu','marge_defecte','migration_v2_done',"
+                "'marge_admin_moldures_pct','cost_hora_taller')"
+            ) or []
+            result['config'] = {r['clau']: r['valor'] for r in cfg_rows}
+        except Exception as e:
+            result['config'] = f'error: {str(e)[:120]}'
+
+        result['use_pg'] = USE_PG
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
 @app.route('/admin/debug-fotos')
 @admin_required
 def admin_debug_fotos():
