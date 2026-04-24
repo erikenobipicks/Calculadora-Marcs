@@ -172,8 +172,29 @@ tr:last-child td{border-bottom:none}
     <h3>Sistema</h3>
     <div class="admin-cards">
       <a href="/admin/config" class="admin-card">Configuració</a>
-      <a href="/admin/db-status" class="admin-card">Estat BD</a>
     </div>
+    <details style="margin-top:.85rem">
+      <summary style="cursor:pointer;font-size:12px;color:var(--hint);user-select:none">
+        Sistema avançat · eines de diagnòstic i migració
+      </summary>
+      <div class="admin-cards" style="margin-top:.6rem">
+        <a href="/admin/db-status" class="admin-card">
+          <div class="admin-card-icon">🩺</div>
+          <div>Estat BD</div>
+          <small>Schema, counts, 3 usuaris de mostra</small>
+        </a>
+        <a href="/admin/taules-preus" class="admin-card">
+          <div class="admin-card-icon">📐</div>
+          <div>Simulació lookup</div>
+          <small>Taules de vidres/encolat amb cerca per mida</small>
+        </a>
+        <a href="/admin/run-migrations" class="admin-card">
+          <div class="admin-card-icon">🔧</div>
+          <div>Re-executar migracions</div>
+          <small>TEMPORAL · eliminar un cop estable</small>
+        </a>
+      </div>
+    </details>
   </div>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}

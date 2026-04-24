@@ -3836,25 +3836,9 @@ def admin_passpartous():
     return render_template('admin_passpartous.html', passpartous=passpartous)
 
 
-@app.route('/admin/proeco', methods=['POST'])
-@admin_required
-def admin_proeco():
-    action = request.form.get('action')
-    if action == 'crear':
-        ref = request.form.get('referencia', '').strip().upper()
-        preu = float(request.form.get('preu', 0))
-        if ref:
-            execute('INSERT OR REPLACE INTO proeco (referencia, preu) VALUES (?,?)', [ref, preu])
-            flash(f'ProEco {ref} desat.', 'ok')
-    elif action == 'eliminar':
-        execute('DELETE FROM proeco WHERE referencia=?', [request.form.get('ref')])
-        flash('Preu ProEco eliminat.', 'ok')
-    elif action == 'editar':
-        ref = request.form.get('ref', '').strip().upper()
-        preu = float(request.form.get('preu', 0))
-        execute('UPDATE proeco SET preu=? WHERE referencia=?', [preu, ref])
-        flash(f'ProEco {ref} actualitzat.', 'ok')
-    return redirect(url_for('admin'))
+# NOTA: /admin/proeco eliminat. ProEco és obsolet (àlies de foam) i ja no té
+# UI per crear/editar/eliminar. Les files existents a la taula `proeco` es
+# mantenen com a alias de lectura per a pressupostos antics (via calcular_cost_foam).
 
 
 @app.route('/admin/impressio', methods=['GET', 'POST'])
