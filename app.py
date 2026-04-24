@@ -478,7 +478,12 @@ else:
 def get_db():
     if 'db' not in g:
         if USE_PG:
-            g.db = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+            g.db = psycopg2.connect(
+                DATABASE_URL,
+                cursor_factory=psycopg2.extras.RealDictCursor,
+                connect_timeout=10,
+                options='-c statement_timeout=30000',
+            )
         else:
             g.db = sqlite3.connect(DB)
             g.db.row_factory = sqlite3.Row
@@ -2674,6 +2679,22 @@ def admin_run_migrations():
             resultats.append(f"OK: {sql[:80].strip()}…")
         except Exception as e:
             resultats.append(f"SKIP: {str(e)[:120]}")
+
+    # Heavy seeds: moguts fora de init_db() per no penjar l'arrencada dels
+    # workers a PG. Aquí els disparem manualment, amb el statement_timeout
+    # de la connexió com a xarxa de seguretat.
+    db = get_db()
+    try:
+        _seed_proeco_preus(db, use_pg=USE_PG)
+        resultats.append("OK: _seed_proeco_preus")
+    except Exception as e:
+        resultats.append(f"SKIP _seed_proeco_preus: {str(e)[:120]}")
+    try:
+        _run_v2_price_backfill(db)
+        resultats.append("OK: _run_v2_price_backfill")
+    except Exception as e:
+        resultats.append(f"SKIP _run_v2_price_backfill: {str(e)[:120]}")
+
     return "<br>".join(resultats)
 
 
@@ -4875,9 +4896,14 @@ def init_db():
     with app.app_context():
         db = get_db()
         if USE_PG:
-            # Use a SEPARATE connection with autocommit for DDL
+            # Use a SEPARATE connection with autocommit for DDL.
+            # Timeouts evitten que un bloqueig a PG penji l'arrencada del worker.
             import psycopg2 as _pg2
-            ddl_conn = _pg2.connect(DATABASE_URL)
+            ddl_conn = _pg2.connect(
+                DATABASE_URL,
+                connect_timeout=10,
+                options='-c statement_timeout=30000',
+            )
             ddl_conn.autocommit = True
             ddl_cur = ddl_conn.cursor()
             ddl = [
@@ -5076,7 +5102,9 @@ def init_db():
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
-            _seed_proeco_preus(db, use_pg=True)
+            # NOTA: _seed_proeco_preus i _run_v2_price_backfill s'invoquen ara
+            # només des de /admin/run-migrations per evitar que penjuin
+            # l'arrencada dels workers a PG.
             _seed_intermol_moldures(db, use_pg=True)
             _fix_ref2_errors(db, use_pg=True)
             db.commit()
@@ -5266,13 +5294,11 @@ def init_db():
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
-            _seed_proeco_preus(db, use_pg=False)
+            # Veure nota a la branca PG: _seed_proeco_preus i el backfill v2
+            # s'executen ara només via /admin/run-migrations.
             _seed_intermol_moldures(db, use_pg=False)
             _fix_ref2_errors(db, use_pg=False)
             db.commit()
-
-        # --- v2 price model: one-time backfill (runs once, guarded by flag) ---
-        _run_v2_price_backfill(db)
 
 
 def _run_v2_price_backfill(db):
