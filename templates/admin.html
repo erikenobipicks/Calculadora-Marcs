@@ -147,8 +147,8 @@ tr:last-child td{border-bottom:none}
     <div class="admin-cards">
       <a href="/admin/cataleg" class="admin-card">Catàleg admin</a>
       <a href="/cataleg" class="admin-card">Catàleg públic</a>
-      <a href="#passpartous" class="admin-card">Passpartú</a>
-      <a href="#impressio" class="admin-card">Impressió</a>
+      <a href="/admin/passpartous" class="admin-card">Passpartú</a>
+      <a href="/admin/impressio" class="admin-card">Impressió</a>
     </div>
   </div>
 
@@ -236,114 +236,6 @@ tr:last-child td{border-bottom:none}
         </form>
       </div>
 
-      <div class="section" id="passpartous">
-        <div class="section-title">Referències de passpartú</div>
-        <p class="muted" style="margin-bottom:1rem">Gestiona les referències de passpartú (P001, P002...) amb color i textura. El preu es calcula automàticament per mida; aquí només es defineix l'estètica.</p>
-        <form method="post" action="/admin/passpartous" style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
-          <input type="hidden" name="action" value="crear">
-          <div><label>Referència</label><input type="text" name="referencia" placeholder="P001" required></div>
-          <div><label>Color</label><input type="text" name="color" placeholder="Blanc trencat"></div>
-          <div><label>Textura</label><input type="text" name="textura" placeholder="Llis"></div>
-          <div><label>Descripció</label><input type="text" name="descripcio" placeholder="Blanc trencat llis estàndard"></div>
-          <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
-        </form>
-        <div class="table-wrap">
-        <table style="font-size:12px">
-          <thead><tr><th>Referència</th><th>Color</th><th>Textura</th><th>Descripció</th><th></th></tr></thead>
-          <tbody>
-          {% for p in passpartous %}
-          <tr>
-            <td style="font-weight:600;color:#0984e3">{{ p.referencia }}</td>
-            <td>{{ p.color }}</td>
-            <td>{{ p.textura }}</td>
-            <td>{{ p.descripcio }}</td>
-            <td>
-              <form method="post" action="/admin/passpartous" style="display:inline">
-                <input type="hidden" name="action" value="eliminar">
-                <input type="hidden" name="ref" value="{{ p.referencia }}">
-                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-          {% if not passpartous %}<tr><td colspan="5" style="color:#aaa;text-align:center;padding:.75rem">Cap referència afegida encara.</td></tr>{% endif %}
-          </tbody>
-        </table>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Tarifes ProEco <span style="display:inline-block;padding:2px 8px;border-radius:10px;background:#FEF3C7;color:#92400E;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle">OBSOLET · àlies de foam</span></div>
-        <p class="muted" style="margin-bottom:1rem">⚠ ProEco és un producte obsolet. Es manté per compatibilitat amb pressupostos antics. Les noves comandes usen automàticament el càlcul de foam (encolat_pro). Els canvis aquí no afecten els nous pressupostos.</p>
-        <form method="post" action="/admin/proeco" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
-          <input type="hidden" name="action" value="crear">
-          <div><label>Referència</label><input type="text" name="referencia" placeholder="PROECO3040" required style="text-transform:uppercase"></div>
-          <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="15.51" required></div>
-          <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
-        </form>
-        <div class="table-wrap">
-        <table style="font-size:12px">
-          <thead><tr><th>Referència</th><th>Mida</th><th>Preu cost</th><th>Editar</th><th></th></tr></thead>
-          <tbody>
-          {% for p in proeco_rows %}
-          {% set dims = p.referencia[6:] %}
-          <tr>
-            <td style="font-weight:600;color:#6c5ce7">{{ p.referencia }}</td>
-            <td style="color:var(--muted)">{{ dims[:2] }}×{{ dims[2:] }} cm</td>
-            <td>
-              <form method="post" action="/admin/proeco" style="display:inline-flex;gap:.3rem;align-items:center">
-                <input type="hidden" name="action" value="editar">
-                <input type="hidden" name="ref" value="{{ p.referencia }}">
-                <input type="number" name="preu" step="0.01" value="{{ "%.2f"|format(p.preu) }}" style="width:80px;padding:3px 6px;font-size:12px;border:1px solid #dfe6e9;border-radius:4px">
-                <button type="submit" class="btn btn-sm" style="background:#f0f4ff;color:#6c5ce7;border:1px solid #c7d2fe;padding:2px 8px">✓</button>
-              </form>
-            </td>
-            <td>
-              <form method="post" action="/admin/proeco" style="display:inline">
-                <input type="hidden" name="action" value="eliminar">
-                <input type="hidden" name="ref" value="{{ p.referencia }}">
-                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar {{ p.referencia }}?')">×</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        </div>
-        <hr style="margin:2rem 0">
-
-        <div id="impressio"></div>
-        <div class="section-title">Tarifes d'impressió fotogràfica</div>
-        <p class="muted" style="margin-bottom:1rem">Afegeix, revisa o elimina formats de cost d'impressió. Aquest bloc queda separat perquè sigui més fàcil mantenir-lo sense barrejar-lo amb usuaris.</p>
-        <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
-          <input type="hidden" name="action" value="crear">
-          <div><label>Referència</label><input type="text" name="referencia" placeholder="IMP30x40" required></div>
-          <div><label>Descripció</label><input type="text" name="descripcio" placeholder="30x40 cm" required></div>
-          <div><label>Preu cost (€)</label><input type="number" name="preu" step="0.01" placeholder="2.80" required></div>
-          <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
-        </form>
-        <div class="table-wrap">
-        <table style="font-size:12px">
-          <thead><tr><th>Referència</th><th>Descripció</th><th>Preu cost</th><th></th></tr></thead>
-          <tbody>
-          {% for f in impressio %}
-          <tr>
-            <td style="font-weight:600;color:#0984e3">{{ f.referencia }}</td>
-            <td>{{ f.descripcio }}</td>
-            <td>{{ "%.2f"|format(f.preu) }} €</td>
-            <td>
-              <form method="post" action="/admin/impressio" style="display:inline">
-                <input type="hidden" name="action" value="eliminar">
-                <input type="hidden" name="ref" value="{{ f.referencia }}">
-                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        </div>
-      </div>
     </div>
 
     <div class="stack">

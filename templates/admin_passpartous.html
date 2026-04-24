@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Passpartú</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:var(--nav);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+nav .brand{color:var(--nav-text);font-family:'DM Serif Display',serif;font-size:20px;order:1}
+nav .links{display:flex;align-items:center;gap:1rem;order:3;flex-wrap:wrap}
+nav .links a{color:var(--nav-muted);text-decoration:none;font-size:13px;font-weight:500}
+nav .links a:hover{color:var(--nav-text)}
+nav .nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid color-mix(in srgb, var(--nav-text) 18%, transparent);border-radius:10px;background:transparent;color:var(--nav-text);font-size:20px;cursor:pointer;order:2;margin-left:auto}
+.container{max-width:1100px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;margin-bottom:.25rem}
+.muted{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;background:#fff}
+input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-danger{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}
+.btn-sm{padding:6px 11px;font-size:12px}
+.alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.alert-err{background:var(--red-l);border:1px solid #F1B9B9;color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
+td{padding:12px;border-bottom:1px solid #F3F1EB;vertical-align:top}
+tr:last-child td{border-bottom:none}
+@media(max-width:980px){
+  nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
+  nav .nav-toggle{display:flex}
+  nav .links{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
+  nav.nav-open .links{display:flex}
+}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>
+function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }
+</script>
+
+<div class="container">
+  <div class="page-title">Referències de passpartú</div>
+  <div class="muted">Gestiona les referències de passpartú (P001, P002…) amb color i textura. El preu es calcula automàticament per mida; aquí només es defineix l'estètica.</div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="section">
+    <form method="post" action="/admin/passpartous" style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+      <input type="hidden" name="action" value="crear">
+      <div><label>Referència</label><input type="text" name="referencia" placeholder="P001" required></div>
+      <div><label>Color</label><input type="text" name="color" placeholder="Blanc trencat"></div>
+      <div><label>Textura</label><input type="text" name="textura" placeholder="Llis"></div>
+      <div><label>Descripció</label><input type="text" name="descripcio" placeholder="Blanc trencat llis estàndard"></div>
+      <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Afegir</button>
+    </form>
+    <div class="table-wrap">
+      <table style="font-size:12px">
+        <thead><tr><th>Referència</th><th>Color</th><th>Textura</th><th>Descripció</th><th></th></tr></thead>
+        <tbody>
+          {% for p in passpartous %}
+          <tr>
+            <td style="font-weight:600;color:#0984e3">{{ p.referencia }}</td>
+            <td>{{ p.color }}</td>
+            <td>{{ p.textura }}</td>
+            <td>{{ p.descripcio }}</td>
+            <td>
+              <form method="post" action="/admin/passpartous" style="display:inline">
+                <input type="hidden" name="action" value="eliminar">
+                <input type="hidden" name="ref" value="{{ p.referencia }}">
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Eliminar?')">×</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not passpartous %}<tr><td colspan="5" style="color:#aaa;text-align:center;padding:.75rem">Cap referència afegida encara.</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>
