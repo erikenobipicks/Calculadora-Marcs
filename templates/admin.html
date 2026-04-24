@@ -71,20 +71,7 @@ tr:last-child td{border-bottom:none}
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
 </head>
 <body>
-<nav class="site-nav">
-  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
-  <span class="brand">OBJECTIU — Admin</span>
-  <div class="links">
-    <a href="/">Portal</a>
-    <a href="/calculadora">Calculadora</a>
-    <a href="/historial">Historial</a>
-    <a href="/ajustos">Ajustos</a>
-    <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara }}</span></a>
-    <a href="/admin/cataleg">Cat&agrave;leg admin</a>
-    <a href="/admin/preus-cost">Preus de cost</a>
-    <a href="/logout">Sortir</a>
-  </div>
-</nav>
+{% include '_nav.html' %}
 <style>
 .nav-pendents{position:relative}
 .nav-badge{background:var(--amber,#f59e0b);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;min-width:16px;text-align:center;display:inline-block;line-height:15px}
@@ -103,14 +90,73 @@ tr:last-child td{border-bottom:none}
   <div class="hero">
     <div>
       <div class="page-title">Panell d'administració</div>
-      <div class="page-subtitle">Centralitza des d'aquí usuaris, configuració general i tarifes d'impressió. He ordenat la pantalla perquè el treball diari quedi més clar i visual.</div>
+      <div class="page-subtitle">Centralitza des d'aquí usuaris, configuració general i tarifes d'impressió.</div>
     </div>
-    <div class="hero-actions">
-      <a href="/ajustos" class="btn btn-secondary">Ajustos</a>
-      <a href="/admin/cataleg" class="btn btn-secondary">Obrir catàleg admin</a>
-      <a href="/cataleg" class="btn btn-secondary">Veure catàleg públic</a>
-      <a href="/admin/preus-cost" class="btn btn-secondary">Preus de cost</a>
-      <a href="/admin/feedback" class="btn btn-secondary">Feedback dels usuaris</a>
+  </div>
+
+  <!-- Accessos ràpids agrupats -->
+  <style>
+    .admin-card-grup{margin:1.5rem 0}
+    .admin-card-grup h3{font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:1px;margin:0 0 .75rem 0}
+    .admin-cards{display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:.75rem}
+    .admin-card{display:block;padding:1rem;border:1px solid var(--border);border-radius:10px;background:var(--card);color:inherit;text-decoration:none;transition:transform .1s, box-shadow .1s}
+    .admin-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.06)}
+    .admin-card-icon{font-size:1.4rem;margin-bottom:.35rem}
+    .admin-card small{display:block;color:var(--hint);font-size:.75rem;margin-top:.2rem}
+  </style>
+
+  <div class="admin-card-grup">
+    <h3>Tarifes</h3>
+    <div class="admin-cards">
+      <a href="/admin/preus-cost" class="admin-card">
+        <div class="admin-card-icon">💰</div>
+        <div>Preus de cost</div>
+        <small>Editar costs per material</small>
+      </a>
+      <a href="/admin/tarifes/actualitzar" class="admin-card">
+        <div class="admin-card-icon">🔄</div>
+        <div>Actualització global</div>
+        <small>% increment o nou preu material</small>
+      </a>
+      <a href="/ajustos" class="admin-card">
+        <div class="admin-card-icon">📊</div>
+        <div>Marges</div>
+        <small>Marges per categoria</small>
+      </a>
+    </div>
+  </div>
+
+  <div class="admin-card-grup">
+    <h3>Gestió</h3>
+    <div class="admin-cards">
+      <a href="#clients" class="admin-card">
+        <div class="admin-card-icon">👥</div>
+        <div>Clients</div>
+        <small>Usuaris professionals</small>
+      </a>
+      <a href="/admin/feedback" class="admin-card">
+        <div class="admin-card-icon">💬</div>
+        <div>Feedback</div>
+        <small>Missatges dels usuaris</small>
+      </a>
+    </div>
+  </div>
+
+  <div class="admin-card-grup">
+    <h3>Catàleg</h3>
+    <div class="admin-cards">
+      <a href="/admin/cataleg" class="admin-card">Catàleg admin</a>
+      <a href="/cataleg" class="admin-card">Catàleg públic</a>
+      <a href="#passpartous" class="admin-card">Passpartú</a>
+      <a href="#impressio" class="admin-card">Impressió</a>
+    </div>
+  </div>
+
+  <div class="admin-card-grup">
+    <h3>Sistema</h3>
+    <div class="admin-cards">
+      <a href="#config" class="admin-card">Configuració</a>
+      <a href="/admin/db-status" class="admin-card">Estat BD</a>
     </div>
   </div>
 
@@ -128,7 +174,7 @@ tr:last-child td{border-bottom:none}
   </div>
 
   <div class="grid">
-    <div>
+    <div id="clients">
       <div class="section">
         <div class="section-title">Alta de nou usuari professional</div>
         <p class="muted" style="margin-bottom:1rem">Crea un compte nou amb estat, perfil i dades comercials inicials. Les dades internes de validació queden guardades al mateix pas.</p>
@@ -190,7 +236,7 @@ tr:last-child td{border-bottom:none}
         </form>
       </div>
 
-      <div class="section">
+      <div class="section" id="passpartous">
         <div class="section-title">Referències de passpartú</div>
         <p class="muted" style="margin-bottom:1rem">Gestiona les referències de passpartú (P001, P002...) amb color i textura. El preu es calcula automàticament per mida; aquí només es defineix l'estètica.</p>
         <form method="post" action="/admin/passpartous" style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
@@ -266,6 +312,7 @@ tr:last-child td{border-bottom:none}
         </div>
         <hr style="margin:2rem 0">
 
+        <div id="impressio"></div>
         <div class="section-title">Tarifes d'impressió fotogràfica</div>
         <p class="muted" style="margin-bottom:1rem">Afegeix, revisa o elimina formats de cost d'impressió. Aquest bloc queda separat perquè sigui més fàcil mantenir-lo sense barrejar-lo amb usuaris.</p>
         <form method="post" action="/admin/impressio" style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
@@ -300,7 +347,7 @@ tr:last-child td{border-bottom:none}
     </div>
 
     <div class="stack">
-      <div class="section">
+      <div class="section" id="config">
         <div class="section-title">Configuració global</div>
         <p class="muted" style="margin-bottom:1rem">Aquest marge és la base comuna per als comptes nous i per a l'operativa general del taller.</p>
         <form method="post" action="/admin/config">

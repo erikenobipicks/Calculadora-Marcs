@@ -2297,6 +2297,91 @@ def admin_preus_cost_update():
                      'preu_cost_ant': preu_cost_ant, 'marge_aplicat': marge_admin})
 
 
+@app.route('/admin/tarifes/actualitzar', methods=['GET', 'POST'])
+@admin_required
+def admin_tarifes_actualitzar():
+    """Eina d'actualització global de tarifes per categoria.
+    GET  → renderitza el formulari.
+    POST → accio='previsualitzar' retorna JSON amb el càlcul sense aplicar;
+           accio='aplicar' escriu els nous preus a la taula i registra cada
+           canvi a historial_preus_cost. Usa statement_timeout com a xarxa
+           de seguretat (get_db() ja l'aplica per defecte)."""
+    if request.method == 'GET':
+        return render_template('admin_tarifes_actualitzar.html')
+
+    accio      = (request.form.get('accio') or '').strip()
+    categoria  = (request.form.get('categoria') or '').strip()
+    metode     = (request.form.get('metode') or 'percent').strip()
+    try:
+        valor = float(request.form.get('valor', '0'))
+    except ValueError:
+        return jsonify({'error': 'Valor no numèric'}), 400
+
+    categories_valides = ['moldures', 'vidres', 'encolat_pro', 'passpartout']
+    if categoria not in categories_valides:
+        return jsonify({'error': 'Categoria no vàlida'}), 400
+    if accio not in ('previsualitzar', 'aplicar'):
+        return jsonify({'error': "Acció ha de ser 'previsualitzar' o 'aplicar'"}), 400
+
+    # Llegir preus actuals (només referències amb preu_cost no nul)
+    rows = query(
+        f"SELECT referencia, preu_cost FROM {categoria} "
+        f"WHERE preu_cost IS NOT NULL ORDER BY referencia"
+    ) or []
+
+    previsualitzacio = []
+    for r in rows:
+        cost_actual = float(r['preu_cost'])
+        # Tant 'percent' com 'material' apliquen el mateix càlcul proporcional:
+        # cost_nou = cost_actual × (1 + valor/100). La diferència és semàntica
+        # (en mode 'material' el valor representa la pujada del material font).
+        cost_nou = round(cost_actual * (1 + valor / 100), 4)
+        diff_pct = round((cost_nou / cost_actual - 1) * 100, 1) if cost_actual else 0.0
+        previsualitzacio.append({
+            'referencia':  r['referencia'],
+            'cost_actual': cost_actual,
+            'cost_nou':    cost_nou,
+            'diff_pct':    diff_pct,
+        })
+
+    if accio == 'previsualitzar':
+        import hashlib
+        token = hashlib.md5(
+            json.dumps(previsualitzacio, sort_keys=True).encode('utf-8')
+        ).hexdigest()[:8]
+        return jsonify({
+            'previsualitzacio': previsualitzacio,
+            'token': token,
+            'total': len(previsualitzacio),
+        })
+
+    # accio == 'aplicar'
+    ara = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    admin_id = session.get('user_id')
+    notes = f'Actualització global {metode} {"+" if valor >= 0 else ""}{valor}%'
+    aplicats = 0
+    errors = []
+    for p in previsualitzacio:
+        try:
+            execute(
+                f"UPDATE {categoria} SET "
+                f"preu_cost_ant = preu_cost, preu_cost = ?, data_cost = ?, "
+                f"usuari_cost_id = ?, notes_cost = ?, cost_verificat = 1 "
+                f"WHERE referencia = ?",
+                [p['cost_nou'], ara, admin_id, notes, p['referencia']],
+            )
+            execute(
+                "INSERT INTO historial_preus_cost "
+                "(taula, referencia, preu_cost_antic, preu_cost_nou, usuari_id, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                [categoria, p['referencia'], p['cost_actual'], p['cost_nou'], admin_id, notes],
+            )
+            aplicats += 1
+        except Exception as e:
+            errors.append({'referencia': p['referencia'], 'error': str(e)[:120]})
+    return jsonify({'ok': True, 'aplicats': aplicats, 'errors': errors})
+
+
 @app.route('/admin/preus-cost/historial')
 @admin_required
 def admin_preus_cost_historial():
