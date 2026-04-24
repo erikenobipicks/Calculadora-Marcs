@@ -281,21 +281,21 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
             <label style="display:flex; align-items:center;
                           gap:.4rem; cursor:pointer; font-size:.9rem">
               <input type="radio" name="admin-mode"
-                     value="taller" checked
+                     value="taller"
                      onchange="canviarModeAdmin('taller')">
               Taller
             </label>
             <label style="display:flex; align-items:center;
                           gap:.4rem; cursor:pointer; font-size:.9rem">
               <input type="radio" name="admin-mode"
-                     value="client"
+                     value="client" checked
                      onchange="canviarModeAdmin('client')">
               Client
             </label>
           </div>
           <div id="admin-mode-desc"
                style="font-size:.75rem; opacity:.5; margin-top:.4rem">
-            Mostrant PVD — preu al distribuïdor
+            Mostrant PVP — preu al client final (+60%)
           </div>
         </div>
       </div>
@@ -637,7 +637,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 var MARGE_PRO = {{ marge_pro | tojson }};
 var MARGE_IMPRESSIO_PRO = {{ marge_impressio_pro | tojson }};
 var IS_ADMIN = {{ is_admin | tojson }};
-var adminModeExtra = 0.0;  // % extra aplicat al PVP final en mode client (només admin)
+var adminModeExtra = 60.0;  // % extra aplicat al PVP final en mode client (default). Només admin.
 
 function toggleAdminMode(){
   var sel = document.getElementById('admin-mode-selector');
