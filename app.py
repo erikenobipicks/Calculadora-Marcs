@@ -2617,9 +2617,33 @@ def cataleg():
 @app.route('/admin/run-migrations')
 @admin_required
 def admin_run_migrations():
-    """TEMPORAL: aplica només els ALTER TABLE / CREATE TABLE estrictament necessaris
-    per al v2 price model. NO crida init_db() perquè a Postgres entra en bucle
-    (DDL + seeds + backfill no acaben). Eliminar la ruta un cop PG estigui migrat."""
+    """TEMPORAL: únic punt d'inicialització/migració de la BD.
+
+    Es crida manualment per un admin després de cada deploy amb canvis de schema.
+    Fa en ordre:
+      1. init_db() — CREATE TABLE + ALTER ADD COLUMN + seeds de config + admin bootstrap
+      2. ALTER TABLE ADD COLUMN IF NOT EXISTS redundants (safety net)
+      3. Seeds i backfill pesats (ProEco, Intermol cleanup, v2 price backfill)
+      4. Conversions de tipus per a DBs desplegades abans (cost_verificat BOOLEAN→INTEGER)
+      5. Renames de columnes històriques (historial_preus_cost)
+
+    Cada pas amb try/except + rollback individual perquè una fallada no bloqui la resta.
+    Eliminar aquesta ruta un cop la BD estigui alineada a totes les instàncies."""
+
+    resultats = []
+    db = get_db()
+
+    # 1) init_db() (CREATE TABLE + ALTER + seeds lleugers)
+    try:
+        init_db()
+        resultats.append("OK: init_db()")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        resultats.append(f"SKIP init_db(): {str(e)[:120]}")
+
     alteracions = [
         # Moldures
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
@@ -2698,6 +2722,10 @@ def admin_run_migrations():
     ]:
         try:
             fn()
+            try:
+                db.commit()
+            except Exception:
+                pass
             resultats.append(f"OK: {nom}")
         except Exception as e:
             try:
@@ -2705,6 +2733,49 @@ def admin_run_migrations():
             except Exception:
                 pass
             resultats.append(f"SKIP {nom}: {str(e)[:120]}")
+
+    # Catch-up migrations per a DBs desplegades amb schema intermedi.
+    # Només s'executen a PG (SQLite no té tipus estrictes i aquestes fallen
+    # allà però el SKIP és inofensiu).
+    if USE_PG:
+        # BOOLEAN → INTEGER: a PG cal DROP DEFAULT, ALTER TYPE amb USING, SET DEFAULT.
+        # Si la columna ja és INTEGER les sentències fallen i es registren com a SKIP.
+        bool_to_int = []
+        for t in ('moldures', 'vidres', 'encolat_pro', 'passpartout'):
+            bool_to_int += [
+                f"ALTER TABLE {t} ALTER COLUMN cost_verificat DROP DEFAULT",
+                f"ALTER TABLE {t} ALTER COLUMN cost_verificat TYPE INTEGER "
+                f"USING (CASE WHEN cost_verificat THEN 1 ELSE 0 END)",
+                f"ALTER TABLE {t} ALTER COLUMN cost_verificat SET DEFAULT 0",
+            ]
+        for sql in bool_to_int:
+            try:
+                execute(sql)
+                resultats.append(f"OK: {sql[:80].strip()}…")
+            except Exception as e:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                resultats.append(f"SKIP: {str(e)[:120]}")
+
+        # historial_preus_cost: renoms per alinear noms antics → nous.
+        renames = [
+            "ALTER TABLE historial_preus_cost RENAME COLUMN taula_origen TO taula",
+            "ALTER TABLE historial_preus_cost RENAME COLUMN preu_cost_ant TO preu_cost_antic",
+            "ALTER TABLE historial_preus_cost RENAME COLUMN data_canvi TO data",
+            "ALTER TABLE historial_preus_cost RENAME COLUMN motiu TO notes",
+        ]
+        for sql in renames:
+            try:
+                execute(sql)
+                resultats.append(f"OK: {sql[:80].strip()}…")
+            except Exception as e:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                resultats.append(f"SKIP: {str(e)[:120]}")
 
     return "<br>".join(resultats)
 
@@ -5344,27 +5415,10 @@ def _run_v2_price_backfill(db):
     print("v2 price backfill complete.")
 
 
-# Init DB via before_first_request equivalent
-_db_initialized = False
-
-@app.before_request
-def ensure_db():
-    global _db_initialized
-    if not _db_initialized:
-        try:
-            init_db()
-            # Ensure config rows exist
-            for clau, valor in [('empresa_nom','Reus Revela'), ('empresa_adreca',''), ('empresa_tel',''), ('marge_defecte','60')]:
-                try:
-                    execute('INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)', [clau, valor])
-                except Exception as _ce:
-                    pass  # Row may already exist
-            _db_initialized = True
-            print("init_db OK")
-        except Exception as e:
-            import traceback
-            print(f"init_db ERROR: {e}")
-            traceback.print_exc()
+# init_db() ja NO s'executa automàticament a cap request. S'invoca explícitament
+# des de /admin/run-migrations perquè els workers arranquin sempre sense tocar BD
+# (evita penjades d'arrencada a PG). Cal visitar /admin/run-migrations com a admin
+# després de cada deploy amb canvis d'schema.
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
