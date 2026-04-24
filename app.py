@@ -2202,7 +2202,12 @@ def admin_preus_cost():
     verificat = request.args.get('verificat', '')
 
     preu_orig = 'preu_taller' if taula == 'moldures' else 'preu'
-    cols = f'referencia, descripcio, preu_cost, preu_cost_ant, data_cost, cost_verificat, notes_cost, {preu_orig} as preu_original'
+    # Només 'moldures' té descripcio i proveidor; les altres (vidres, encolat_pro,
+    # passpartout) només tenen referencia + preu + columnes v2.
+    base_cols = 'referencia, '
+    if taula == 'moldures':
+        base_cols += 'descripcio, '
+    cols = f'{base_cols}preu_cost, preu_cost_ant, data_cost, cost_verificat, notes_cost, {preu_orig} as preu_original'
     if taula == 'moldures':
         cols += ', proveidor'
 
