@@ -145,7 +145,7 @@ tr:last-child td{border-bottom:none}
   <div class="admin-card-grup">
     <h3>Gestió</h3>
     <div class="admin-cards">
-      <a href="#clients" class="admin-card">
+      <a href="/admin/usuaris" class="admin-card">
         <div class="admin-card-icon">👥</div>
         <div>Clients</div>
         <small>Usuaris professionals</small>
@@ -171,7 +171,7 @@ tr:last-child td{border-bottom:none}
   <div class="admin-card-grup">
     <h3>Sistema</h3>
     <div class="admin-cards">
-      <a href="#config" class="admin-card">Configuració</a>
+      <a href="/admin/config" class="admin-card">Configuració</a>
       <a href="/admin/db-status" class="admin-card">Estat BD</a>
     </div>
   </div>
@@ -189,187 +189,13 @@ tr:last-child td{border-bottom:none}
     <div class="stat"><span>Tarifes impressió</span><strong>{{ impressio|length }}</strong><small>Formats de cost carregats</small></div>
   </div>
 
-  <div class="grid">
-    <div id="clients">
-      <div class="section">
-        <div class="section-title">Alta de nou usuari professional</div>
-        <p class="muted" style="margin-bottom:1rem">Crea un compte nou amb estat, perfil i dades comercials inicials. Les dades internes de validació queden guardades al mateix pas.</p>
-        <form method="post" action="/admin/usuari">
-          <input type="hidden" name="action" value="crear">
-          <div class="form-grid">
-            <div>
-              <label>Nom complet</label>
-              <input type="text" name="nom" placeholder="Anna García" required>
-            </div>
-            <div>
-              <label>Nom d'usuari</label>
-              <input type="text" name="username" placeholder="anna" required>
-            </div>
-            <div>
-              <label>Contrasenya</label>
-              <input type="password" name="password" required>
-            </div>
-            <div>
-              <label>Rol</label>
-              <select name="is_admin">
-                <option value="0">Usuari normal</option>
-                <option value="1">Administrador</option>
-              </select>
-            </div>
-            <div>
-              <label>Estat d'accés</label>
-              <select name="access_status">
-                <option value="active">Actiu</option>
-                <option value="pending">Pendent</option>
-                <option value="blocked">Bloquejat</option>
-              </select>
-            </div>
-            <div>
-              <label>Perfil</label>
-              <select name="profile_type">
-                <option value="professional">Professional</option>
-                <option value="studio">Estudi</option>
-                <option value="gallery">Galeria / art</option>
-                <option value="association">Associació / exposició</option>
-              </select>
-            </div>
-            <div>
-              <label>Web</label>
-              <input type="text" name="web_url" placeholder="https://...">
-            </div>
-            <div>
-              <label>Instagram</label>
-              <input type="text" name="instagram" placeholder="@perfil">
-            </div>
-            <div>
-              <label>CIF / NIF</label>
-              <input type="text" name="fiscal_id" placeholder="B12345678">
-            </div>
-          </div>
-          <label>Notes de validació</label>
-          <textarea name="notes_validacio" placeholder="Dades revisades, tipus de client, observacions internes..."></textarea>
-          <button type="submit" class="btn btn-primary">Crear usuari</button>
-        </form>
-      </div>
-
-    </div>
-
-    <div class="stack">
-      <div class="section" id="config">
-        <div class="section-title">Configuració global</div>
-        <p class="muted" style="margin-bottom:1rem">Aquest marge és la base comuna per als comptes nous i per a l'operativa general del taller.</p>
-        <form method="post" action="/admin/config">
-          <label>Marge de benefici per defecte (%)</label>
-          <p class="hint">Tots els usuaris usaran aquest marge. Recomanació: 60</p>
-          <input type="number" name="marge" value="{{ config.get('marge_defecte', 60) }}" min="0" max="200">
-          <div style="margin-top:.8rem">
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-              <input type="checkbox" name="marge_pro_actiu" value="1" {% if config.get('marge_pro_actiu','1')=='1' %}checked{% endif %}>
-              <span>Marge professional actiu</span>
-            </label>
-            <p class="hint">Si es desactiva, els professionals veuen preus PVD sense marge aplicat (preu de cost + marge admin).</p>
-          </div>
-          <button type="submit" class="btn btn-primary">Desar</button>
-        </form>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Ordre de treball</div>
-        <div class="field-stack muted">
-          <div>1. Dona d'alta o revisa l'usuari professional.</div>
-          <div>2. Ajusta l'estat d'accés i el perfil segons la validació.</div>
-          <div>3. Mantén les tarifes d'impressió actualitzades.</div>
-          <div>4. Revisa el catàleg complet des del panell de catàleg admin.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <div class="section">
-    <div class="section-title">Usuaris actuals ({{ usuaris|length }})</div>
-    <p class="muted" style="margin-bottom:1rem">Cada fila et deixa actualitzar perfil, estat, dades comercials, contrasenya i eliminació. He mantingut totes les accions però amb una lectura més neta.</p>
-    <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Compte</th>
-          <th>Perfil</th>
-          <th>Accés</th>
-          <th>Dades</th>
-          <th>Marge</th>
-          <th>Contrasenya</th>
-          <th>Eliminar</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for u in usuaris %}
-      {% set status = u.access_status or 'active' %}
-      <tr>
-        <td>
-          <div><strong>{{ u.nom }}</strong></div>
-          <div class="mono">{{ u.username }}</div>
-          <div style="margin-top:4px">{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</div>
-        </td>
-        <td>
-          <form method="post" action="/admin/usuari" class="mini-form">
-            <input type="hidden" name="action" value="actualitzar_estat">
-            <input type="hidden" name="uid" value="{{ u.id }}">
-            <select name="profile_type">
-              <option value="professional" {% if (u.profile_type or 'professional') == 'professional' %}selected{% endif %}>Professional</option>
-              <option value="studio" {% if u.profile_type == 'studio' %}selected{% endif %}>Estudi</option>
-              <option value="gallery" {% if u.profile_type == 'gallery' %}selected{% endif %}>Galeria / art</option>
-              <option value="association" {% if u.profile_type == 'association' %}selected{% endif %}>Associació / exposició</option>
-            </select>
-        </td>
-        <td>
-            <div style="margin-bottom:.4rem">
-              {% if status == 'active' %}
-                <span class="badge-active">Actiu</span>
-              {% elif status == 'pending' %}
-                <span class="badge-pending">Pendent</span>
-              {% else %}
-                <span class="badge-blocked">Bloquejat</span>
-              {% endif %}
-            </div>
-            <select name="access_status">
-              <option value="active" {% if status == 'active' %}selected{% endif %}>Actiu</option>
-              <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pendent</option>
-              <option value="blocked" {% if status == 'blocked' %}selected{% endif %}>Bloquejat</option>
-            </select>
-        </td>
-        <td>
-            <input type="text" name="web_url" value="{{ u.web_url or '' }}" placeholder="Web">
-            <input type="text" name="instagram" value="{{ u.instagram or '' }}" placeholder="Instagram">
-            <input type="text" name="fiscal_id" value="{{ u.fiscal_id or '' }}" placeholder="CIF / NIF">
-            <textarea name="notes_validacio" placeholder="Notes internes">{{ u.notes_validacio or '' }}</textarea>
-            <button type="submit" class="btn btn-primary btn-sm">Desar perfil</button>
-          </form>
-        </td>
-        <td style="font-weight:600;color:#0984e3">
-          {{ u.marge or 60 }}%<br>
-          <span style="color:#00b894">{{ u.marge_impressio or 0 }}%</span>
-        </td>
-        <td>
-          <form method="post" action="/admin/usuari" class="row-actions">
-            <input type="hidden" name="action" value="canviar_pw">
-            <input type="hidden" name="uid" value="{{ u.id }}">
-            <input type="password" name="password" placeholder="Nova contrasenya" style="margin:0;padding:4px 8px;font-size:12px;width:140px">
-            <button type="submit" class="btn btn-primary btn-sm">OK</button>
-          </form>
-        </td>
-        <td>
-          {% if u.username != 'admin' %}
-          <form method="post" action="/admin/usuari" onsubmit="return confirm('Eliminar {{ u.nom }}?')">
-            <input type="hidden" name="action" value="eliminar">
-            <input type="hidden" name="uid" value="{{ u.id }}">
-            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="section-title">Ordre de treball</div>
+    <div class="field-stack muted">
+      <div>1. Dona d'alta o revisa l'usuari professional des de <a href="/admin/usuaris">Clients</a>.</div>
+      <div>2. Ajusta l'estat d'accés i el perfil segons la validació.</div>
+      <div>3. Mantén les tarifes d'impressió actualitzades des de <a href="/admin/impressio">Impressió</a>.</div>
+      <div>4. Revisa el catàleg complet des de <a href="/admin/cataleg">Catàleg admin</a>.</div>
     </div>
   </div>
 </div>

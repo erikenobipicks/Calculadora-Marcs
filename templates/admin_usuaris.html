@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Clients</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+nav{background:var(--nav);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+nav .brand{color:var(--nav-text);font-family:'DM Serif Display',serif;font-size:20px;order:1}
+nav .links{display:flex;align-items:center;gap:1rem;order:3;flex-wrap:wrap}
+nav .links a{color:var(--nav-muted);text-decoration:none;font-size:13px;font-weight:500}
+nav .links a:hover{color:var(--nav-text)}
+nav .nav-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid color-mix(in srgb, var(--nav-text) 18%, transparent);border-radius:10px;background:transparent;color:var(--nav-text);font-size:20px;cursor:pointer;order:2;margin-left:auto}
+.container{max-width:1320px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:32px;font-weight:400;letter-spacing:-.5px;margin-bottom:.25rem}
+.page-subtitle{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:1.25rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+.section-title{font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.9rem;margin-bottom:1rem}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.1rem}
+.stat span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--hint);margin-bottom:.45rem}
+.stat strong{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;color:var(--text)}
+.stat small{display:block;font-size:12px;color:var(--muted);margin-top:.35rem}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;margin-bottom:.75rem;font-family:'DM Sans',sans-serif;background:#fff}
+textarea{min-height:70px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-danger{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}
+.btn-sm{padding:6px 11px;font-size:12px}
+.alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.alert-err{background:var(--red-l);border:1px solid #F1B9B9;color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
+td{padding:12px;border-bottom:1px solid #F3F1EB;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.badge-admin{background:var(--green-l);color:var(--green);font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
+.badge-active,.badge-pending,.badge-blocked{display:inline-block;font-size:11px;padding:4px 9px;border-radius:999px;font-weight:700}
+.badge-active{background:var(--green-l);color:var(--green)}
+.badge-pending{background:var(--amber-l);color:var(--amber)}
+.badge-blocked{background:var(--red-l);color:var(--red)}
+.hint{font-size:11px;color:var(--hint);margin-top:-4px;margin-bottom:.65rem}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
+.mono{font-family:Consolas,monospace;font-size:12px}
+.muted{font-size:12px;color:var(--muted);line-height:1.6}
+.mini-form{display:grid;gap:.5rem}
+.row-actions{display:flex;gap:.35rem;align-items:center}
+@media(max-width:980px){
+  nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
+  nav .nav-toggle{display:flex}
+  nav .links{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:.85rem;padding:.25rem 0 .5rem}
+  nav.nav-open .links{display:flex}
+  .stats{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}
+}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>
+function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }
+</script>
+
+<div class="container">
+  {% set ns = namespace(admins=0, pendents=0, bloquejats=0) %}
+  {% for u in usuaris %}
+    {% if u.is_admin %}{% set ns.admins = ns.admins + 1 %}{% endif %}
+    {% if (u.access_status or 'active') == 'pending' %}{% set ns.pendents = ns.pendents + 1 %}{% endif %}
+    {% if (u.access_status or 'active') == 'blocked' %}{% set ns.bloquejats = ns.bloquejats + 1 %}{% endif %}
+  {% endfor %}
+
+  <div class="page-title">Clients</div>
+  <div class="page-subtitle">Usuaris professionals amb accés a la calculadora. Des d'aquí pots crear-ne de nous, editar el perfil, canviar la contrasenya o eliminar-los.</div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="stats">
+    <div class="stat"><span>Usuaris</span><strong>{{ usuaris|length }}</strong><small>{{ ns.admins }} admins i {{ usuaris|length - ns.admins }} professionals</small></div>
+    <div class="stat"><span>Validació pendent</span><strong>{{ ns.pendents }}</strong><small>Comptes pendents de revisió</small></div>
+    <div class="stat"><span>Bloquejats</span><strong>{{ ns.bloquejats }}</strong><small>Usuaris sense accés actiu</small></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Alta de nou usuari professional</div>
+    <p class="muted" style="margin-bottom:1rem">Crea un compte nou amb estat, perfil i dades comercials inicials.</p>
+    <form method="post" action="/admin/usuari">
+      <input type="hidden" name="action" value="crear">
+      <div class="form-grid">
+        <div><label>Nom complet</label><input type="text" name="nom" placeholder="Anna García" required></div>
+        <div><label>Nom d'usuari</label><input type="text" name="username" placeholder="anna" required></div>
+        <div><label>Contrasenya</label><input type="password" name="password" required></div>
+        <div><label>Rol</label>
+          <select name="is_admin">
+            <option value="0">Usuari normal</option>
+            <option value="1">Administrador</option>
+          </select>
+        </div>
+        <div><label>Estat d'accés</label>
+          <select name="access_status">
+            <option value="active">Actiu</option>
+            <option value="pending">Pendent</option>
+            <option value="blocked">Bloquejat</option>
+          </select>
+        </div>
+        <div><label>Perfil</label>
+          <select name="profile_type">
+            <option value="professional">Professional</option>
+            <option value="studio">Estudi</option>
+            <option value="gallery">Galeria / art</option>
+            <option value="association">Associació / exposició</option>
+          </select>
+        </div>
+        <div><label>Web</label><input type="text" name="web_url" placeholder="https://..."></div>
+        <div><label>Instagram</label><input type="text" name="instagram" placeholder="@perfil"></div>
+        <div><label>CIF / NIF</label><input type="text" name="fiscal_id" placeholder="B12345678"></div>
+      </div>
+      <label>Notes de validació</label>
+      <textarea name="notes_validacio" placeholder="Dades revisades, tipus de client, observacions internes..."></textarea>
+      <button type="submit" class="btn btn-primary">Crear usuari</button>
+    </form>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Usuaris actuals ({{ usuaris|length }})</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Compte</th><th>Perfil</th><th>Accés</th><th>Dades</th>
+            <th>Marge</th><th>Contrasenya</th><th>Eliminar</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for u in usuaris %}
+        {% set status = u.access_status or 'active' %}
+        <tr>
+          <td>
+            <div><strong>{{ u.nom }}</strong></div>
+            <div class="mono">{{ u.username }}</div>
+            <div style="margin-top:4px">{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</div>
+          </td>
+          <td>
+            <form method="post" action="/admin/usuari" class="mini-form">
+              <input type="hidden" name="action" value="actualitzar_estat">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <select name="profile_type">
+                <option value="professional" {% if (u.profile_type or 'professional') == 'professional' %}selected{% endif %}>Professional</option>
+                <option value="studio" {% if u.profile_type == 'studio' %}selected{% endif %}>Estudi</option>
+                <option value="gallery" {% if u.profile_type == 'gallery' %}selected{% endif %}>Galeria / art</option>
+                <option value="association" {% if u.profile_type == 'association' %}selected{% endif %}>Associació / exposició</option>
+              </select>
+          </td>
+          <td>
+              <div style="margin-bottom:.4rem">
+                {% if status == 'active' %}<span class="badge-active">Actiu</span>
+                {% elif status == 'pending' %}<span class="badge-pending">Pendent</span>
+                {% else %}<span class="badge-blocked">Bloquejat</span>{% endif %}
+              </div>
+              <select name="access_status">
+                <option value="active" {% if status == 'active' %}selected{% endif %}>Actiu</option>
+                <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pendent</option>
+                <option value="blocked" {% if status == 'blocked' %}selected{% endif %}>Bloquejat</option>
+              </select>
+          </td>
+          <td>
+              <input type="text" name="web_url" value="{{ u.web_url or '' }}" placeholder="Web">
+              <input type="text" name="instagram" value="{{ u.instagram or '' }}" placeholder="Instagram">
+              <input type="text" name="fiscal_id" value="{{ u.fiscal_id or '' }}" placeholder="CIF / NIF">
+              <textarea name="notes_validacio" placeholder="Notes internes">{{ u.notes_validacio or '' }}</textarea>
+              <button type="submit" class="btn btn-primary btn-sm">Desar perfil</button>
+            </form>
+          </td>
+          <td style="font-weight:600;color:#0984e3">
+            {{ u.marge or 60 }}%<br>
+            <span style="color:#00b894">{{ u.marge_impressio or 0 }}%</span>
+          </td>
+          <td>
+            <form method="post" action="/admin/usuari" class="row-actions">
+              <input type="hidden" name="action" value="canviar_pw">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <input type="password" name="password" placeholder="Nova contrasenya" style="margin:0;padding:4px 8px;font-size:12px;width:140px">
+              <button type="submit" class="btn btn-primary btn-sm">OK</button>
+            </form>
+          </td>
+          <td>
+            {% if u.username != 'admin' %}
+            <form method="post" action="/admin/usuari" onsubmit="return confirm('Eliminar {{ u.nom }}?')">
+              <input type="hidden" name="action" value="eliminar">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>
