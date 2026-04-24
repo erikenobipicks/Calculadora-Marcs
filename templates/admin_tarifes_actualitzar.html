@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Actualització global de tarifes</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+<style>
+:root{
+  --bg:#F7F4EE;--card:#FFF;--text:#0F1614;--hint:#6B7A73;--border:#E5E0D6;
+  --primary:#1A6B45;--primary-2:#164F34;--accent:#E4B73C;--danger:#B23A3A;
+  --success:#1F7A55;--radius:14px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+     background:var(--bg);color:var(--text)}
+.container{max-width:900px;margin:0 auto;padding:1.5rem}
+h2{margin:0 0 1.5rem 0}
+.card-step{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+           padding:1.25rem;margin-bottom:1rem}
+.card-step h5{margin:0 0 1rem 0;font-size:.95rem}
+label{display:block;font-size:.85rem;font-weight:500;margin-bottom:.3rem}
+select,input[type=number]{padding:.5rem;border:1px solid var(--border);border-radius:8px;
+                          background:#fff;font:inherit}
+select{width:100%;margin-bottom:1rem}
+.btn{padding:.5rem 1.25rem;border-radius:8px;border:none;cursor:pointer;font:inherit;font-weight:500}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-2)}
+.btn-success{background:var(--success);color:#fff}
+.btn-ghost{background:transparent;border:1px solid var(--border)}
+.diff-up{color:var(--danger)}
+.diff-down{color:var(--success)}
+.diff-zero{color:var(--hint)}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{text-align:left;padding:.4rem;border-bottom:1px solid var(--border)}
+td{padding:.4rem;border-bottom:.5px solid var(--border)}
+.r{text-align:right}
+.mono{font-family:"SFMono-Regular",Menlo,monospace}
+.muted{color:var(--hint);font-size:.85rem}
+.result-ok{background:#E8F3EE;border:1px solid var(--success);color:var(--success)}
+.result-err{background:#FBEBE9;border:1px solid var(--danger);color:var(--danger)}
+.result-ok strong, .result-err strong{display:block;margin-bottom:.35rem}
+</style>
+</head>
+<body>
+{% include '_nav.html' %}
+
+<div class="container">
+  <h2>Actualització global de tarifes</h2>
+
+  <!-- Pas 1 — Configurar -->
+  <div class="card-step">
+    <h5>Pas 1 — Seleccionar categoria i mètode</h5>
+
+    <label for="categoria">Categoria</label>
+    <select id="categoria">
+      <option value="moldures">Moldures</option>
+      <option value="vidres">Vidres</option>
+      <option value="encolat_pro">Encolat / Laminat</option>
+      <option value="passpartout">Passpartú</option>
+    </select>
+
+    <label>Mètode</label>
+    <div style="display:flex;gap:1.5rem;margin-bottom:1rem">
+      <label style="cursor:pointer;font-weight:normal">
+        <input type="radio" name="metode" value="percent" checked onchange="canviarMetode('percent')">
+        % d'increment global
+      </label>
+      <label style="cursor:pointer;font-weight:normal">
+        <input type="radio" name="metode" value="material" onchange="canviarMetode('material')">
+        Nou preu de material
+      </label>
+    </div>
+
+    <div id="bloc-percent">
+      <label for="valor-percent">Increment (%)</label>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="number" id="valor-percent" step="0.1" value="5" style="width:120px">
+        <span class="muted">% sobre el preu de cost actual</span>
+      </div>
+    </div>
+
+    <div id="bloc-material" style="display:none">
+      <label for="valor-material">% de variació del material</label>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="number" id="valor-material" step="0.1" value="0" style="width:120px">
+        <span class="muted">positiu = pujada · negatiu = baixada</span>
+      </div>
+      <div class="muted" style="margin-top:.35rem">
+        Ex: el vidre ha pujat de 28,80 a 30,00 €/m² → increment del 4,17%.
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-primary" onclick="previsualitzar()" style="margin-top:1rem">
+      Previsualitzar canvis
+    </button>
+  </div>
+
+  <!-- Pas 2 — Previsualització -->
+  <div id="bloc-previsualitzar" class="card-step" style="display:none">
+    <h5>Pas 2 — Previsualització</h5>
+    <div id="resum-previsualitzar" class="muted" style="margin-bottom:.75rem"></div>
+
+    <div style="max-height:380px;overflow-y:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Referència</th>
+            <th class="r">Cost actual</th>
+            <th class="r">Cost nou</th>
+            <th class="r">Variació</th>
+          </tr>
+        </thead>
+        <tbody id="taula-previsualitzar"></tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:.75rem;margin-top:1rem">
+      <button type="button" class="btn btn-success" onclick="aplicar()">Aplicar canvis</button>
+      <button type="button" class="btn btn-ghost" onclick="cancelar()">Cancel·lar</button>
+    </div>
+  </div>
+
+  <!-- Resultat -->
+  <div id="bloc-resultat" class="card-step" style="display:none"></div>
+</div>
+
+<script>
+var _previsualitzacio = [];
+var _token = "";
+
+function canviarMetode(m){
+  document.getElementById('bloc-percent').style.display  = m === 'percent'  ? 'block' : 'none';
+  document.getElementById('bloc-material').style.display = m === 'material' ? 'block' : 'none';
+}
+
+function getValorActual(){
+  var metode = document.querySelector('input[name="metode"]:checked').value;
+  var id = metode === 'percent' ? 'valor-percent' : 'valor-material';
+  return parseFloat(document.getElementById(id).value) || 0;
+}
+
+function formatDiff(pct){
+  var cls = pct > 0 ? 'diff-up' : (pct < 0 ? 'diff-down' : 'diff-zero');
+  var sign = pct > 0 ? '+' : '';
+  return '<span class="'+cls+'">'+sign+pct.toFixed(1)+'%</span>';
+}
+
+function previsualitzar(){
+  var categoria = document.getElementById('categoria').value;
+  var metode    = document.querySelector('input[name="metode"]:checked').value;
+  var valor     = getValorActual();
+
+  var body = new URLSearchParams({
+    accio:'previsualitzar', categoria:categoria, metode:metode, valor:String(valor)
+  });
+  fetch('/admin/tarifes/actualitzar', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body: body
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.error){
+      mostrarResultat(false, data.error);
+      return;
+    }
+    _previsualitzacio = data.previsualitzacio;
+    _token = data.token;
+
+    var tbody = document.getElementById('taula-previsualitzar');
+    tbody.innerHTML = '';
+    _previsualitzacio.forEach(function(p){
+      var tr = '<tr>'+
+        '<td class="mono">'+p.referencia+'</td>'+
+        '<td class="r">'+p.cost_actual.toFixed(4)+' €</td>'+
+        '<td class="r" style="font-weight:500">'+p.cost_nou.toFixed(4)+' €</td>'+
+        '<td class="r">'+formatDiff(p.diff_pct)+'</td>'+
+      '</tr>';
+      tbody.insertAdjacentHTML('beforeend', tr);
+    });
+    document.getElementById('resum-previsualitzar').textContent =
+      data.total + ' referències · canvi aplicat sobre preus de cost actuals';
+    document.getElementById('bloc-previsualitzar').style.display = 'block';
+    document.getElementById('bloc-resultat').style.display = 'none';
+  })
+  .catch(function(e){ mostrarResultat(false, 'Error de xarxa: '+e); });
+}
+
+function aplicar(){
+  if(!_previsualitzacio.length) return;
+  if(!confirm('Confirmes l\'aplicació dels canvis a '+_previsualitzacio.length+' referències?')) return;
+
+  var categoria = document.getElementById('categoria').value;
+  var metode    = document.querySelector('input[name="metode"]:checked').value;
+  var valor     = getValorActual();
+
+  var body = new URLSearchParams({
+    accio:'aplicar', categoria:categoria, metode:metode, valor:String(valor), token:_token
+  });
+  fetch('/admin/tarifes/actualitzar', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body: body
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.ok){
+      var msg = '<strong>✓ Canvis aplicats</strong>' +
+                data.aplicats+' referències actualitzades correctament.';
+      if(data.errors && data.errors.length){
+        msg += '<div style="margin-top:.5rem">'+data.errors.length+' errors: '+
+               data.errors.map(function(e){return e.referencia+' ('+e.error+')';}).join(', ')+'</div>';
+      }
+      msg += '<div style="margin-top:.5rem"><a href="/admin/preus-cost?taula='+categoria+'">Veure preus actualitzats →</a></div>';
+      mostrarResultat(true, msg);
+    } else {
+      mostrarResultat(false, data.error || 'Error aplicant els canvis');
+    }
+    document.getElementById('bloc-previsualitzar').style.display = 'none';
+  })
+  .catch(function(e){ mostrarResultat(false, 'Error de xarxa: '+e); });
+}
+
+function cancelar(){
+  document.getElementById('bloc-previsualitzar').style.display = 'none';
+  _previsualitzacio = [];
+  _token = '';
+}
+
+function mostrarResultat(ok, html){
+  var bloc = document.getElementById('bloc-resultat');
+  bloc.className = 'card-step ' + (ok ? 'result-ok' : 'result-err');
+  bloc.innerHTML = ok ? html : ('<strong>Error</strong>'+html);
+  bloc.style.display = 'block';
+}
+</script>
+</body>
+</html>

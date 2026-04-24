@@ -215,11 +215,12 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="https://reusrevela.cat/area-privada" target="_self">Inici</a>
+    {% if not session.is_admin %}
     <a href="/historial">Historial</a>
     <a href="/cataleg">Cat&agrave;leg</a>
     <a href="/ajustos">Ajustos</a>
-    {% if session.is_admin %}<a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara }}</span></a>{% endif %}
-    {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
+    {% endif %}
+    {% include '_nav_admin_links.html' %}
     <a href="/logout">Sortir</a>
   </div>
 </nav>

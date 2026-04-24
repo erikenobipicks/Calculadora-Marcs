@@ -94,3 +94,19 @@ a.nav-cta:hover {
 #fb-toggle {
     background: var(--success) !important;
 }
+
+/* Admin nav: separadors i etiquetes de grup */
+nav.site-nav .nav-sep {
+    color: rgba(255,255,255,0.3);
+    margin: 0 .35rem;
+    user-select: none;
+}
+nav.site-nav .nav-label {
+    color: rgba(255,255,255,0.55);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-right: .15rem;
+    user-select: none;
+}
