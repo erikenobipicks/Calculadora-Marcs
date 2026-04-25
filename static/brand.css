@@ -105,7 +105,22 @@ nav.site-nav .nav-r,
 nav.site-nav .nav-right {
     flex-wrap: wrap;
     column-gap: .55rem;
-    row-gap: .4rem;
+    row-gap: .55rem;
+    align-items: center;
+}
+/* Nav height: les plantilles tenen height:56px inline pensant per a una
+   sola fila. Amb el nav admin agrupat (~15 enllaços + labels) sempre fa
+   wrap, així que canviem a min-height + padding vertical perquè respiri.
+   El !important sobreescriu els 'height:56px' inline de cada plantilla. */
+nav.site-nav {
+    height: auto !important;
+    min-height: 56px;
+    padding-top: .55rem !important;
+    padding-bottom: .55rem !important;
+    /* PWA standalone (Windows/macOS instal·lat): respecta la safe area
+       superior si el navegador la informa. Fallback al padding base. */
+    padding-top: max(.55rem, env(safe-area-inset-top, .55rem)) !important;
+    align-items: center;
 }
 nav.site-nav .nav-sep {
     color: rgba(255,255,255,0.28);
@@ -128,4 +143,10 @@ nav.site-nav a[href="/ajustos"],
 nav.site-nav a[href^="/historial"],
 nav.site-nav a[href="/cataleg"] {
     white-space: nowrap;
+}
+
+/* Espai sota la barra: quan el nav puja a 2 files, no quedin pegades
+   amb el contingut de sota. */
+nav.site-nav + * {
+    margin-top: 0;
 }
