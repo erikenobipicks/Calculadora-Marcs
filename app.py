@@ -3122,14 +3122,28 @@ def admin_run_migrations():
     return "<br>".join(resultats)
 
 
+_PASSPARTOUS_SEED = [
+    ('P001', 'Blanc Cru',  '', 'Blanc cru'),
+    ('P003', 'Negre',      '', 'Negre'),
+    ('P008', 'Groc',       '', 'Groc'),
+    ('P016', 'Blanc',      '', 'Blanc'),
+    ('P076', 'Marron',     '', 'Marró'),
+    ('P077', 'Gris Clar',  '', 'Gris clar'),
+    ('P078', 'Gris Fosc',  '', 'Gris fosc'),
+]
+
+
 @app.route('/admin/seed-passpartous')
 @admin_required
 def admin_seed_passpartous():
     """Seed ràpid només dels 7 passpartous de color. Pensat per no fer
-    timeout: insereix una a una via execute() amb rollback per fila."""
+    timeout: insereix una a una via cursor amb commit/rollback per fila."""
     db = get_db()
+    # Reset connection state in case a prior aborted transaction is around
+    try: db.rollback()
+    except Exception: pass
     inserted, skipped = [], []
-    for ref, color, textura, descripcio in _PASSPARTOUS_BASE:
+    for ref, color, textura, descripcio in _PASSPARTOUS_SEED:
         try:
             if USE_PG:
                 cur = db.cursor()
@@ -3157,7 +3171,7 @@ def admin_seed_passpartous():
     except Exception as e:
         rows = []
     out = ['<h2>Seed passpartous</h2>']
-    out.append(f'<p>Inserides/processades: {len(inserted)} de {len(_PASSPARTOUS_BASE)}</p>')
+    out.append(f'<p>Inserides/processades: {len(inserted)} de {len(_PASSPARTOUS_SEED)}</p>')
     if skipped:
         out.append('<p><b>Errors:</b><br>' + '<br>'.join(skipped) + '</p>')
     out.append(f'<p><b>Total amb color a la BD ara mateix:</b> {len(rows)}</p>')
