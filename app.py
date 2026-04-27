@@ -579,9 +579,15 @@ def execute(sql, args=()):
             sql2 = sql2.rstrip().rstrip(';')
             if is_ignore:
                 sql2 += ' ON CONFLICT DO NOTHING'
-            # Only add RETURNING id for tables that have serial id
-            has_id = any(t in sql2.upper() for t in ['INTO USUARIS','INTO COMANDES','INTO MOLDURES',
-                         'INTO VIDRES','INTO PASSPARTOUT','INTO ENCOLAT_PRO','INTO IMPRESSIO'])
+            # Only add RETURNING id for tables that actually have a SERIAL id
+            # column. Tables with TEXT primary key (referencia) — moldures,
+            # vidres, passpartout, encolat_pro, impressio — would fail on
+            # 'column id does not exist'.
+            has_id = any(t in sql2.upper() for t in [
+                'INTO USUARIS', 'INTO COMANDES',
+                'INTO FEEDBACK', 'INTO HISTORIAL_PREUS_COST',
+                'INTO LAB_SENDS',
+            ])
             if has_id and 'RETURNING' not in sql2.upper():
                 sql2 += ' RETURNING id'
             cur = db.cursor()
@@ -4078,8 +4084,14 @@ def admin_passpartous():
             textura = request.form.get('textura', '').strip()
             descripcio = request.form.get('descripcio', '').strip()
             if ref:
-                execute('INSERT OR REPLACE INTO passpartout (referencia, color, textura, descripcio) VALUES (?,?,?,?)',
-                        [ref, color, textura, descripcio])
+                # UPSERT manual: INSERT OR REPLACE no es comporta igual a PG.
+                existing = query('SELECT 1 FROM passpartout WHERE referencia=?', [ref], one=True)
+                if existing:
+                    execute('UPDATE passpartout SET color=?, textura=?, descripcio=? WHERE referencia=?',
+                            [color, textura, descripcio, ref])
+                else:
+                    execute('INSERT INTO passpartout (referencia, color, textura, descripcio) VALUES (?,?,?,?)',
+                            [ref, color, textura, descripcio])
                 flash(f'Referència {ref} desada.', 'ok')
         elif action == 'eliminar':
             ref = request.form.get('ref', '').strip()
@@ -4116,7 +4128,12 @@ def admin_impressio():
             ref = request.form.get('referencia','').strip().upper()
             desc = request.form.get('descripcio','').strip()
             preu = float(request.form.get('preu', 0))
-            execute('INSERT OR REPLACE INTO impressio VALUES (?,?,?)', [ref, desc, preu])
+            # UPSERT manual per a PG (INSERT OR REPLACE no fa upsert allà)
+            existing = query('SELECT 1 FROM impressio WHERE referencia=?', [ref], one=True)
+            if existing:
+                execute('UPDATE impressio SET descripcio=?, preu=? WHERE referencia=?', [desc, preu, ref])
+            else:
+                execute('INSERT INTO impressio (referencia, descripcio, preu) VALUES (?,?,?)', [ref, desc, preu])
             flash(f'Format {ref} desat.', 'ok')
         elif action == 'eliminar':
             execute('DELETE FROM impressio WHERE referencia=?', [request.form.get('ref')])
