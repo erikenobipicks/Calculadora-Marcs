@@ -5027,10 +5027,15 @@ def _display_interior(c, t):
     if not ref or ref == '-':
         return ''
     if ref.startswith('DOBPAS'):
-        return t['doble_passpartu']
-    if ref.startswith('PROECO'):
-        return t['proeco_label']
-    return t['passpartu_label']
+        base = t['doble_passpartu']
+    elif ref.startswith('PROECO'):
+        base = t['proeco_label']
+    else:
+        base = t['passpartu_label']
+    color_ref = (c.get('passpartu_ref') or '').strip()
+    if color_ref:
+        return f'{base} ({color_ref})'
+    return base
 
 def _display_revers_peu(c, t):
     raw = c.get('revers_peu')

@@ -204,7 +204,9 @@ tr:hover td{background:#FAFAF8}
             </td>
             <td>{{ op.amplada|int }} × {{ op.alcada|int }}</td>
             <td style="font-size:12px">{{ op.vidre or '—' }}</td>
-            <td style="font-size:12px">{{ op.passpartout or '—' }}</td>
+            <td style="font-size:12px">
+              {{ op.passpartout or '—' }}{% if op.passpartu_ref %} <span style="color:var(--hint);font-size:11px">· {{ op.passpartu_ref }}</span>{% endif %}
+            </td>
             <td style="font-size:12px">{% if op.impressio %}<span style="color:var(--green)">✓</span>{% else %}—{% endif %}</td>
             <td><strong>{{ "%.2f"|format(op.preu_final) }} €</strong></td>
             {% if session.is_admin %}
