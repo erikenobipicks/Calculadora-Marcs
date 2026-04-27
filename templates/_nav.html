@@ -1,43 +1,22 @@
-{# Shared nav bar. Same HTML shell as the old site-nav;
-   admin users see the full grouped structure, others see a simplified set. #}
+{# Shared nav. Filosofia: nav minimal homogeni; els admins veuen els
+   mateixos enllaços que els no-admin més 2 ítems extra (Pendents
+   albarà i accés al panell /admin). Tot el detall d'eines admin
+   està a /admin com a cards. #}
 <nav class="site-nav">
   <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
   <span class="brand">OBJECTIU{% if session.is_admin %} — Admin{% endif %}</span>
   <div class="links">
-    {% if session.is_admin %}
-      {# Grup 1 — Principal #}
-      <a href="/calculadora">Calculadora</a>
-      <a href="/historial">Pressupostos</a>
-      <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
-      <span class="nav-sep">|</span>
-      {# Grup 2 — Gestió #}
-      <span class="nav-label">Gestió</span>
-      <a href="/admin#clients">Clients</a>
-      <a href="/admin/feedback">Feedback</a>
-      <span class="nav-sep">|</span>
-      {# Grup 3 — Tarifes #}
-      <span class="nav-label">Tarifes</span>
-      <a href="/admin/preus-cost">Preus cost</a>
-      <a href="/admin/tarifes/actualitzar">Actualització</a>
-      <a href="/ajustos">Marges</a>
-      <span class="nav-sep">|</span>
-      {# Grup 4 — Catàleg #}
-      <span class="nav-label">Catàleg</span>
-      <a href="/admin/cataleg">Admin</a>
-      <a href="/cataleg">Públic</a>
-      <a href="/admin#passpartous">Passpartú</a>
-      <a href="/admin#impressio">Impressió</a>
-      <span class="nav-sep">|</span>
-      {# Grup 5 — Sistema #}
-      <a href="/admin#config">Configuració</a>
-      <a href="/logout">Sortir</a>
-    {% else %}
-      <a href="/calculadora">Calculadora</a>
-      <a href="/historial">Pressupostos</a>
-      <a href="/cataleg">Catàleg</a>
+    <a href="/calculadora">Calculadora</a>
+    <a href="/historial">Pressupostos</a>
+    <a href="/cataleg">Catàleg</a>
+    {% if not session.is_admin %}
       <a href="/ajustos">Ajustos</a>
       <a href="/ajuda">Ajuda</a>
-      <a href="/logout">Sortir</a>
     {% endif %}
+    {% if session.is_admin %}
+      <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">⏳ Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
+      <a href="/admin">⚙️ Admin</a>
+    {% endif %}
+    <a href="/logout">Sortir</a>
   </div>
 </nav>

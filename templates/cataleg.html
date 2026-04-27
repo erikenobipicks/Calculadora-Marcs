@@ -67,9 +67,9 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="/calculadora">Calculadora</a>
+    <a href="/historial">Pressupostos</a>
     {% if not session.is_admin %}
     <a href="/">Inici</a>
-    <a href="/historial">Historial</a>
     <a href="/ajustos">Ajustos</a>
     {% endif %}
     {% include '_nav_admin_links.html' %}

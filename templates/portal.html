@@ -79,9 +79,9 @@ nav{background:var(--nav);height:56px;display:flex;align-items:center;justify-co
   <div class="nav-r">
     <span class="nav-u">{{ session.nom }}</span>
     <a href="/calculadora">Calculadora</a>
-    {% if not session.is_admin %}
-    <a href="/historial">Historial</a>
+    <a href="/historial">Pressupostos</a>
     <a href="/cataleg">Cat&agrave;leg</a>
+    {% if not session.is_admin %}
     <a href="/ajustos">Ajustos</a>
     {% endif %}
     {% include '_nav_admin_links.html' %}
