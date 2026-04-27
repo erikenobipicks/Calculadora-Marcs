@@ -4004,8 +4004,16 @@ def api_albara_individual():
 @app.route('/api/passpartous')
 @login_required
 def api_passpartous():
-    """Llista de referències de passpartú (color/textura) per al selector de la calculadora."""
-    rows = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    """Llista de referències de color/estil de passpartú per al selector
+    de la calculadora. La taula passpartout té dos tipus de fila barrejades:
+      - preus per mida (PAS13x18, PAS20x30…) — sense color, no es mostren
+      - referències de color (P001, P003…) — amb color, sí es mostren
+    Filtrem per color != '' per mostrar només les segones."""
+    rows = query(
+        "SELECT referencia, color, textura, descripcio FROM passpartout "
+        "WHERE color IS NOT NULL AND color <> '' "
+        "ORDER BY referencia"
+    ) or []
     return jsonify([{
         'ref': r['referencia'],
         'color': r['color'] or '',
@@ -4035,7 +4043,13 @@ def admin_passpartous():
             flash('Referència eliminada.', 'ok')
         return redirect(url_for('admin_passpartous'))
 
-    passpartous_raw = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    # Només mostrem files que són referències de color (P001, P003…), no
+    # les files de preus per mida (PAS13x18…) que viuen al mateix mateix table.
+    passpartous_raw = query(
+        "SELECT referencia, color, textura, descripcio FROM passpartout "
+        "WHERE color IS NOT NULL AND color <> '' "
+        "ORDER BY referencia"
+    ) or []
     passpartous = []
     for r in passpartous_raw:
         d = dict(r) if not isinstance(r, dict) else r
