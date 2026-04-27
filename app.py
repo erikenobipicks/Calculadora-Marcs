@@ -3116,6 +3116,50 @@ def admin_run_migrations():
     return "<br>".join(resultats)
 
 
+@app.route('/admin/seed-passpartous')
+@admin_required
+def admin_seed_passpartous():
+    """Seed ràpid només dels 7 passpartous de color. Pensat per no fer
+    timeout: insereix una a una via execute() amb rollback per fila."""
+    db = get_db()
+    inserted, skipped = [], []
+    for ref, color, textura, descripcio in _PASSPARTOUS_BASE:
+        try:
+            if USE_PG:
+                cur = db.cursor()
+                cur.execute(
+                    "INSERT INTO passpartout (referencia, color, textura, descripcio) "
+                    "VALUES (%s, %s, %s, %s) ON CONFLICT (referencia) DO NOTHING",
+                    [ref, color, textura, descripcio],
+                )
+                db.commit()
+            else:
+                db.execute(
+                    "INSERT OR IGNORE INTO passpartout (referencia, color, textura, descripcio) "
+                    "VALUES (?, ?, ?, ?)",
+                    [ref, color, textura, descripcio],
+                )
+                db.commit()
+            inserted.append(ref)
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            skipped.append(f'{ref}: {str(e)[:120]}')
+    # Comptar quantes hi ha realment a la BD
+    try:
+        rows = query("SELECT referencia, color FROM passpartout WHERE color IS NOT NULL AND color <> '' ORDER BY referencia") or []
+    except Exception as e:
+        rows = []
+    out = ['<h2>Seed passpartous</h2>']
+    out.append(f'<p>Inserides/processades: {len(inserted)} de {len(_PASSPARTOUS_BASE)}</p>')
+    if skipped:
+        out.append('<p><b>Errors:</b><br>' + '<br>'.join(skipped) + '</p>')
+    out.append(f'<p><b>Total amb color a la BD ara mateix:</b> {len(rows)}</p>')
+    out.append('<ul>' + ''.join(f'<li>{r["referencia"]} — {r["color"]}</li>' for r in rows) + '</ul>')
+    out.append('<p><a href="/admin/passpartous">→ Tornar a /admin/passpartous</a></p>')
+    return '\n'.join(out)
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
