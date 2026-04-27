@@ -2317,8 +2317,12 @@ function buildMailText(){
 
 function obrirMailComanda(){
   document.getElementById('mail-cos').value = buildMailText();
-  var clientMail = '';  // podria venir d'un camp futur
-  document.getElementById('mail-destinatari').value = clientMail;
+  // Per defecte el destinatari és el correu del taller (Reus Revela). L'usuari pot
+  // sobreescriure'l en el camp si vol enviar-ho a una altra adreça.
+  var dest = document.getElementById('mail-destinatari');
+  if(!dest.value || !dest.value.trim()){
+    dest.value = 'reusrevela@gmail.com';
+  }
   // Activa/desactiva els botons d'albarà segons si hi ha nom de client
   var nomClient = (document.getElementById('client_nom').value||'').trim();
   var grpAlbara = document.getElementById('albara-btns');
@@ -2799,7 +2803,7 @@ recalcMides();
     <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
       <div style="margin-bottom:.9rem">
         <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">DESTINATARI (correu del taller)</label>
-        <input type="email" id="mail-destinatari" placeholder="taller@reusrevela.cat" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif">
+        <input type="email" id="mail-destinatari" placeholder="reusrevela@gmail.com" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:14px;font-family:'DM Sans',sans-serif">
       </div>
       <div>
         <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">TEXT DE LA COMANDA <span style="font-weight:400">(editable)</span></label>
