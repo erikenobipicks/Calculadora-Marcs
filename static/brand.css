@@ -76,6 +76,74 @@ nav.site-nav {
     border-bottom: 1px solid rgba(221, 211, 196, 0.15);
 }
 
+/* Estilos base del nav perquè qualsevol pàgina que inclogui _nav.html
+   tingui un aspecte coherent fins i tot si no defineix CSS de nav inline.
+   Les pàgines amb les seves pròpies regles inline (admin.html, etc.)
+   poden afinar detalls; aquestes regles són el fallback per defecte. */
+nav.site-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+nav.site-nav .brand {
+    color: #fff;
+    font-size: 19px;
+    font-weight: 600;
+    order: 1;
+}
+nav.site-nav .links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    order: 3;
+}
+nav.site-nav .links a,
+nav.site-nav .nav-r a,
+nav.site-nav .nav-right a {
+    color: rgba(255, 255, 255, 0.78);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: color .15s;
+}
+nav.site-nav .links a:hover,
+nav.site-nav .nav-r a:hover,
+nav.site-nav .nav-right a:hover {
+    color: #fff;
+}
+nav.site-nav .nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    background: transparent;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    order: 2;
+    margin-left: auto;
+}
+@media (max-width: 980px) {
+    nav.site-nav .nav-toggle { display: flex; }
+    nav.site-nav .links {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .85rem;
+        padding: .35rem 0 .5rem;
+    }
+    nav.site-nav.nav-open .links { display: flex; }
+}
+
 /* Botons i cards amb el nou radius */
 button, .btn, .btn-sm, input, select, textarea {
     border-radius: 10px;
