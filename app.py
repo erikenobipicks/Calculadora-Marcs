@@ -2755,6 +2755,123 @@ def acceptar_comanda(cid):
     return jsonify({'ok': True})
 
 
+# ── Enviar fotografia al laboratori d'impressió ─────────────────────────
+def _format_lab_template(template, comanda, default=''):
+    """Substitueix {num_pressupost} {client} {mida} {format} a la plantilla."""
+    if not template:
+        return default
+    num = _row_get(comanda, 'num_pressupost', '') or f"#{_row_get(comanda, 'id', '')}"
+    client = _row_get(comanda, 'client_nom', '') or 'sense nom'
+    fw = _row_get(comanda, 'final_amplada', 0) or _row_get(comanda, 'amplada', 0) or 0
+    fh = _row_get(comanda, 'final_alcada', 0) or _row_get(comanda, 'alcada', 0) or 0
+    try:
+        mida = f"{int(float(fw))}×{int(float(fh))} cm"
+    except (TypeError, ValueError):
+        mida = f"{fw}×{fh} cm"
+    impr = (_row_get(comanda, 'impressio', '') or '').strip() or '—'
+    encolat = (_row_get(comanda, 'encolat', '') or '').strip() or ''
+    fmt = impr if impr != '—' else ''
+    if encolat and encolat != '-':
+        fmt = (fmt + ' / ' + encolat).strip(' /')
+    return template.format(
+        num_pressupost=num,
+        client=client,
+        mida=mida,
+        format=fmt or '—',
+    )
+
+
+@app.route('/admin/comanda/<int:cid>/lab-send', methods=['GET', 'POST'])
+@admin_required
+def admin_lab_send(cid):
+    """Form per enviar la fotografia d'una comanda al laboratori (Fase 1: només email).
+    GET  → mostra form amb pujada de fitxer + previsualització.
+    POST → adjunta el fitxer i envia via Gmail SMTP. Registra a lab_sends."""
+    comanda = query('SELECT * FROM comandes WHERE id=?', [cid], one=True)
+    if not comanda:
+        flash('Pressupost no trobat.', 'error')
+        return redirect(url_for('historial'))
+
+    cfg = {r['clau']: r['valor'] for r in (query('SELECT * FROM config') or [])}
+    historial = query(
+        'SELECT id, canal, destinacio, filename, mida_kb, ok, error, link, sent_at FROM lab_sends '
+        'WHERE comanda_id=? ORDER BY id DESC',
+        [cid],
+    ) or []
+
+    if request.method == 'POST':
+        canal = (request.form.get('canal') or 'email').strip()
+        dest = (request.form.get('destinacio') or '').strip()
+        notes = (request.form.get('notes') or '').strip()
+        f = request.files.get('foto')
+
+        if canal != 'email':
+            flash("Aquest canal encara no està disponible (Fase 2). Tria Email.", 'error')
+            return redirect(url_for('admin_lab_send', cid=cid))
+        if not f or not f.filename:
+            flash("Has d'adjuntar un fitxer.", 'error')
+            return redirect(url_for('admin_lab_send', cid=cid))
+        if not dest:
+            flash('Falta l\'adreça destinatària.', 'error')
+            return redirect(url_for('admin_lab_send', cid=cid))
+
+        data = f.read()
+        size_kb = max(1, len(data) // 1024)
+        filename = f.filename or 'foto.jpg'
+
+        gmail_user = cfg.get('gmail_user','')
+        gmail_pass = cfg.get('gmail_pass','')
+        if not gmail_user or not gmail_pass:
+            flash("Falta configurar gmail_user / gmail_pass a /admin/config (secció Gmail).", 'error')
+            return redirect(url_for('admin_lab_send', cid=cid))
+
+        assumpte_t = cfg.get('lab_assumpte_template') or 'Comanda Laboratori — {num_pressupost} · {mida} {format}'
+        cos_t = cfg.get('lab_cos_template') or "Bon dia,\n\nAdjunto la fotografia per imprimir corresponent al pressupost {num_pressupost}.\n\nClient: {client}\nMida d'impressió: {mida}\nFormat / acabat: {format}\n\nGràcies!"
+        assumpte = _format_lab_template(assumpte_t, comanda, default='Foto per imprimir')
+        cos = _format_lab_template(cos_t, comanda, default='Adjunto la fotografia per imprimir.')
+        if notes:
+            cos += "\n\nNotes addicionals:\n" + notes
+
+        ok, error = 1, None
+        try:
+            import smtplib
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+            from email.mime.base import MIMEBase
+            from email import encoders
+            msg = MIMEMultipart()
+            msg['From'] = gmail_user
+            msg['To'] = dest
+            msg['Subject'] = assumpte
+            msg.attach(MIMEText(cos, 'plain', 'utf-8'))
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(data)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
+            msg.attach(part)
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+                s.login(gmail_user, gmail_pass)
+                s.sendmail(gmail_user, [dest], msg.as_string())
+        except Exception as e:
+            ok = 0
+            error = str(e)[:300]
+
+        execute(
+            'INSERT INTO lab_sends (comanda_id, canal, destinacio, filename, mida_kb, ok, error, link, sent_at, user_id) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [cid, 'email', dest, filename, size_kb, ok, error, None,
+             datetime.now().strftime('%Y-%m-%d %H:%M:%S'), session.get('user_id')],
+        )
+
+        if ok:
+            flash(f'Fitxer enviat a {dest} ({size_kb} kB).', 'ok')
+        else:
+            flash(f'Error enviant: {error}', 'error')
+        return redirect(url_for('admin_lab_send', cid=cid))
+
+    return render_template('admin_lab_send.html', comanda=comanda, config=cfg, historial=historial)
+
+
 # ── Catàleg de motllures ──────────────────────────────────────────────────
 @app.route('/cataleg')
 @login_required
@@ -2863,6 +2980,20 @@ def admin_run_migrations():
             data TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             usuari_id INTEGER NOT NULL,
             notes TEXT
+        )""",
+        # Historial d'enviaments a laboratori (impressió fotogràfica)
+        """CREATE TABLE IF NOT EXISTS lab_sends (
+            id SERIAL PRIMARY KEY,
+            comanda_id INTEGER NOT NULL,
+            canal VARCHAR(20) NOT NULL,
+            destinacio TEXT,
+            filename TEXT,
+            mida_kb INTEGER,
+            ok INTEGER DEFAULT 0,
+            error TEXT,
+            link TEXT,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER
         )""",
     ]
 
@@ -3429,6 +3560,11 @@ def admin_config():
                 execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_user", ?)', [gu])
             if gp:
                 execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
+        # Laboratori d'impressió (Fase 1: només email).
+        for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
+            val = request.form.get(clau)
+            if val is not None:
+                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)', [clau, val.strip()])
         flash('Configuració desada.', 'ok')
         return redirect(url_for('admin_config'))
 
@@ -5438,6 +5574,22 @@ def init_db():
                 )""")
             except Exception as e:
                 print("feedback table skip:", e)
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS lab_sends (
+                    id SERIAL PRIMARY KEY,
+                    comanda_id INTEGER NOT NULL,
+                    canal VARCHAR(20) NOT NULL,
+                    destinacio TEXT,
+                    filename TEXT,
+                    mida_kb INTEGER,
+                    ok INTEGER DEFAULT 0,
+                    error TEXT,
+                    link TEXT,
+                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    user_id INTEGER
+                )""")
+            except Exception as e:
+                print("lab_sends table skip:", e)
             ddl_cur.close()
             ddl_conn.close()
             print("DDL done, checking admin...")
@@ -5636,6 +5788,19 @@ def init_db():
                 pagina TEXT,
                 data TEXT,
                 llegit INTEGER DEFAULT 0
+            )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS lab_sends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                comanda_id INTEGER NOT NULL,
+                canal TEXT NOT NULL,
+                destinacio TEXT,
+                filename TEXT,
+                mida_kb INTEGER,
+                ok INTEGER DEFAULT 0,
+                error TEXT,
+                link TEXT,
+                sent_at TEXT,
+                user_id INTEGER
             )""")
             db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")

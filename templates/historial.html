@@ -230,6 +230,9 @@ tr:hover td{background:#FAFAF8}
                 <button onclick="crearAlbaraIndividual({{ op.id }}, 'cost', this)" class="btn-sm btn-albara-cost" title="Albarà a cost producció">FD cost</button>
               </span>
               {% endif %}
+              {% if op.impressio and op.impressio != '-' and op.impressio != '' %}
+              <a href="/admin/comanda/{{ op.id }}/lab-send" class="btn-sm btn-pdf" title="Enviar foto al laboratori">📤 Lab</a>
+              {% endif %}
               {% endif %}
               <button onclick="acceptarComanda({{ op.id }}, this)" class="btn-sm btn-acc" title="Marcar com acceptat">✓</button>
               <button onclick="eliminarComanda({{ op.id }}, this)" class="btn-sm btn-del" title="Eliminar">×</button>

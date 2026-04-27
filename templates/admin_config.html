@@ -95,6 +95,30 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <p class="hint">Si es desactiva, els professionals veuen preus PVD (preu de cost + marge admin) sense el seu marge personal aplicat.</p>
     </div>
 
+    <div class="section">
+      <div class="section-title">Laboratori d'impressió</div>
+      <p class="muted" style="margin-bottom:1rem">Quan un pressupost té impressió fotogràfica, des de l'històric podràs enviar el fitxer al laboratori. <strong>Fase 1:</strong> només per email (reusa el Gmail SMTP de l'app).</p>
+
+      <label>Email del laboratori</label>
+      <p class="hint">Adreça destinatària per defecte. Es pot sobreescriure cada cop al moment d'enviar.</p>
+      <input type="email" name="lab_email_dest" value="{{ config.get('lab_email_dest', '') }}" placeholder="laboratori@exemple.com">
+
+      <label>Canal per defecte</label>
+      <select name="lab_canal_default">
+        {% set _canal = config.get('lab_canal_default', 'email') %}
+        <option value="email" {% if _canal=='email' %}selected{% endif %}>Email (Gmail SMTP)</option>
+        <option value="swisstransfer" {% if _canal=='swisstransfer' %}selected{% endif %}>SwissTransfer (Fase 2 — pendent)</option>
+        <option value="dropbox" {% if _canal=='dropbox' %}selected{% endif %}>Dropbox (Fase 2 — pendent)</option>
+      </select>
+
+      <label>Plantilla d'assumpte</label>
+      <p class="hint">Variables disponibles: <code>{num_pressupost}</code>, <code>{client}</code>, <code>{mida}</code>, <code>{format}</code>.</p>
+      <input type="text" name="lab_assumpte_template" value="{{ config.get('lab_assumpte_template', 'Comanda Laboratori — {num_pressupost} · {mida} {format}') }}" placeholder="Comanda Laboratori — {num_pressupost} · {mida} {format}">
+
+      <label>Plantilla del cos</label>
+      <textarea name="lab_cos_template" rows="6" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif">{{ config.get('lab_cos_template', "Bon dia,\n\nAdjunto la fotografia per imprimir corresponent al pressupost {num_pressupost}.\n\nClient: {client}\nMida d'impressió: {mida}\nFormat / acabat: {format}\n\nGràcies!") }}</textarea>
+    </div>
+
     <button type="submit" class="btn btn-primary" style="margin-bottom:1rem">Desar configuració</button>
   </form>
 

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Enviar al laboratori</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:780px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;letter-spacing:-.5px;margin-bottom:.25rem}
+.muted-sub{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:1.5rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+.section-title{font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+.meta-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:.85rem;font-size:13px}
+.meta-grid div small{display:block;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:.15rem}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;margin-bottom:.75rem;font-family:'DM Sans',sans-serif;background:#fff}
+input[type=file]{padding:6px}
+input:focus,select:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.alert-err{background:var(--red-l);border:1px solid #F1B9B9;color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.hint{font-size:11px;color:var(--hint);margin-top:-4px;margin-bottom:.65rem}
+.history-row{display:grid;grid-template-columns:auto 1fr auto;gap:.5rem 1rem;padding:.6rem 0;border-bottom:1px solid #F1ECE3;font-size:12px}
+.history-row:last-child{border-bottom:none}
+.badge-ok{background:var(--green-l);color:var(--green);font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700}
+.badge-err{background:var(--red-l);color:var(--red);font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>
+function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }
+</script>
+
+<div class="container">
+  <div class="page-title">Enviar al laboratori</div>
+  <div class="muted-sub">Adjunta la fotografia local del pressupost i envia-la al laboratori per email. El correu inclou les dades del pressupost auto-referenciades (núm., client, mida, format).</div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Dades del pressupost -->
+  <div class="section">
+    <div class="section-title">Pressupost</div>
+    <div class="meta-grid">
+      <div><small>Núm.</small>{{ comanda.num_pressupost or ('#' ~ comanda.id) }}</div>
+      <div><small>Client</small>{{ comanda.client_nom or '—' }}</div>
+      <div><small>Mida d'impressió</small>{{ comanda.final_amplada|int }}×{{ comanda.final_alcada|int }} cm</div>
+      <div><small>Format / impressió</small>{{ comanda.impressio or '—' }}</div>
+      <div><small>Encolat / acabat</small>{{ comanda.encolat or '—' }}</div>
+      <div><small>Data</small>{{ comanda.data or '—' }}</div>
+    </div>
+  </div>
+
+  <!-- Form d'enviament -->
+  <form method="post" action="/admin/comanda/{{ comanda.id }}/lab-send" enctype="multipart/form-data" class="section">
+    <div class="section-title">Nou enviament</div>
+
+    <label>Fitxer (foto)</label>
+    <p class="hint">Adjunta el fitxer del teu disc. Gmail accepta fins a 25 MB per missatge.</p>
+    <input type="file" name="foto" accept="image/*,application/pdf,.tif,.tiff" required>
+
+    <label>Canal</label>
+    <select name="canal">
+      <option value="email" {% if config.get('lab_canal_default','email')=='email' %}selected{% endif %}>Email</option>
+      <option value="swisstransfer" disabled>SwissTransfer (Fase 2)</option>
+      <option value="dropbox" disabled>Dropbox (Fase 2)</option>
+    </select>
+
+    <label>Adreça destinatària</label>
+    <input type="email" name="destinacio" value="{{ config.get('lab_email_dest', '') }}" placeholder="laboratori@exemple.com" required>
+
+    <label>Notes addicionals (opcional)</label>
+    <textarea name="notes" rows="3" placeholder="Instruccions extra per al laboratori"></textarea>
+
+    <div style="display:flex;gap:.75rem;margin-top:.5rem">
+      <button type="submit" class="btn btn-primary">📤 Enviar</button>
+      <a href="/historial" class="btn btn-ghost">Tornar al històric</a>
+    </div>
+  </form>
+
+  <!-- Historial -->
+  {% if historial %}
+  <div class="section">
+    <div class="section-title">Historial d'enviaments</div>
+    {% for h in historial %}
+    <div class="history-row">
+      <div>
+        {% if h.ok %}<span class="badge-ok">✓ Enviat</span>{% else %}<span class="badge-err">✗ Error</span>{% endif %}
+      </div>
+      <div>
+        <strong>{{ h.canal }}</strong> → {{ h.destinacio or '—' }}<br>
+        <span style="color:var(--hint)">{{ h.filename or '—' }} · {{ h.mida_kb or 0 }} kB</span>
+        {% if h.error %}<div style="color:var(--red);margin-top:2px">{{ h.error }}</div>{% endif %}
+      </div>
+      <div style="color:var(--hint);text-align:right">{{ h.sent_at }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>
