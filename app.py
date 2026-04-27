@@ -2947,16 +2947,28 @@ def cataleg():
 def admin_run_migrations():
     """TEMPORAL: únic punt d'inicialització/migració de la BD.
 
-    Es crida manualment per un admin després de cada deploy amb canvis de schema.
-    Fa en ordre:
-      1. init_db() — CREATE TABLE + ALTER ADD COLUMN + seeds de config + admin bootstrap
-      2. ALTER TABLE ADD COLUMN IF NOT EXISTS redundants (safety net)
-      3. Seeds i backfill pesats (ProEco, Intermol cleanup, v2 price backfill)
-      4. Conversions de tipus per a DBs desplegades abans (cost_verificat BOOLEAN→INTEGER)
-      5. Renames de columnes històriques (historial_preus_cost)
+    GET sense ?confirm=1 → pàgina de confirmació (ràpida, no toca BD).
+    GET amb ?confirm=1   → executa la migració (init_db + seeds + ALTERs +…).
 
-    Cada pas amb try/except + rollback individual perquè una fallada no bloqui la resta.
-    Eliminar aquesta ruta un cop la BD estigui alineada a totes les instàncies."""
+    El gate ?confirm=1 evita que retries automatitzats del navegador o
+    Cloudflare disparin la feina pesada en bucle quan la primera petició
+    timeoutejà.
+    """
+    if request.args.get('confirm') != '1':
+        return (
+            '<h2>⚠️ Migracions manuals</h2>'
+            '<p>Aquesta operació pot trigar fins a uns minuts i potencialment '
+            'donar timeout (Cloudflare 524). Cal executar-la només manualment, '
+            'i NO recarregar la pestanya si triga.</p>'
+            '<p><b>Si tot el que vols és inserir els 7 passpartous</b>, '
+            'usa <a href="/admin/seed-passpartous">/admin/seed-passpartous</a> '
+            '(és instantani).</p>'
+            '<p><a href="/admin/run-migrations?confirm=1" '
+            'style="display:inline-block;padding:10px 18px;background:#B23A3A;'
+            'color:#fff;text-decoration:none;border-radius:6px">'
+            'Executar migracions ara</a></p>'
+            '<p><a href="/admin">← Tornar a /admin</a></p>'
+        )
 
     resultats = []
     db = get_db()
