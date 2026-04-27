@@ -2284,6 +2284,7 @@ function buildMailText(){
   var interior  = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  var ppRef     = (document.getElementById('ref-passpartu-color')||{}).value||'';
   var vidre  = (document.getElementById('vidre')||{}).value||'';
   var obs    = document.getElementById('observacions').value||'';
   var cProd  = c.cost_produccio ? fmt2(c.cost_produccio) : '—';
@@ -2303,7 +2304,11 @@ function buildMailText(){
   lines.push('Mides: ' + ample + ' × ' + alcada + ' cm');
   if(marc)    lines.push('Marc principal: ' + marc);
   if(premarc) lines.push('Pre-marc: ' + premarc);
-  lines.push('Interior: '  + (interiorMap[interior]||interior||'Cap'));
+  var interiorTxt = interiorMap[interior]||interior||'Cap';
+  if(ppRef && (interior==='passpartu' || interior==='doble_pas')){
+    interiorTxt += ' (' + ppRef + ')';
+  }
+  lines.push('Interior: '  + interiorTxt);
   lines.push('Protecció: ' + (proteccioMap[proteccio]||proteccio||'Sense vidre'));
   lines.push('Muntatge: '  + (muntatgeMap[muntatge]||muntatge||'Estàndard'));
   if(vidre && vidre !== proteccio) lines.push('Vidre ref: ' + vidre);
@@ -2667,6 +2672,10 @@ function buildWAtext(){
   var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
+  var ppRef        = (document.getElementById('ref-passpartu-color')||{}).value||'';
+  if(nomInterior && ppRef && (interior==='passpartu' || interior==='doble_pas')){
+    nomInterior += ' (' + ppRef + ')';
+  }
   var num = window._numPressupost || '';
   var t = T[_lang] || T.ca;
   var pieceLabel = getPieceDisplayLabel();
@@ -2721,6 +2730,10 @@ function buildWAtext_intern(){
   var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
+  var ppRef        = (document.getElementById('ref-passpartu-color')||{}).value||'';
+  if(nomInterior && ppRef && (interior==='passpartu' || interior==='doble_pas')){
+    nomInterior += ' (' + ppRef + ')';
+  }
 
   // Cost price (not client price)
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
