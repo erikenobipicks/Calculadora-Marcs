@@ -510,6 +510,18 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           </div>
           <!-- Bloc passpartú: apareix quan es selecciona passpartú -->
           <div id="bloc-passpartu" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
+            <div class="f2" style="margin-bottom:.5rem;align-items:center">
+              <div class="f">
+                <label>Color / referència</label>
+                <select id="ref-passpartu-color" onchange="onPasspartuChange()">
+                  <option value="">— Tria —</option>
+                </select>
+              </div>
+              <div class="f" style="display:flex;align-items:flex-end;gap:.5rem">
+                <img id="passpartu-foto" src="" alt="" style="display:none;width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid var(--border)">
+                <span id="passpartu-foto-empty" style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:8px;background:#F5F4F1;color:#9E9B94;font-size:11px;border:1px dashed var(--border)">sense foto</span>
+              </div>
+            </div>
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
                 <label>Marge passpartú (cm per banda)</label>
@@ -1227,6 +1239,36 @@ fetch('/api/moldura-options').then(function(r){return r.json();}).then(function(
   REFS.marc = REFS.pre.slice();
   updateMolduraFilterMeta();
 });
+
+// Passpartous: carrega referències + foto al selector del bloc passpartú.
+var PASSPARTOUS = [];
+fetch('/api/passpartous').then(function(r){return r.json();}).then(function(d){
+  PASSPARTOUS = d || [];
+  var sel = document.getElementById('ref-passpartu-color');
+  if(!sel) return;
+  PASSPARTOUS.forEach(function(p){
+    var opt = document.createElement('option');
+    opt.value = p.ref;
+    var label = p.ref + ' — ' + (p.color || '');
+    if(p.textura) label += ' · ' + p.textura;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  });
+});
+
+function onPasspartuChange(){
+  var ref = (document.getElementById('ref-passpartu-color')||{}).value || '';
+  var img = document.getElementById('passpartu-foto');
+  var empty = document.getElementById('passpartu-foto-empty');
+  var found = PASSPARTOUS.find ? PASSPARTOUS.find(function(p){ return p.ref === ref; }) : null;
+  if(found && found.foto){
+    if(img){ img.src = found.foto; img.style.display = 'inline-block'; }
+    if(empty) empty.style.display = 'none';
+  } else {
+    if(img) img.style.display = 'none';
+    if(empty) empty.style.display = ref ? 'inline-flex' : 'inline-flex';
+  }
+}
 
 function normalizeMolduraText(value){
   return (value || '')

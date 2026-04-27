@@ -302,6 +302,42 @@ def _find_local_moldura_photo(ref):
     return ''
 
 
+PASSPARTOU_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
+
+def _passpartou_photo_url(ref):
+    """Retorna la URL pública de la foto d'un passpartú, o '' si no n'hi ha.
+    Cerca a /static/passpartous/ qualsevol fitxer el nom del qual comenci
+    per la referència (case-insensitive). Permet noms tipus
+    'P001 - Blanc Cru.jpeg' o 'P001.jpg' indistintament."""
+    if not ref:
+        return ''
+    ref_up = ref.strip().upper()
+    folder = os.path.join(app.root_path, 'static', 'passpartous')
+    if not os.path.isdir(folder):
+        return ''
+    try:
+        entries = os.listdir(folder)
+    except OSError:
+        return ''
+    # Mira primer matches exactes "REF.ext", després "REF " o "REF-"
+    for fname in entries:
+        stem, dot, ext = fname.rpartition('.')
+        if not dot or ext.lower() not in PASSPARTOU_IMAGE_EXTS:
+            continue
+        if stem.upper() == ref_up:
+            return f'/static/passpartous/{fname}'
+    for fname in entries:
+        stem, dot, ext = fname.rpartition('.')
+        if not dot or ext.lower() not in PASSPARTOU_IMAGE_EXTS:
+            continue
+        s_up = stem.upper().replace('  ', ' ').strip()
+        if (s_up.startswith(ref_up + ' ') or
+            s_up.startswith(ref_up + '-') or
+            s_up.startswith(ref_up + ' -')):
+            return f'/static/passpartous/{fname}'
+    return ''
+
+
 def _resolve_moldura_photo(ref, foto, ref2=''):
     """Resolve photo for a moldura. Tries: stored foto URL, then local file by
     referencia (stripping separators), then local file by ref2 (supplier code)."""
@@ -3975,6 +4011,7 @@ def api_passpartous():
         'color': r['color'] or '',
         'textura': r['textura'] or '',
         'descripcio': r['descripcio'] or '',
+        'foto': _passpartou_photo_url(r['referencia']),
     } for r in rows])
 
 
@@ -3998,7 +4035,12 @@ def admin_passpartous():
             flash('Referència eliminada.', 'ok')
         return redirect(url_for('admin_passpartous'))
 
-    passpartous = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    passpartous_raw = query('SELECT referencia, color, textura, descripcio FROM passpartout ORDER BY referencia') or []
+    passpartous = []
+    for r in passpartous_raw:
+        d = dict(r) if not isinstance(r, dict) else r
+        d['foto'] = _passpartou_photo_url(_row_get(r, 'referencia', ''))
+        passpartous.append(d)
     return render_template('admin_passpartous.html', passpartous=passpartous)
 
 
