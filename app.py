@@ -1421,31 +1421,78 @@ def _closest_vidre_taula(amplada, alcada, prefix=''):
     return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
+def _closest_vidre_taula_tolerancia(amplada, alcada, prefix='', tolerancia=2.0):
+    """Min-contain amb tolerància configurable: un vidre 60×60 pot cobrir
+    una obra 62×62 si la tolerància és >= 2 cm. Considera ambdues
+    orientacions del vidre (W×H i H×W).
+
+    Selecciona el candidat amb preu_cost més baix; ignora files sense
+    preu_cost."""
+    rows = [dict(r) for r in query('SELECT referencia, preu_cost FROM vidres')]
+    if prefix == '':
+        rows = [r for r in rows
+                if not (r['referencia'].upper().startswith('DV-')
+                        or r['referencia'].upper().startswith('MIR-'))]
+    else:
+        rows = [r for r in rows if r['referencia'].upper().startswith(prefix.upper())]
+
+    candidates = []
+    tol_w = max(0.0, amplada - tolerancia)
+    tol_h = max(0.0, alcada - tolerancia)
+    for r in rows:
+        if _row_get(r, 'preu_cost') is None:
+            continue
+        rw, rh = _parse_dims(r['referencia'])
+        if rw is None:
+            continue
+        # Cobertura amb tolerància en qualsevol orientació
+        if (rw >= tol_w and rh >= tol_h) or (rh >= tol_w and rw >= tol_h):
+            candidates.append(r)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda x: float(x['preu_cost']))
+
+
 def calcular_cost_vidre(amplada, alcada):
-    """Vidre simple tallat a mida.
-    1. Min-contain sobre vidres (exclou DV-/MIR-)
-    2. Fórmula fallback: material × cm² + temps tall (base + lineal × perímetre)"""
-    marge     = float(get_config_value('marge_admin_vidres_pct', '60'))
-    cost_cm2  = float(get_config_value('vidre_cost_cm2', '0.002880'))
-    t_base    = float(get_config_value('vidre_temps_base_min', '3'))
-    t_lineal  = float(get_config_value('vidre_temps_lineal_m', '0.5'))
-    cost_hora = float(get_config_value('cost_hora_taller', '25'))
+    """Vidre simple tallat a mida — lògica híbrida:
+    1. Min-contain amb tolerància sobre taula vidres (exclou DV-/MIR-)
+       que considera orientacions girades.
+    2. Fórmula: material × cm² + temps tall (base + lineal × perímetre).
+    3. Si hi ha fila vàlida, agafa el min(taula, fórmula). Si no, usa
+       només la fórmula."""
+    cost_cm2   = float(get_config_value('vidre_cost_cm2', '0.002880'))
+    t_base     = float(get_config_value('vidre_temps_base_min', '3'))
+    t_lineal   = float(get_config_value('vidre_temps_lineal_m', '0.5'))
+    cost_hora  = float(get_config_value('cost_hora_taller', '25'))
+    marge      = float(get_config_value('marge_admin_vidres_pct', '60'))
+    tolerancia = float(get_config_value('vidre_tolerancia_cm', '2'))
 
-    fila = _closest_vidre_taula(amplada, alcada, prefix='')
-    if fila and _row_get(fila, 'preu_cost') is not None:
-        cost = float(fila['preu_cost'])
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
-
-    # Fallback fórmula
+    # Càlcul de fórmula (sempre disponible com a fallback / comparació)
     area = amplada * alcada
     perimetre_m = 2 * (amplada + alcada) / 100
     mat = area * cost_cm2
     temps = t_base + (t_lineal * perimetre_m)
     mo = temps * cost_hora / 60
-    cost = round(mat + mo, 4)
+    cost_formula = mat + mo
+
+    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='', tolerancia=tolerancia)
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost_taula = float(fila['preu_cost'])
+        if cost_taula <= cost_formula:
+            cost = round(cost_taula, 4)
+            origen = 'taula'
+            ref = fila['referencia']
+        else:
+            cost = round(cost_formula, 4)
+            origen = 'formula'
+            ref = f'vidre-{amplada}x{alcada}'
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'vidre-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'vidre-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': origen, 'ref': ref}
 
 
 def calcular_cost_doble_vidre(amplada, alcada):
