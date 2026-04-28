@@ -2288,11 +2288,35 @@ function buildMailText(){
   var vidre  = (document.getElementById('vidre')||{}).value||'';
   var obs    = document.getElementById('observacions').value||'';
   var cProd  = c.cost_produccio ? fmt2(c.cost_produccio) : '—';
+  var chkImp = !!(document.getElementById('chk-impressio')||{}).checked;
+  // Mode "només impressió": hi ha impressió fotogràfica seleccionada però
+  // ni marc, ni pre-marc, ni interior, ni proteccio. La comanda es tracta
+  // com una impressió estricta, sense informació de marc/encolat/etc.
+  var onlyPrint = chkImp && !marc && !premarc && !interior && !proteccio && !muntatge;
   var interiorMap = {passpartu:'Passpartú',doble_pas:'Doble passpartú',proeco:'ProEco','':'Cap'};
   var proteccioMap = {vidre_basic:'Vidre bàsic',vidre_premium:'Vidre premium',vidre_uv:'Vidre UV',vidre_museum:'Vidre museu',doble_vidre:'Doble vidre',mirall:'Mirall','':'Sense vidre'};
   var muntatgeMap  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat','':'Estàndard'};
 
   var lines = [];
+  if(onlyPrint){
+    lines.push('COMANDA D\'IMPRESSIÓ — OBJECTIU FOTOGRAFIA');
+    lines.push('══════════════════════════════════════════');
+    lines.push('');
+    if(num)     lines.push('Pressupost núm.: ' + num);
+    if(nomPila) lines.push('Client: ' + nomPila);
+    lines.push('');
+    lines.push('IMPRESSIÓ FOTOGRÀFICA');
+    lines.push('─────────────────────');
+    lines.push('Mides: ' + ample + ' × ' + alcada + ' cm');
+    lines.push('(Sense marc — només impressió)');
+    if(obs) lines.push('Observacions: ' + obs);
+    lines.push('');
+    lines.push('COST (sense IVA)');
+    lines.push('────────────────');
+    lines.push('Cost base: ' + cProd);
+    return lines.join('\n');
+  }
+
   lines.push('COMANDA DE MARC — OBJECTIU FOTOGRAFIA');
   lines.push('══════════════════════════════════════');
   lines.push('');
@@ -2312,6 +2336,7 @@ function buildMailText(){
   lines.push('Protecció: ' + (proteccioMap[proteccio]||proteccio||'Sense vidre'));
   lines.push('Muntatge: '  + (muntatgeMap[muntatge]||muntatge||'Estàndard'));
   if(vidre && vidre !== proteccio) lines.push('Vidre ref: ' + vidre);
+  if(chkImp)  lines.push('Impressió fotogràfica: sí');
   if(obs) lines.push('Observacions: ' + obs);
   lines.push('');
   lines.push('COST DE PRODUCCIÓ (sense IVA)');
@@ -2359,7 +2384,16 @@ function obrirMailClient(){
   var cos  = document.getElementById('mail-cos').value;
   var client = document.getElementById('client_nom').value||'';
   var num    = window._numPressupost||'';
-  var subj   = 'Comanda marc' + (client?' — '+client:'') + (num?' ('+num+')':'');
+  // Detecció only-print per al subject (mateixa lògica que buildMailText).
+  var marc      = (document.getElementById('marc_principal').value||'').trim();
+  var premarc   = (document.getElementById('pre_marc').value||'').trim();
+  var interior  = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+  var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var muntatge  = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  var chkImp    = !!(document.getElementById('chk-impressio')||{}).checked;
+  var onlyPrint = chkImp && !marc && !premarc && !interior && !proteccio && !muntatge;
+  var subjPrefix = onlyPrint ? "Comanda impressió" : 'Comanda marc';
+  var subj   = subjPrefix + (client?' — '+client:'') + (num?' ('+num+')':'');
   var mailto = 'mailto:' + encodeURIComponent(dest)
              + '?subject=' + encodeURIComponent(subj)
              + '&body='    + encodeURIComponent(cos);
@@ -2676,12 +2710,32 @@ function buildWAtext(){
   if(nomInterior && ppRef && (interior==='passpartu' || interior==='doble_pas')){
     nomInterior += ' (' + ppRef + ')';
   }
+  // Detecció "només impressió": chk-impressio sense cap altre material
+  var marc = (document.getElementById('marc_principal').value||'').trim();
+  var premarc = (document.getElementById('pre_marc').value||'').trim();
+  var onlyPrint = chkImp && !marc && !premarc && !interior && !proteccio && !muntatge;
   var num = window._numPressupost || '';
   var t = T[_lang] || T.ca;
   var pieceLabel = getPieceDisplayLabel();
   var midaFinal = getFinalSizeText();
   var midaFoto = getPhotoSizeText();
-  var lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
+  var lines;
+  if(onlyPrint){
+    lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
+    if(midaFinal) lines.push(t.midaFinal+': '+midaFinal);
+    if(midaFoto) lines.push(t.mides+': '+midaFoto);
+    lines.push(t.impressio+': '+t.yes+' (només impressió)');
+    if(obs) lines.push(t.notes+': '+obs);
+    lines.push('');
+    if(desc>0) lines.push(t.discountApplied+': '+desc+'%');
+    lines.push('*'+t.total+': '+pFin+' EUR ('+t.iva+')*');
+    lines.push('');
+    lines.push(t.gracies+' ' + empresa_nom);
+    if(empresa_adreca) lines.push(empresa_adreca);
+    if(empresa_tel) lines.push('Tel: ' + empresa_tel);
+    return encodeURIComponent(lines.join('\n'));
+  }
+  lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
   if(pieceLabel) lines.push(t.piece+': '+pieceLabel);
   if(midaFinal) lines.push(t.midaFinal+': '+midaFinal);
   if(midaFoto) lines.push(t.mides+': '+midaFoto);
@@ -2734,6 +2788,10 @@ function buildWAtext_intern(){
   if(nomInterior && ppRef && (interior==='passpartu' || interior==='doble_pas')){
     nomInterior += ' (' + ppRef + ')';
   }
+  // Detecció "només impressió" (mateix criteri que buildMailText / buildWAtext)
+  var marc    = (document.getElementById('marc_principal').value||'').trim();
+  var premarc = (document.getElementById('pre_marc').value||'').trim();
+  var onlyPrint = chkImp && !marc && !premarc && !interior && !proteccio && !muntatge;
 
   // Cost price (not client price)
   var cTot = window._c ? (window._c.preu_net / (1 + (marge/100))).toFixed(2) : '—';
@@ -2743,22 +2801,27 @@ function buildWAtext_intern(){
   var pieceLabel = getPieceDisplayLabel();
   var midaFinal = getFinalSizeText();
   var midaFoto = getPhotoSizeText();
+  var titol = onlyPrint ? "*Comanda d'impressió — Reus Revela*" : ('*'+t.waInternTitol+'*');
   var lines = [
-    '*'+t.waInternTitol+'*','',
+    titol,'',
     t.numPres+': *' + num + '*',
     t.client+': ' + client,
     t.phone+': ' + tel,
     '',
   ];
-  if(pieceLabel) lines.push(t.piece+': ' + pieceLabel);
+  if(pieceLabel && !onlyPrint) lines.push(t.piece+': ' + pieceLabel);
   if(midaFinal) lines.push(t.midaFinal+': ' + midaFinal);
   if(midaFoto) lines.push(t.mides+': ' + midaFoto);
-  if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
-  if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
-  if(nomInterior)  lines.push(t.interior+': '+nomInterior);
-  if(chkRevers)    lines.push(t.reversPeu+': '+t.yes);
-  if(chkImp)       lines.push(t.impressio+': '+t.yes);
-  if(chkImp)       lines.push(t.printIncluded);
+  if(onlyPrint){
+    lines.push(t.impressio+': '+t.yes+' (només impressió, sense marc)');
+  } else {
+    if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
+    if(nomProteccio) lines.push(t.proteccio+': '+nomProteccio);
+    if(nomInterior)  lines.push(t.interior+': '+nomInterior);
+    if(chkRevers)    lines.push(t.reversPeu+': '+t.yes);
+    if(chkImp)       lines.push(t.impressio+': '+t.yes);
+    if(chkImp)       lines.push(t.printIncluded);
+  }
   lines.push('');
   lines.push(t.cost+': *' + cTot + ' EUR*');
   lines.push(t.clientPrice+': *' + preuClient + ' EUR (' + t.iva + ')*');
