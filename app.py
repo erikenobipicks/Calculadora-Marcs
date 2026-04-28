@@ -1297,6 +1297,29 @@ def _closest_passpartu_taula(amplada, alcada, prefix='1PAS'):
     return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
+def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', tolerancia=2.0):
+    """Min-contain amb tolerància sobre la taula passpartout. Filtra per
+    prefix de referència (1PAS, DOBPAS…). Considera ambdues orientacions
+    i selecciona el preu_cost més baix entre els que cobreixen la mida
+    amb la tolerància donada."""
+    rows = [dict(r) for r in query('SELECT referencia, preu_cost FROM passpartout')]
+    rows = [r for r in rows if r['referencia'].upper().startswith(prefix.upper())]
+    candidates = []
+    tol_w = max(0.0, amplada - tolerancia)
+    tol_h = max(0.0, alcada - tolerancia)
+    for r in rows:
+        if _row_get(r, 'preu_cost') is None:
+            continue
+        rw, rh = _parse_dims(r['referencia'])
+        if rw is None:
+            continue
+        if (rw >= tol_w and rh >= tol_h) or (rh >= tol_w and rw >= tol_h):
+            candidates.append(r)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda x: float(x['preu_cost']))
+
+
 def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     """Calcula cost i PVD del passpartú: primer busca a taula, si no, fórmula.
     Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula'}."""
@@ -1308,9 +1331,11 @@ def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     minim_mat    = float(get_config_value('passpartu_minim_material', '0.50'))
     marge_pas    = float(get_config_value('marge_admin_passpartu_pct', '60'))
 
-    # 1. Min-contain sobre taula (mides estàndard)
+    tolerancia   = float(get_config_value('passpartu_tolerancia_cm', '2'))
+
+    # 1. Min-contain amb tolerància sobre taula (mides estàndard)
     prefix = '1PAS' if tipus == 'simple' else 'DOBPAS'
-    fila = _closest_passpartu_taula(amplada, alcada, prefix)
+    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix=prefix, tolerancia=tolerancia)
     if fila:
         pc = _row_get(fila, 'preu_cost')
         if pc is not None:
@@ -1346,13 +1371,36 @@ def _closest_encolat_taula(amplada, alcada, prefix):
     return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
+def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
+    """Min-contain amb tolerància sobre encolat_pro filtrat per prefix
+    (ENC o PRO). Considera ambdues orientacions i selecciona el preu_cost
+    més baix entre els que cobreixen amb la tolerància donada."""
+    rows = [dict(r) for r in query('SELECT referencia, preu_cost FROM encolat_pro')]
+    rows = [r for r in rows if r['referencia'].upper().startswith(prefix.upper())]
+    candidates = []
+    tol_w = max(0.0, amplada - tolerancia)
+    tol_h = max(0.0, alcada - tolerancia)
+    for r in rows:
+        if _row_get(r, 'preu_cost') is None:
+            continue
+        rw, rh = _parse_dims(r['referencia'])
+        if rw is None:
+            continue
+        if (rw >= tol_w and rh >= tol_h) or (rh >= tol_w and rw >= tol_h):
+            candidates.append(r)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda x: float(x['preu_cost']))
+
+
 def calcular_cost_foam(amplada, alcada):
     """Encolat en foam adhesiu (ProEco és àlies del mateix producte).
-    1. Min-contain sobre encolat_pro (refs ENC%)
+    1. Min-contain amb tolerància sobre encolat_pro (refs ENC%)
     2. Fórmula fallback per mides fora de taula"""
-    marge = float(get_config_value('marge_admin_encolat_pct', '60'))
+    marge      = float(get_config_value('marge_admin_encolat_pct', '60'))
+    tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
 
-    fila = _closest_encolat_taula(amplada, alcada, prefix='ENC')
+    fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='ENC', tolerancia=tolerancia)
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost = float(fila['preu_cost'])
         pvd = round(cost * (1 + marge / 100), 4)
@@ -1378,8 +1426,9 @@ def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
     temps_base    = float(get_config_value('laminat_temps_base_min', '12'))
     temps_var     = float(get_config_value('laminat_temps_var_cm2', '0.0012'))
     cost_cm2 = cost_cm2_mate if tipus == 'mate' else cost_cm2_semi
+    tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
 
-    fila = _closest_encolat_taula(amplada, alcada, prefix='PRO')
+    fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='PRO', tolerancia=tolerancia)
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost_base = float(fila['preu_cost'])
         if tipus == 'mate':
@@ -1497,13 +1546,14 @@ def calcular_cost_vidre(amplada, alcada):
 
 def calcular_cost_doble_vidre(amplada, alcada):
     """Doble vidre: dos vidres simples + muntatge.
-    1. Min-contain sobre DV-
+    1. Min-contain amb tolerància sobre DV-
     2. Fórmula: (cost_vidre_simple × 2) + cost_muntatge"""
-    marge     = float(get_config_value('marge_admin_vidres_pct', '60'))
-    t_muntat  = float(get_config_value('vidre_dv_muntatge_min', '5'))
-    cost_hora = float(get_config_value('cost_hora_taller', '25'))
+    marge      = float(get_config_value('marge_admin_vidres_pct', '60'))
+    t_muntat   = float(get_config_value('vidre_dv_muntatge_min', '5'))
+    cost_hora  = float(get_config_value('cost_hora_taller', '25'))
+    tolerancia = float(get_config_value('vidre_tolerancia_cm', '2'))
 
-    fila = _closest_vidre_taula(amplada, alcada, prefix='DV-')
+    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='DV-', tolerancia=tolerancia)
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost = float(fila['preu_cost'])
         pvd = round(cost * (1 + marge / 100), 4)
@@ -5821,7 +5871,10 @@ def init_db():
                          ('vidre_temps_lineal_m','0.5'),
                          ('vidre_dv_muntatge_min','5'),
                          ('mirall_cost_cm2','0.003153'),
-                         ('mirall_multiplo_dm2','6')]:
+                         ('mirall_multiplo_dm2','6'),
+                         ('vidre_tolerancia_cm','2'),
+                         ('passpartu_tolerancia_cm','2'),
+                         ('encolat_tolerancia_cm','2')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -6025,7 +6078,10 @@ def init_db():
                          ('vidre_temps_lineal_m','0.5'),
                          ('vidre_dv_muntatge_min','5'),
                          ('mirall_cost_cm2','0.003153'),
-                         ('mirall_multiplo_dm2','6')]:
+                         ('mirall_multiplo_dm2','6'),
+                         ('vidre_tolerancia_cm','2'),
+                         ('passpartu_tolerancia_cm','2'),
+                         ('encolat_tolerancia_cm','2')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
