@@ -3369,9 +3369,9 @@ def admin_normalitzar_costos():
 @admin_required
 def admin_revisar_taules():
     """TEMPORAL: dump JSON de les referències amb preu_cost ordenat
-    ascendentment per a passpartú (1PAS%), encolat foam (ENC%) i vidres
-    (excloent DV- i MIR-). Útil per detectar inconsistències a les taules
-    abans de calibrar marges."""
+    ascendentment per a passpartú (1PAS%, DOBPAS%), encolat foam (ENC%),
+    vidres simples (excloent DV-/MIR-) i doble vidre (DV-%). Útil per
+    detectar inconsistències a les taules abans de calibrar marges."""
     def _rows(sql):
         return [
             {'ref': _row_get(r, 'referencia'), 'cost': float(_row_get(r, 'preu_cost') or 0)}
@@ -3384,6 +3384,11 @@ def admin_revisar_taules():
             "WHERE UPPER(referencia) LIKE '1PAS%' AND preu_cost IS NOT NULL "
             "ORDER BY preu_cost ASC"
         ),
+        'doble_pas': _rows(
+            "SELECT referencia, preu_cost FROM passpartout "
+            "WHERE UPPER(referencia) LIKE 'DOBPAS%' AND preu_cost IS NOT NULL "
+            "ORDER BY preu_cost ASC"
+        ),
         'encolat': _rows(
             "SELECT referencia, preu_cost FROM encolat_pro "
             "WHERE UPPER(referencia) LIKE 'ENC%' AND preu_cost IS NOT NULL "
@@ -3394,6 +3399,11 @@ def admin_revisar_taules():
             "WHERE UPPER(referencia) NOT LIKE 'DV-%' "
             "AND UPPER(referencia) NOT LIKE 'MIR-%' "
             "AND preu_cost IS NOT NULL "
+            "ORDER BY preu_cost ASC"
+        ),
+        'doble_vidre': _rows(
+            "SELECT referencia, preu_cost FROM vidres "
+            "WHERE UPPER(referencia) LIKE 'DV-%' AND preu_cost IS NOT NULL "
             "ORDER BY preu_cost ASC"
         ),
     })
