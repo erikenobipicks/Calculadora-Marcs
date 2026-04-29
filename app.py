@@ -3594,6 +3594,57 @@ def admin_auditoria_moldures():
     return jsonify({'detall': detall, 'resum': resum})
 
 
+@app.route('/admin/auditoria-marges')
+@admin_required
+def admin_auditoria_marges():
+    """TEMPORAL: anàlisi de marges de moldures, agregat per proveïdor en
+    Python (no per SQL — més portable entre PG/SQLite). Retorna
+    {detall, resum} on:
+      - detall: per moldura, marge actual + pvd nou (cost·1.60)
+      - resum:  per proveïdor, total refs + marge mig/min/max"""
+    rows = query("""
+        SELECT referencia, preu_taller, preu_cost, gruix, proveidor
+        FROM moldures
+        WHERE preu_cost IS NOT NULL AND preu_cost > 0
+          AND preu_taller IS NOT NULL AND preu_taller > 0
+        ORDER BY proveidor, referencia
+    """) or []
+
+    detall = []
+    for r in rows:
+        pt = float(_row_get(r, 'preu_taller') or 0)
+        pc = float(_row_get(r, 'preu_cost') or 0)
+        if pt <= 0 or pc <= 0:
+            continue
+        detall.append({
+            'ref':              _row_get(r, 'referencia'),
+            'proveidor':        _row_get(r, 'proveidor'),
+            'gruix':            _row_get(r, 'gruix'),
+            'preu_taller':      pt,
+            'preu_cost':        pc,
+            'marge_actual_pct': round((pt / pc - 1) * 100, 1),
+            'pvd_nou':          round(pc * 1.60, 4),
+            'diff_pct':         round((pc * 1.60 / pt - 1) * 100, 1),
+        })
+
+    from collections import defaultdict
+    proveidors = defaultdict(list)
+    for d in detall:
+        proveidors[d['proveidor']].append(d['marge_actual_pct'])
+
+    resum = []
+    for prov, marges in sorted(proveidors.items(), key=lambda kv: (kv[0] or '')):
+        resum.append({
+            'proveidor':  prov,
+            'total_refs': len(marges),
+            'marge_mig':  round(sum(marges) / len(marges), 1),
+            'marge_min':  round(min(marges), 1),
+            'marge_max':  round(max(marges), 1),
+        })
+
+    return jsonify({'detall': detall, 'resum': resum})
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
