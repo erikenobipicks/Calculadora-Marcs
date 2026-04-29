@@ -1322,8 +1322,12 @@ def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', toleranc
 
 
 def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
-    """Calcula cost i PVD del passpartú: primer busca a taula, si no, fórmula.
-    Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula'}."""
+    """Calcula cost i PVD del passpartú — lògica híbrida:
+    1. Calcula sempre el cost per fórmula (material + tall + finestres extra).
+    2. Busca min-contain amb tolerància sobre la taula.
+    3. Si hi ha fila vàlida, agafa min(taula+extra_finestres, fórmula).
+    4. Si no, usa només la fórmula.
+    Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula', 'ref'}."""
     cost_hora    = float(get_config_value('cost_hora_taller', '25'))
     temps_simple = float(get_config_value('passpartu_temps_simple', '9'))
     temps_doble  = float(get_config_value('passpartu_temps_doble', '16'))
@@ -1331,28 +1335,37 @@ def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     cost_cm2     = float(get_config_value('passpartu_cost_cm2', '0.000620'))
     minim_mat    = float(get_config_value('passpartu_minim_material', '0.50'))
     marge_pas    = float(get_config_value('marge_admin_passpartu_pct', '60'))
-
     tolerancia   = float(get_config_value('passpartu_tolerancia_cm', '2'))
 
-    # 1. Min-contain amb tolerància sobre taula (mides estàndard)
     prefix = '1PAS' if tipus == 'simple' else 'DOBPAS'
-    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix=prefix, tolerancia=tolerancia)
-    if fila:
-        pc = _row_get(fila, 'preu_cost')
-        if pc is not None:
-            cost = float(pc) + finestres_extra * (temps_extra * cost_hora / 60)
-            pvd = round(cost * (1 + marge_pas / 100), 4)
-            return {'cost': round(cost, 4), 'pvd': pvd, 'origen': 'taula', 'ref': fila['referencia']}
 
-    # 2. Fallback fórmula per a mides fora de taula
-    area = amplada * alcada
-    cost_mat = max(area * cost_cm2, minim_mat)
-    minuts = temps_doble if tipus == 'doble' else temps_simple
-    cost_mo = minuts * cost_hora / 60
-    cost_extra = finestres_extra * (temps_extra * cost_hora / 60)
-    cost = round(cost_mat + cost_mo + cost_extra, 4)
+    # Cost per fórmula (sempre disponible)
+    area         = amplada * alcada
+    cost_mat     = max(area * cost_cm2, minim_mat)
+    minuts       = temps_doble if tipus == 'doble' else temps_simple
+    cost_mo      = minuts * cost_hora / 60
+    cost_extra   = finestres_extra * (temps_extra * cost_hora / 60)
+    cost_formula = cost_mat + cost_mo + cost_extra
+
+    # Cost per taula (si hi ha fila vàlida)
+    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix=prefix, tolerancia=tolerancia)
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost_taula = float(fila['preu_cost']) + cost_extra
+        if cost_taula <= cost_formula:
+            cost = round(cost_taula, 4)
+            origen = 'taula'
+            ref = fila['referencia']
+        else:
+            cost = round(cost_formula, 4)
+            origen = 'formula'
+            ref = f'pas-{amplada}x{alcada}'
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'pas-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge_pas / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'origen': 'formula', 'ref': f'pas-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'origen': origen, 'ref': ref}
 
 
 def _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var_cm2):
@@ -1397,25 +1410,37 @@ def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
 
 
 def calcular_cost_foam(amplada, alcada):
-    """Encolat en foam adhesiu (ProEco és àlies del mateix producte).
-    1. Min-contain amb tolerància sobre encolat_pro (refs ENC%)
-    2. Fórmula fallback per mides fora de taula"""
+    """Encolat en foam adhesiu (ProEco és àlies del mateix producte) — lògica
+    híbrida: calcula sempre cost per fórmula i busca min-contain amb
+    tolerància sobre la taula. Retorna el més barat dels dos."""
     marge      = float(get_config_value('marge_admin_encolat_pct', '60'))
     tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
-
-    fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='ENC', tolerancia=tolerancia)
-    if fila and _row_get(fila, 'preu_cost') is not None:
-        cost = float(fila['preu_cost'])
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
-
-    # Fallback fórmula
     cost_cm2   = float(get_config_value('foam_cost_cm2', '0.001143'))
     temps_base = float(get_config_value('foam_temps_base_min', '9'))
     temps_var  = float(get_config_value('foam_temps_var_cm2', '0.0015'))
-    cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+
+    # Cost per fórmula (sempre disponible)
+    cost_formula = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+
+    # Cost per taula (si hi ha fila vàlida)
+    fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='ENC', tolerancia=tolerancia)
+    if fila and _row_get(fila, 'preu_cost') is not None:
+        cost_taula = float(fila['preu_cost'])
+        if cost_taula <= cost_formula:
+            cost = round(cost_taula, 4)
+            origen = 'taula'
+            ref = fila['referencia']
+        else:
+            cost = round(cost_formula, 4)
+            origen = 'formula'
+            ref = f'foam-{amplada}x{alcada}'
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'foam-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'foam-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': origen, 'ref': ref}
 
 
 def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
