@@ -3318,6 +3318,74 @@ def admin_seed_passpartous():
     return '\n'.join(out)
 
 
+@app.route('/admin/normalitzar-costos')
+@admin_required
+def admin_normalitzar_costos():
+    """TEMPORAL: actualitza preu_cost de passpartú (1PAS, DOBPAS) i encolat
+    foam (ENC) amb costos calculats per fórmula. Útil per re-baselinar la
+    taula després de canviar paràmetres de cost (cm², temps, hora)."""
+    COST_CM2_PAS  = 0.000620
+    TEMPS_PAS     = 9.0       # minuts
+    COST_CM2_FOAM = 0.001143
+    TEMPS_FOAM    = 9.0       # minuts base
+    TEMPS_VAR     = 0.0015    # minuts per cm²
+    COST_HORA     = 25.0
+
+    results, errors = [], []
+
+    # ── Passpartú simple (1PAS...) ────────────────────────────
+    files = query("SELECT referencia FROM passpartout WHERE UPPER(referencia) LIKE '1PAS%'") or []
+    for f in files:
+        ref = _row_get(f, 'referencia')
+        try:
+            parts = ref.upper().replace('1PAS', '').split('X')
+            w, h  = float(parts[0]), float(parts[1])
+            cost  = round(w * h * COST_CM2_PAS + TEMPS_PAS * COST_HORA / 60, 4)
+            execute("UPDATE passpartout SET preu_cost = ? WHERE referencia = ?", (cost, ref))
+            results.append(f"{ref}: {cost}")
+        except Exception as e:
+            errors.append(f"{ref}: {e}")
+
+    # ── Passpartú doble = simple × 2 ──────────────────────────
+    files = query("SELECT referencia FROM passpartout WHERE UPPER(referencia) LIKE 'DOBPAS%'") or []
+    for f in files:
+        ref = _row_get(f, 'referencia')
+        try:
+            ref_simple = ref.upper().replace('DOBPAS', '1PAS')
+            simple = query(
+                "SELECT preu_cost FROM passpartout WHERE UPPER(referencia) = ?",
+                (ref_simple,), one=True
+            )
+            if simple and _row_get(simple, 'preu_cost') is not None:
+                cost = round(float(_row_get(simple, 'preu_cost')) * 2.0, 4)
+                execute("UPDATE passpartout SET preu_cost = ? WHERE referencia = ?", (cost, ref))
+                results.append(f"{ref}: {cost}")
+        except Exception as e:
+            errors.append(f"{ref}: {e}")
+
+    # ── Encolat foam (ENC...) ─────────────────────────────────
+    files = query("SELECT referencia FROM encolat_pro WHERE UPPER(referencia) LIKE 'ENC%'") or []
+    for f in files:
+        ref = _row_get(f, 'referencia')
+        try:
+            parts = ref.upper().replace('ENCC', '').replace('ENC', '').split('X')
+            w, h  = float(parts[0]), float(parts[1])
+            area  = w * h
+            temps = TEMPS_FOAM + area * TEMPS_VAR
+            cost  = round(area * COST_CM2_FOAM + temps * COST_HORA / 60, 4)
+            execute("UPDATE encolat_pro SET preu_cost = ? WHERE referencia = ?", (cost, ref))
+            results.append(f"{ref}: {cost}")
+        except Exception as e:
+            errors.append(f"{ref}: {e}")
+
+    return '<br>'.join([
+        f"<b>OK: {len(results)} files actualitzades</b>",
+        *results,
+        f"<b>Errors: {len(errors)}</b>",
+        *errors,
+    ])
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
