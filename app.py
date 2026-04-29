@@ -3399,6 +3399,43 @@ def admin_revisar_taules():
     })
 
 
+@app.route('/admin/normalitzar-vidres')
+@admin_required
+def admin_normalitzar_vidres():
+    """TEMPORAL: recalcula preu_cost i preu de les mides noves de vidre
+    usant la fórmula real (cm² × 0.002880 + (3 + 0.5·perim_m)·25/60),
+    amb marge fix 1.60. Només toca les mides afegides recentment."""
+    MIDES = [
+        (65, 65), (65, 80), (65, 90), (65, 100),
+        (70, 70), (70, 80), (70, 90), (80, 80),
+        (80, 100), (90, 120), (100, 150),
+    ]
+
+    results, errors = [], []
+    for w, h in MIDES:
+        area    = w * h
+        perim_m = 2 * (w + h) / 100
+        cost    = round(area * 0.002880 + (3 + 0.5 * perim_m) * 25 / 60, 4)
+        preu    = round(cost * 1.60, 3)
+        ref     = f'{w}x{h}'
+        try:
+            execute(
+                "UPDATE vidres SET preu_cost = ?, preu = ? "
+                "WHERE LOWER(referencia) = LOWER(?)",
+                (cost, preu, ref),
+            )
+            results.append(f"{ref}: cost={cost} preu={preu}")
+        except Exception as e:
+            errors.append(f"{ref}: {e}")
+
+    return '<br>'.join([
+        f"<b>OK: {len(results)} mides actualitzades</b>",
+        *results,
+        f"<b>Errors: {len(errors)}</b>",
+        *errors,
+    ])
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
