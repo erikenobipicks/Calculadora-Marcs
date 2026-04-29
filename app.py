@@ -3436,6 +3436,43 @@ def admin_normalitzar_vidres():
     ])
 
 
+@app.route('/admin/normalitzar-vidres-tots')
+@admin_required
+def admin_normalitzar_vidres_tots():
+    """TEMPORAL: recalcula preu_cost i preu de TOTES les mides de vidre
+    simple (excloent DV-% i MIR-%) usant la fórmula real."""
+    rows = query(
+        "SELECT referencia FROM vidres "
+        "WHERE UPPER(referencia) NOT LIKE 'DV-%' "
+        "AND UPPER(referencia) NOT LIKE 'MIR-%'"
+    ) or []
+
+    results, errors = [], []
+    for r in rows:
+        ref = _row_get(r, 'referencia')
+        try:
+            parts = ref.upper().split('X')
+            w, h  = float(parts[0]), float(parts[1])
+            area  = w * h
+            perim = 2 * (w + h) / 100
+            cost  = round(area * 0.002880 + (3 + 0.5 * perim) * 25 / 60, 4)
+            preu  = round(cost * 1.60, 3)
+            execute(
+                "UPDATE vidres SET preu_cost = ?, preu = ? WHERE referencia = ?",
+                (cost, preu, ref),
+            )
+            results.append(f"{ref}: cost={cost} preu={preu}")
+        except Exception as e:
+            errors.append(f"{ref}: {e}")
+
+    return '<br>'.join([
+        f"<b>OK: {len(results)} mides actualitzades</b>",
+        *results,
+        f"<b>Errors: {len(errors)}</b>",
+        *errors,
+    ])
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
