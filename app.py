@@ -1300,8 +1300,8 @@ def _closest_passpartu_taula(amplada, alcada, prefix='1PAS'):
 def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', tolerancia=2.0):
     """Min-contain amb tolerància sobre la taula passpartout. Filtra per
     prefix de referència (1PAS, DOBPAS…). Considera ambdues orientacions
-    i selecciona el preu_cost més baix entre els que cobreixen la mida
-    amb la tolerància donada."""
+    i selecciona la fila amb àrea més propera a la sol·licitada (la més
+    ajustada físicament) entre les que cobreixen amb la tolerància donada."""
     rows = [dict(r) for r in query('SELECT referencia, preu_cost FROM passpartout')]
     rows = [r for r in rows if r['referencia'].upper().startswith(prefix.upper())]
     candidates = []
@@ -1314,10 +1314,11 @@ def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', toleranc
         if rw is None:
             continue
         if (rw >= tol_w and rh >= tol_h) or (rh >= tol_w and rw >= tol_h):
-            candidates.append(r)
+            candidates.append((r, rw * rh))
     if not candidates:
         return None
-    return min(candidates, key=lambda x: float(x['preu_cost']))
+    target_area = amplada * alcada
+    return min(candidates, key=lambda c: abs(c[1] - target_area))[0]
 
 
 def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
@@ -1373,8 +1374,9 @@ def _closest_encolat_taula(amplada, alcada, prefix):
 
 def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
     """Min-contain amb tolerància sobre encolat_pro filtrat per prefix
-    (ENC o PRO). Considera ambdues orientacions i selecciona el preu_cost
-    més baix entre els que cobreixen amb la tolerància donada."""
+    (ENC o PRO). Considera ambdues orientacions i selecciona la fila amb
+    àrea més propera a la sol·licitada (la més ajustada físicament) entre
+    les que cobreixen amb la tolerància donada."""
     rows = [dict(r) for r in query('SELECT referencia, preu_cost FROM encolat_pro')]
     rows = [r for r in rows if r['referencia'].upper().startswith(prefix.upper())]
     candidates = []
@@ -1387,10 +1389,11 @@ def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
         if rw is None:
             continue
         if (rw >= tol_w and rh >= tol_h) or (rh >= tol_w and rw >= tol_h):
-            candidates.append(r)
+            candidates.append((r, rw * rh))
     if not candidates:
         return None
-    return min(candidates, key=lambda x: float(x['preu_cost']))
+    target_area = amplada * alcada
+    return min(candidates, key=lambda c: abs(c[1] - target_area))[0]
 
 
 def calcular_cost_foam(amplada, alcada):
@@ -1475,8 +1478,8 @@ def _closest_vidre_taula_tolerancia(amplada, alcada, prefix='', tolerancia=2.0):
     una obra 62×62 si la tolerància és >= 2 cm. Considera ambdues
     orientacions del vidre (W×H i H×W).
 
-    Selecciona el candidat amb preu_cost més baix; ignora files sense
-    preu_cost."""
+    Selecciona la fila amb àrea més propera a la sol·licitada (la més
+    ajustada físicament); ignora files sense preu_cost."""
     rows = [dict(r) for r in query('SELECT referencia, preu_cost FROM vidres')]
     if prefix == '':
         rows = [r for r in rows
@@ -1496,10 +1499,11 @@ def _closest_vidre_taula_tolerancia(amplada, alcada, prefix='', tolerancia=2.0):
             continue
         # Cobertura amb tolerància en qualsevol orientació
         if (rw >= tol_w and rh >= tol_h) or (rh >= tol_w and rw >= tol_h):
-            candidates.append(r)
+            candidates.append((r, rw * rh))
     if not candidates:
         return None
-    return min(candidates, key=lambda x: float(x['preu_cost']))
+    target_area = amplada * alcada
+    return min(candidates, key=lambda c: abs(c[1] - target_area))[0]
 
 
 def calcular_cost_vidre(amplada, alcada):
