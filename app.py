@@ -3483,6 +3483,49 @@ def admin_normalitzar_vidres_tots():
     ])
 
 
+@app.route('/admin/normalitzar-doble-vidre')
+@admin_required
+def admin_normalitzar_doble_vidre():
+    """TEMPORAL: recalcula preu_cost i preu de totes les mides DV-:
+        cost = vidre_simple_cost · 2 + MO_muntatge
+        MO_muntatge = 5 min · 25€/h / 60 = 2.0833 €
+        preu = cost · 1.60
+    Cada DV-WxH busca la fila simple WxH (sense prefix) i hi calcula a sobre.
+    """
+    MO_MUNTATGE = round(5 * 25 / 60, 4)
+    rows = query("SELECT referencia FROM vidres WHERE UPPER(referencia) LIKE 'DV-%'") or []
+
+    results, errors = [], []
+    for r in rows:
+        ref = _row_get(r, 'referencia')
+        try:
+            ref_simple = ref.upper().replace('DV-', '')
+            simple = query(
+                "SELECT preu_cost FROM vidres WHERE UPPER(referencia) = ?",
+                (ref_simple,), one=True,
+            )
+            if simple and _row_get(simple, 'preu_cost') is not None:
+                cost_simple = float(_row_get(simple, 'preu_cost'))
+                cost = round(cost_simple * 2 + MO_MUNTATGE, 4)
+                preu = round(cost * 1.60, 3)
+                execute(
+                    "UPDATE vidres SET preu_cost = ?, preu = ? WHERE referencia = ?",
+                    (cost, preu, ref),
+                )
+                results.append(f"{ref}: {cost} € (simple {cost_simple} × 2 + {MO_MUNTATGE})")
+            else:
+                errors.append(f"{ref}: no s'ha trobat la mida simple {ref_simple}")
+        except Exception as e:
+            errors.append(f"{ref}: {e}")
+
+    return '<br>'.join([
+        f"<b>OK: {len(results)} mides actualitzades</b>",
+        *results,
+        f"<b>Errors: {len(errors)}</b>",
+        *errors,
+    ])
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
