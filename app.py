@@ -3526,6 +3526,74 @@ def admin_normalitzar_doble_vidre():
     ])
 
 
+@app.route('/admin/auditoria-moldures')
+@admin_required
+def admin_auditoria_moldures():
+    """TEMPORAL: dump JSON amb dades per a auditoria de marges de moldures.
+    Retorna {detall, resum} on:
+      - detall: una fila per moldura amb ratio actual i pvd nou (cost·1.60)
+      - resum:  agregat per proveïdor (count, ratios mig/min/max)
+    Filtra files amb preu_cost o preu_taller nuls/zero per evitar div/0."""
+    detall_rows = query("""
+        SELECT
+            referencia,
+            preu_taller,
+            preu_cost,
+            gruix,
+            proveidor,
+            ROUND(CAST(preu_taller AS NUMERIC) / CAST(preu_cost AS NUMERIC), 3) AS ratio_actual,
+            ROUND((CAST(preu_taller AS NUMERIC) / CAST(preu_cost AS NUMERIC) - 1) * 100, 1) AS marge_actual_pct,
+            ROUND(CAST(preu_cost AS NUMERIC) * 1.60, 4) AS pvd_nou,
+            ROUND((CAST(preu_cost AS NUMERIC) * 1.60 / CAST(preu_taller AS NUMERIC) - 1) * 100, 1) AS diff_pvd_vs_preu_taller_pct
+        FROM moldures
+        WHERE preu_cost IS NOT NULL AND preu_cost <> 0
+          AND preu_taller IS NOT NULL AND preu_taller <> 0
+        ORDER BY proveidor, referencia
+    """) or []
+
+    resum_rows = query("""
+        SELECT
+            proveidor,
+            COUNT(*) AS total_refs,
+            ROUND(AVG(CAST(preu_taller AS NUMERIC) / CAST(preu_cost AS NUMERIC)), 3) AS ratio_mig,
+            ROUND(AVG((CAST(preu_taller AS NUMERIC) / CAST(preu_cost AS NUMERIC) - 1) * 100), 1) AS marge_mig_pct,
+            ROUND(MIN((CAST(preu_taller AS NUMERIC) / CAST(preu_cost AS NUMERIC) - 1) * 100), 1) AS marge_min_pct,
+            ROUND(MAX((CAST(preu_taller AS NUMERIC) / CAST(preu_cost AS NUMERIC) - 1) * 100), 1) AS marge_max_pct
+        FROM moldures
+        WHERE preu_cost IS NOT NULL AND preu_cost <> 0
+          AND preu_taller IS NOT NULL AND preu_taller <> 0
+        GROUP BY proveidor
+        ORDER BY proveidor
+    """) or []
+
+    def _to_float(v):
+        try: return float(v) if v is not None else None
+        except (TypeError, ValueError): return None
+
+    detall = [{
+        'referencia': _row_get(r, 'referencia'),
+        'preu_taller': _to_float(_row_get(r, 'preu_taller')),
+        'preu_cost': _to_float(_row_get(r, 'preu_cost')),
+        'gruix': _row_get(r, 'gruix'),
+        'proveidor': _row_get(r, 'proveidor'),
+        'ratio_actual': _to_float(_row_get(r, 'ratio_actual')),
+        'marge_actual_pct': _to_float(_row_get(r, 'marge_actual_pct')),
+        'pvd_nou': _to_float(_row_get(r, 'pvd_nou')),
+        'diff_pvd_vs_preu_taller_pct': _to_float(_row_get(r, 'diff_pvd_vs_preu_taller_pct')),
+    } for r in detall_rows]
+
+    resum = [{
+        'proveidor': _row_get(r, 'proveidor'),
+        'total_refs': _row_get(r, 'total_refs'),
+        'ratio_mig': _to_float(_row_get(r, 'ratio_mig')),
+        'marge_mig_pct': _to_float(_row_get(r, 'marge_mig_pct')),
+        'marge_min_pct': _to_float(_row_get(r, 'marge_min_pct')),
+        'marge_max_pct': _to_float(_row_get(r, 'marge_max_pct')),
+    } for r in resum_rows]
+
+    return jsonify({'detall': detall, 'resum': resum})
+
+
 @app.route('/admin/db-status')
 def admin_db_status():
     """TEMPORAL: diagnòstic complet de l'estat de la BD.
