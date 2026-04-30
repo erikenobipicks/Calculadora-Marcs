@@ -3857,6 +3857,185 @@ def admin_auditoria_marges():
     return jsonify({'detall': detall, 'resum': resum})
 
 
+@app.route('/admin/auditoria-preus')
+@admin_required
+def admin_auditoria_preus():
+    """TEMPORAL: compara els preus que retorna la calc per impressió
+    (via _imp_closest + get_marge_impressio_tram) amb el que faria
+    reusrevela-web (replicant _resolve_print_margin_from_trams sobre
+    les dades que rep via /api/public/professional-summary). Si tots
+    dos camins donen el mateix número, la cadena de dades és coherent."""
+    MIDES = [
+        (13, 18), (20, 30), (30, 40), (40, 50), (50, 70),
+        (60, 80), (70, 100), (80, 120), (90, 150), (100, 200),
+    ]
+    USUARIS = [
+        (1, 'admin (alt)'),
+        (3, 'Foto Focus (mig)'),
+    ]
+
+    def _summary_data_for(usuari):
+        """Replica el JSON que retornaria /api/public/professional-summary
+        per a aquest usuari (només els camps que el web fa servir)."""
+        return {
+            'imp_tram1': _row_get(usuari, 'imp_tram1'),
+            'imp_tram2': _row_get(usuari, 'imp_tram2'),
+            'imp_tram3': _row_get(usuari, 'imp_tram3'),
+            'imp_tram4': _row_get(usuari, 'imp_tram4'),
+            'imp_tram5': _row_get(usuari, 'imp_tram5'),
+            'imp_tram6': _row_get(usuari, 'imp_tram6'),
+            'imp_tram_limits': [
+                float(get_config_value('imp_tram1_area', '900')),
+                float(get_config_value('imp_tram2_area', '2000')),
+                float(get_config_value('imp_tram3_area', '4200')),
+                float(get_config_value('imp_tram4_area', '6000')),
+                float(get_config_value('imp_tram5_area', '14400')),
+            ],
+            'imp_tram_defaults': [
+                float(get_config_value('imp_tram1_marge_default', '80')),
+                float(get_config_value('imp_tram2_marge_default', '75')),
+                float(get_config_value('imp_tram3_marge_default', '70')),
+                float(get_config_value('imp_tram4_marge_default', '60')),
+                float(get_config_value('imp_tram5_marge_default', '50')),
+                float(get_config_value('imp_tram6_marge_default', '45')),
+            ],
+        }
+
+    def _simulate_web_resolution(width, height, summary):
+        """Replica _resolve_print_margin_from_trams de reusrevela-web."""
+        raw_limits = summary.get('imp_tram_limits')
+        if isinstance(raw_limits, list) and len(raw_limits) >= 5:
+            try:
+                limits = [float(v) for v in raw_limits[:5]] + [float('inf')]
+            except (TypeError, ValueError):
+                limits = [900, 2000, 4200, 6000, 14400, float('inf')]
+        else:
+            limits = [900, 2000, 4200, 6000, 14400, float('inf')]
+        raw_defaults = summary.get('imp_tram_defaults')
+        if isinstance(raw_defaults, list) and len(raw_defaults) >= 6:
+            try:
+                defaults = [float(v) for v in raw_defaults[:6]]
+            except (TypeError, ValueError):
+                defaults = [80, 75, 70, 60, 50, 45]
+        else:
+            defaults = [80, 75, 70, 60, 50, 45]
+        area = max(0.0, float(width or 0)) * max(0.0, float(height or 0))
+        for i, lim in enumerate(limits):
+            if area <= lim:
+                v = summary.get(f'imp_tram{i + 1}')
+                if v is not None:
+                    try: return {'marge': float(v), 'tram': i + 1, 'source': 'user'}
+                    except (TypeError, ValueError): pass
+                return {'marge': float(defaults[i]), 'tram': i + 1, 'source': 'default'}
+        return {'marge': float(defaults[-1]), 'tram': 6, 'source': 'default'}
+
+    seccions = []
+    for uid, label in USUARIS:
+        usuari = query('SELECT * FROM usuaris WHERE id=?', [uid], one=True)
+        if not usuari:
+            seccions.append({'label': f'{label} — id={uid}', 'rows': [], 'error': 'usuari no trobat'})
+            continue
+        summary = _summary_data_for(usuari)
+        files = []
+        for w, h in MIDES:
+            r = _imp_closest(w, h)
+            if not r:
+                files.append({'w': w, 'h': h, 'area': w * h, 'ref': '—', 'pvd': 0, 'tram_calc': None,
+                              'marge_calc': None, 'pvp_calc': None, 'tram_web': None,
+                              'marge_web': None, 'pvp_web': None, 'match': None,
+                              'error': 'sense match a impressio'})
+                continue
+            pvd = float(r.get('preu') or 0)
+
+            tram_calc = get_marge_impressio_tram(w * h, usuari)
+            pvp_calc = round(pvd * (1 + tram_calc['marge'] / 100), 4)
+
+            tram_web = _simulate_web_resolution(w, h, summary)
+            pvp_web = round(pvd * (1 + tram_web['marge'] / 100), 4)
+
+            match = abs(pvp_calc - pvp_web) <= 0.01
+            files.append({
+                'w': w, 'h': h, 'area': w * h, 'ref': r['ref'], 'pvd': pvd,
+                'tram_calc': tram_calc['tram'], 'marge_calc': tram_calc['marge'],
+                'pvp_calc': pvp_calc,
+                'tram_web': tram_web['tram'], 'marge_web': tram_web['marge'],
+                'pvp_web': pvp_web, 'match': match, 'error': None,
+            })
+        seccions.append({'label': f'{label} — id={uid}', 'rows': files, 'error': None})
+
+    # HTML inline (route temporal — no val la pena un template separat)
+    html = ['<!DOCTYPE html><html><head><meta charset="UTF-8">',
+            '<title>Auditoria preus impressió</title>',
+            '<style>',
+            'body{font-family:system-ui,sans-serif;background:#F8F7F4;color:#1C1B18;margin:0;padding:1.5rem 2rem;max-width:1240px}',
+            'h1{font-size:24px;margin:0 0 .25rem}',
+            'h2{font-size:16px;margin:1.5rem 0 .5rem;color:#1A6B45}',
+            'p.muted{color:#6B6860;font-size:13px;margin:0 0 1.5rem}',
+            'table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden;font-size:12px}',
+            'th{background:#F5F4F1;text-align:left;padding:8px 10px;font-weight:700;font-size:11px;text-transform:uppercase;color:#6B6860;border-bottom:1px solid #E5E2DB}',
+            'td{padding:8px 10px;border-bottom:1px solid #F3F1EB}',
+            'td.r{text-align:right;font-family:Consolas,monospace}',
+            'tr:last-child td{border-bottom:none}',
+            'tr.match-no td{background:#FAEAEA}',
+            '.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:4px;font-weight:700}',
+            '.ok{background:#E8F3EE;color:#1A6B45}',
+            '.bad{background:#FAEAEA;color:#B84040}',
+            '.err{background:#FDF3E8;color:#C8873A}',
+            '</style></head><body>',
+            '<h1>Auditoria preus impressió</h1>',
+            '<p class="muted">Compara <code>/api/closest</code> (camí directe) vs reusrevela-web (camí simulat sobre <code>/api/public/professional-summary</code>). Si tots dos camins donen el mateix PVP, la cadena de dades és coherent.</p>']
+    for s in seccions:
+        html.append(f'<h2>{s["label"]}</h2>')
+        if s['error']:
+            html.append(f'<p class="muted">⚠ {s["error"]}</p>')
+            continue
+        html.append('<table><thead><tr>'
+                    '<th>Mida</th><th class="r">Àrea</th><th>Ref</th>'
+                    '<th class="r">PVD</th>'
+                    '<th class="r">Tram calc</th><th class="r">Marge calc</th><th class="r">PVP calc</th>'
+                    '<th class="r">Tram web</th><th class="r">Marge web</th><th class="r">PVP web</th>'
+                    '<th>Match</th></tr></thead><tbody>')
+
+        def _eur(v):
+            return f'{v:.4f} €' if isinstance(v, (int, float)) else '—'
+
+        def _pct(v):
+            return f'{v:.1f} %' if isinstance(v, (int, float)) else '—'
+
+        def _num(v):
+            return str(v) if v is not None else '—'
+
+        for row in s['rows']:
+            if row.get('error'):
+                cls = 'match-no'
+                tag = f'<span class="tag err">{row["error"]}</span>'
+            elif row['match']:
+                cls = 'match-yes'
+                tag = '<span class="tag ok">✓ OK</span>'
+            else:
+                cls = 'match-no'
+                diff = (row['pvp_calc'] or 0) - (row['pvp_web'] or 0)
+                tag = f'<span class="tag bad">⚠ Δ{diff:+.4f}€</span>'
+
+            cells = [
+                f'{row["w"]}×{row["h"]}',
+                f'<span class="r">{row["area"]}</span>',
+                row['ref'],
+                f'<span class="r">{_eur(row["pvd"])}</span>',
+                f'<span class="r">{_num(row["tram_calc"])}</span>',
+                f'<span class="r">{_pct(row["marge_calc"])}</span>',
+                f'<span class="r">{_eur(row["pvp_calc"])}</span>',
+                f'<span class="r">{_num(row["tram_web"])}</span>',
+                f'<span class="r">{_pct(row["marge_web"])}</span>',
+                f'<span class="r">{_eur(row["pvp_web"])}</span>',
+                tag,
+            ]
+            html.append(f'<tr class="{cls}">' + ''.join(f'<td>{c}</td>' for c in cells) + '</tr>')
+        html.append('</tbody></table>')
+    html.append('</body></html>')
+    return ''.join(html)
+
+
 @app.route('/admin/marcar-descatalogades')
 @admin_required
 def admin_marcar_descatalogades():
