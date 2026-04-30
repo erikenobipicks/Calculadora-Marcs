@@ -1868,7 +1868,7 @@ def public_professional_summary():
             return jsonify({'ok': False, 'error': 'not_found'}), 404
 
         user = query(
-            'SELECT id, nom, nom_empresa, profile_type, access_status, marge, marge_impressio, margins_json FROM usuaris WHERE lower(username)=?',
+            'SELECT id, nom, nom_empresa, profile_type, access_status, marge, marge_pro_pct, marge_impressio, marge_impressio_pro_pct, margins_json FROM usuaris WHERE lower(username)=?',
             [username],
             one=True,
         )
@@ -1899,6 +1899,9 @@ def public_professional_summary():
                 'pendent': bool(row['pendent']),
             })
 
+        marge_pro_pct = _row_get(user, 'marge_pro_pct')
+        marge_impressio_pro_pct = _row_get(user, 'marge_impressio_pro_pct')
+
         return jsonify({
             'ok': True,
             'name': user['nom'] or '',
@@ -1910,7 +1913,11 @@ def public_professional_summary():
             # valors en lloc del JSON local, que ara fa només de cache.
             'margins': margins,
             'marge': float(user['marge']) if user['marge'] is not None else 60.0,
+            'marge_pro_pct': float(marge_pro_pct) if marge_pro_pct is not None else None,
+            'marge_efectiu': _get_marge_value(user),
             'marge_impressio': float(user['marge_impressio']) if user['marge_impressio'] is not None else 0.0,
+            'marge_impressio_pro_pct': float(marge_impressio_pro_pct) if marge_impressio_pro_pct is not None else None,
+            'marge_impressio_efectiu': _get_marge_impressio_value(user),
         })
     except Exception as exc:
         print(f'professional-summary error: {exc}')
