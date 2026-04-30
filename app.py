@@ -3933,6 +3933,47 @@ def admin_moldura_toggle(ref):
         pass
     return jsonify({'ok': True, 'actiu': nou})
 
+
+@app.route('/admin/moldura/descatalogada', methods=['POST'])
+@admin_required
+def admin_moldura_descatalogada():
+    """Toggle del flag 'descatalogada'. Accepta 'ref' i opcionalment 'descatalogada'
+    (true/false) per fixar un valor concret. Si no s'envia, fa toggle del valor actual.
+    Retorna {ok, ref, descatalogada, notes_stock}."""
+    payload = request.get_json(silent=True) or request.form
+    ref = (payload.get('ref') or '').strip()
+    if not ref:
+        return jsonify({'ok': False, 'error': 'missing_ref'}), 400
+
+    m = query(
+        'SELECT descatalogada, notes_stock FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+        [ref], one=True,
+    )
+    if not m:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+
+    actual = bool(_row_get(m, 'descatalogada', False))
+    if 'descatalogada' in payload:
+        raw = payload.get('descatalogada')
+        nou = str(raw).lower() in ('1', 'true', 'yes', 'on') if not isinstance(raw, bool) else raw
+    else:
+        nou = not actual
+
+    try:
+        execute(
+            'UPDATE moldures SET descatalogada = ? WHERE LOWER(referencia)=LOWER(?)',
+            [bool(nou), ref],
+        )
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)[:160]}), 500
+
+    return jsonify({
+        'ok': True,
+        'ref': ref,
+        'descatalogada': bool(nou),
+        'notes_stock': _row_get(m, 'notes_stock', '') or '',
+    })
+
 # â"€â"€ API: buscar moldura per ref exacte (autocomplete) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/admin/cataleg/api/cerca')
 @admin_required
