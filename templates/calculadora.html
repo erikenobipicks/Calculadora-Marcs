@@ -2072,8 +2072,10 @@ function calcular(){
   var pvpImp  = pvpImpressio();
   // Mode admin: si l'admin escull "client", aplica un +60% extra sobre el PVP
   // per simular el preu al client final. Usuaris no-admin mai toquen aquest factor.
+  // NOTA: factorModeAdmin NO s'aplica a impressions — el seu pvp ja inclou el
+  // marge per tram d'àrea (que per a admin ja és el preu al client final).
   var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
-  var pNet    = (pvpMarc+pvpExt+pvpImp)*qty*factorModeAdmin;
+  var pNet    = (pvpMarc+pvpExt)*qty*factorModeAdmin + pvpImp*qty;
 
   // Descompte sobre PVP, mai sobre cost
   var descEur  = pNet*(desc/100);
