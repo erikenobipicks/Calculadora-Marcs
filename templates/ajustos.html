@@ -145,6 +145,43 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Marge d'impressions per àrea</div>
+    <div class="card">
+      <div class="hint-box">El marge d'impressió s'aplica per trams segons l'àrea de la foto en cm². Si deixes un camp buit, s'aplicarà el valor per defecte que mostra el placeholder.</div>
+      <form method="post" action="{{ url_for('ajustos_impressio_trams') }}" style="display:flex;flex-direction:column;gap:.85rem">
+        {% for t in imp_trams %}
+        <div class="margin-row">
+          <div>
+            <label for="imp-tram{{ t.idx }}">Tram {{ t.idx }} <span style="color:var(--hint);font-weight:400">({{ t.label }})</span></label>
+            <p style="font-size:12px;color:var(--muted);margin:0">
+              {% if t.area_max %}fins {{ '%g'|format(t.area_max) }} cm²{% else %}més de l'anterior{% endif %} · default {{ '%g'|format(t.default) }}%
+            </p>
+          </div>
+          <div class="f" style="margin-bottom:0">
+            <label for="imp-tram{{ t.idx }}">Marge (%)</label>
+            <input type="number" id="imp-tram{{ t.idx }}" name="imp_tram{{ t.idx }}"
+                   value="{{ '%g'|format(t.value) if t.value is not none else '' }}"
+                   placeholder="{{ '%g'|format(t.default) }}"
+                   min="0" max="500" step="0.1">
+          </div>
+        </div>
+        {% endfor %}
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+          <button type="submit" class="btn-g" style="margin-top:0;width:auto;padding:11px 22px">Desar trams</button>
+        </div>
+      </form>
+      <form method="post" action="{{ url_for('ajustos_impressio_trams_reset') }}"
+            onsubmit="return confirm('Restaurar tots els trams als valors per defecte?')"
+            style="margin-top:.6rem">
+        <button type="submit"
+                style="padding:9px 18px;border-radius:7px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted)">
+          Restaurar valors per defecte
+        </button>
+      </form>
+    </div>
+  </div>
+
     <div class="section">
     <div class="section-title">Logotip del negoci (opcional)</div>
     <div class="card">
