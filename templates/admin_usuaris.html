@@ -138,7 +138,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
         <thead>
           <tr>
             <th>Compte</th><th>Perfil</th><th>Accés</th><th>Dades</th>
-            <th>Marge</th><th>Contrasenya</th><th>Eliminar</th>
+            <th>Contrasenya</th><th>Eliminar</th>
           </tr>
         </thead>
         <tbody>
@@ -180,10 +180,6 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
               <textarea name="notes_validacio" placeholder="Notes internes">{{ u.notes_validacio or '' }}</textarea>
               <button type="submit" class="btn btn-primary btn-sm">Desar perfil</button>
             </form>
-          </td>
-          <td style="font-weight:600;color:#0984e3">
-            {{ u.marge or 60 }}%<br>
-            <span style="color:#00b894">{{ u.marge_impressio or 0 }}%</span>
           </td>
           <td>
             <form method="post" action="/admin/usuari" class="row-actions">
