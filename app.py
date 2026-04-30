@@ -1053,6 +1053,54 @@ def _seed_proeco_preus(db, use_pg=False):
     print(f'ProEco seed: {ok}/{len(_PROECO_PREUS)} preus inserits')
 
 
+# Llistat base de referències de passpartú. Idempotent: només insereix
+# si la referència no existeix. Per afegir-ne més, edita la llista i
+# torna a executar /admin/run-migrations.
+_PASSPARTOUS_BASE = [
+    ('P001', 'Blanc Cru',  '', 'Blanc cru'),
+    ('P003', 'Negre',      '', 'Negre'),
+    ('P008', 'Groc',       '', 'Groc'),
+    ('P016', 'Blanc',      '', 'Blanc'),
+    ('P076', 'Marron',     '', 'Marró'),
+    ('P077', 'Gris Clar',  '', 'Gris clar'),
+    ('P078', 'Gris Fosc',  '', 'Gris fosc'),
+]
+
+
+def _seed_passpartous_basic(db, use_pg=False):
+    """Inserta el catàleg base de passpartous si encara no hi són.
+    Idempotent (ON CONFLICT DO NOTHING / INSERT OR IGNORE)."""
+    ok = 0
+    if use_pg:
+        cur = db.cursor()
+        for ref, color, textura, descripcio in _PASSPARTOUS_BASE:
+            try:
+                cur.execute(
+                    "INSERT INTO passpartout (referencia, color, textura, descripcio) "
+                    "VALUES (%s, %s, %s, %s) ON CONFLICT (referencia) DO NOTHING",
+                    [ref, color, textura, descripcio],
+                )
+                ok += 1
+            except Exception as e:
+                print(f'Passpartou seed PG skip {ref}: {e}')
+        try: db.commit()
+        except: pass
+    else:
+        for ref, color, textura, descripcio in _PASSPARTOUS_BASE:
+            try:
+                db.execute(
+                    "INSERT OR IGNORE INTO passpartout (referencia, color, textura, descripcio) "
+                    "VALUES (?, ?, ?, ?)",
+                    [ref, color, textura, descripcio],
+                )
+                ok += 1
+            except Exception as e:
+                print(f'Passpartou seed SQLite skip {ref}: {e}')
+        try: db.commit()
+        except: pass
+    print(f'Passpartous seed: {ok}/{len(_PASSPARTOUS_BASE)} referències processades')
+
+
 def _seed_intermol_moldures(db, use_pg=False):
     """Neteja registres Intermol inserits per error (codi proveïdor com a referència primària).
     Les fotos es resolen dinàmicament via _find_local_moldura_photo: el codi intern
@@ -3174,10 +3222,11 @@ def admin_run_migrations():
     # Operacions pesades: totes mogudes aquí des de init_db() per no penjar
     # l'arrencada dels workers a PG. Cadascuna amb el seu try/except + rollback.
     for nom, fn in [
-        ("_seed_proeco_preus",      lambda: _seed_proeco_preus(db, use_pg=USE_PG)),
-        ("_seed_intermol_moldures", lambda: _seed_intermol_moldures(db, use_pg=USE_PG)),
-        ("_fix_ref2_errors",        lambda: _fix_ref2_errors(db, use_pg=USE_PG)),
-        ("_run_v2_price_backfill",  lambda: _run_v2_price_backfill(db)),
+        ("_seed_proeco_preus",       lambda: _seed_proeco_preus(db, use_pg=USE_PG)),
+        ("_seed_passpartous_basic",  lambda: _seed_passpartous_basic(db, use_pg=USE_PG)),
+        ("_seed_intermol_moldures",  lambda: _seed_intermol_moldures(db, use_pg=USE_PG)),
+        ("_fix_ref2_errors",         lambda: _fix_ref2_errors(db, use_pg=USE_PG)),
+        ("_run_v2_price_backfill",   lambda: _run_v2_price_backfill(db)),
     ]:
         try:
             fn()
