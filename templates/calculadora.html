@@ -1494,7 +1494,7 @@ function lookupRef(t,ref){
     PREUS[t]=0; GRUIX[t]=0; MERMA[t]={pct:10,min:100}; setChips(t,[]);
     setDescatalogadaWarning(t, false);
     if(t==='pre'){ document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
-    if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); setProtterDisabled(false); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
+    if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
     calcular(); return;
   }
   fetch('/api/lookup?tipus=moldura&ref='+encodeURIComponent(ref))
@@ -1513,7 +1513,6 @@ function lookupRef(t,ref){
           document.getElementById('desc-marc').textContent=d.descripcio||'';
           document.getElementById('desc-marc').style.color='';
           document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
-          setProtterDisabled(true);
           _lastFetchKey=''; recalcMides(); updateReversPeu(); return;
         }
       } else {
@@ -1738,7 +1737,7 @@ function applyIncompatibilities(){
 
   var rules = {
     encolat:           hasProeco||hasDoblVidre||hasPasspartu,
-    protter:           hasProeco||hasDoblVidre||hasPasspartu||hasMarc,
+    protter:           hasProeco||hasDoblVidre||hasPasspartu,
     laminat:           hasProeco||hasDoblVidre||hasPasspartu,
     'muntatge-cap':    false,
     vidre:             hasProeco,
@@ -1981,7 +1980,6 @@ function onImpressioChange(){ toggleImpressio(); }
 var _marcLookupTimer = null;
 function onMarcInput(){
   var val = document.getElementById('marc_principal').value.trim();
-  setProtterDisabled(val !== '');
   if(val === ''){
     PREUS.marc=0; GRUIX.marc=0; setChips('marc',[]);
     document.getElementById('desc-marc').textContent='';
@@ -2581,7 +2579,6 @@ function restauraEstat(e){
             document.getElementById('desc-marc').textContent=d.descripcio||'';
             document.getElementById('desc-marc').style.color='';
             document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="">':'<div class="no-foto">Sense foto</div>';
-            setProtterDisabled(true);
           }
         })
     : Promise.resolve();
