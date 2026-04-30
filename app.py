@@ -733,6 +733,44 @@ def _get_marge_impressio_value(u):
     return 0.0
 
 
+def get_marge_impressio_tram(area_cm2, usuari):
+    """Marge d'impressions PVD→PVP per àrea de la foto (cm²).
+    6 trams configurables; cada usuari té els seus propis valors a
+    usuaris.imp_tram1..imp_tram6. Si en falta algun, cau al default
+    global de config (imp_tram{N}_marge_default).
+
+    Retorna {'marge': float, 'tram': int (1-6), 'limit': float|None}."""
+    try:
+        a = float(area_cm2 or 0)
+    except (TypeError, ValueError):
+        a = 0.0
+
+    limits = [
+        float(get_config_value('imp_tram1_area', '900')),
+        float(get_config_value('imp_tram2_area', '2000')),
+        float(get_config_value('imp_tram3_area', '4200')),
+        float(get_config_value('imp_tram4_area', '7500')),
+        float(get_config_value('imp_tram5_area', '14400')),
+        float('inf'),
+    ]
+    user_vals = [_row_get(usuari, f'imp_tram{i}') for i in range(1, 7)]
+    defaults = [
+        float(get_config_value('imp_tram1_marge_default', '80')),
+        float(get_config_value('imp_tram2_marge_default', '75')),
+        float(get_config_value('imp_tram3_marge_default', '70')),
+        float(get_config_value('imp_tram4_marge_default', '60')),
+        float(get_config_value('imp_tram5_marge_default', '50')),
+        float(get_config_value('imp_tram6_marge_default', '45')),
+    ]
+    for i, lim in enumerate(limits):
+        if a <= lim:
+            v = user_vals[i]
+            marge = float(v) if v is not None else defaults[i]
+            return {'marge': marge, 'tram': i + 1, 'limit': None if lim == float('inf') else lim}
+    # Fallback teòricament inabastable
+    return {'marge': defaults[-1], 'tram': 6, 'limit': None}
+
+
 def _user_is_allowed(user):
     return bool(user) and (bool(_row_get(user, 'is_admin', 0)) or _user_access_status(user) == 'active')
 
@@ -3157,6 +3195,13 @@ def admin_run_migrations():
         # Usuaris
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_pro_pct DECIMAL(5,2)",
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_impressio_pro_pct DECIMAL(5,2)",
+        # Trams de marge per impressions (PVD→PVP segons àrea de la foto)
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram1 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram2 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram3 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram4 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram5 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram6 REAL",
         # Historial de preus de cost — noms de columna alineats amb el codi
         # existent (taula, preu_cost_antic, data, notes).
         """CREATE TABLE IF NOT EXISTS historial_preus_cost (
@@ -3560,6 +3605,40 @@ def admin_normalitzar_doble_vidre():
 
     return '<br>'.join([
         f"<b>OK: {len(results)} mides actualitzades</b>",
+        *results,
+        f"<b>Errors: {len(errors)}</b>",
+        *errors,
+    ])
+
+
+@app.route('/admin/seed-imp-trams')
+@admin_required
+def admin_seed_imp_trams():
+    """TEMPORAL: omple imp_tram1..6 d'usuaris existents segons el grup
+    inicial acordat (admin/Fotoimag/La Capsa → trams alts; pros mitjans;
+    inactius → defaults). Idempotent — sobreescriu els valors si ja
+    n'hi havia."""
+    GRUPS = [
+        ('alt',     [1, 7, 9],                      [140, 130, 120, 100, 90, 80]),
+        ('mig',     [3, 8, 13, 17, 19],             [100, 95, 90, 75, 65, 55]),
+        ('default', [4, 5, 6, 10, 11, 12, 14, 16, 18], [80, 75, 70, 60, 50, 45]),
+    ]
+
+    results, errors = [], []
+    for nom, ids, valors in GRUPS:
+        for uid in ids:
+            try:
+                execute(
+                    "UPDATE usuaris SET imp_tram1=?, imp_tram2=?, imp_tram3=?, "
+                    "imp_tram4=?, imp_tram5=?, imp_tram6=? WHERE id=?",
+                    valors + [uid],
+                )
+                results.append(f"id={uid} grup={nom} → {valors}")
+            except Exception as e:
+                errors.append(f"id={uid}: {str(e)[:160]}")
+
+    return '<br>'.join([
+        f"<b>OK: {len(results)} usuaris actualitzats</b>",
         *results,
         f"<b>Errors: {len(errors)}</b>",
         *errors,
@@ -4198,16 +4277,23 @@ def admin_usuaris():
     continua a /admin/usuari (singular) per compatibilitat amb els forms
     existents — aquí només renderitzem el llistat.
 
-    Nota privacitat: els marges (marge, marge_impressio, marge_pro_pct,
-    marge_impressio_pro_pct, margins_json) es consideren dades privades
-    del professional i NO s'inclouen al SELECT, així no arriben mai a la
-    UI d'admin. Cada pro els gestiona des de /ajustos."""
+    Nota privacitat: els marges generals (marge, marge_pro_pct, marge_impressio,
+    marge_impressio_pro_pct, margins_json) es consideren dades privades del
+    professional i NO arriben a la UI d'admin. Cada pro els gestiona des de
+    /ajustos. Els trams d'impressió (imp_tram1..6) sí es mostren aquí per a
+    onboarding/suport però queden traçats al audit log si l'admin els toca."""
     usuaris = query("""
         SELECT id, username, nom, nom_empresa, profile_type, access_status,
-               web_url, instagram, fiscal_id, notes_validacio, is_admin
+               web_url, instagram, fiscal_id, notes_validacio, is_admin,
+               imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6
         FROM usuaris ORDER BY nom
     """)
-    return render_template('admin_usuaris.html', usuaris=usuaris)
+    # Defaults globals per als placeholders
+    imp_defaults = {
+        f'tram{i}': float(get_config_value(f'imp_tram{i}_marge_default', '0'))
+        for i in range(1, 7)
+    }
+    return render_template('admin_usuaris.html', usuaris=usuaris, imp_defaults=imp_defaults)
 
 
 @app.route('/admin/usuari', methods=['POST'])
@@ -4257,6 +4343,22 @@ def admin_usuari():
                    target_username=_row_get(target, 'username', '') if target else '',
                    details=f"status={request.form.get('access_status','active')} profile={request.form.get('profile_type','professional')}")
         flash('Perfil professional actualitzat.', 'ok')
+    elif action == 'actualitzar_imp_trams':
+        uid = request.form['uid']
+        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
+        valors = []
+        for i in range(1, 7):
+            raw = (request.form.get(f'imp_tram{i}') or '').strip()
+            valors.append(float(raw) if raw else None)
+        execute(
+            'UPDATE usuaris SET imp_tram1=?, imp_tram2=?, imp_tram3=?, '
+            'imp_tram4=?, imp_tram5=?, imp_tram6=? WHERE id=?',
+            valors + [uid],
+        )
+        _audit_log('user.imp_trams_update', target_user_id=int(uid) if str(uid).isdigit() else None,
+                   target_username=_row_get(target, 'username', '') if target else '',
+                   details=' '.join(f"t{i+1}={v}" for i, v in enumerate(valors)))
+        flash('Trams d\'impressió actualitzats.', 'ok')
     return redirect(url_for('admin_usuaris'))
 
 
@@ -5611,6 +5713,33 @@ def ajustos():
     user_tel     = _row_get(u, 'empresa_tel', '') or ''
     nom_fiscal   = _row_get(u, 'nom_fiscal', '') or ''
     fiscal_id    = _row_get(u, 'fiscal_id', '') or ''
+
+    # Trams d'impressió de l'usuari + defaults globals (per als placeholders)
+    user_full = query(
+        'SELECT imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6 '
+        'FROM usuaris WHERE id=?', [session['user_id']], one=True,
+    )
+    tram_areas = [
+        float(get_config_value('imp_tram1_area', '900')),
+        float(get_config_value('imp_tram2_area', '2000')),
+        float(get_config_value('imp_tram3_area', '4200')),
+        float(get_config_value('imp_tram4_area', '7500')),
+        float(get_config_value('imp_tram5_area', '14400')),
+        None,
+    ]
+    tram_labels = ['fins 30×30', 'fins 40×50', 'fins 60×70', 'fins 75×100', 'fins 80×180', '> 80×180']
+    imp_trams = []
+    for i in range(1, 7):
+        v = _row_get(user_full, f'imp_tram{i}') if user_full else None
+        d = float(get_config_value(f'imp_tram{i}_marge_default', '0'))
+        imp_trams.append({
+            'idx': i,
+            'label': tram_labels[i - 1],
+            'area_max': tram_areas[i - 1],
+            'value': float(v) if v is not None else None,
+            'default': d,
+        })
+
     return render_template('ajustos.html', marge_actual=marge_actual, marge_imp=marge_imp,
                            margin_entries=[
                                dict(entry, description='S\'aplica a la fotografia impresa. Foam, laminat + foam i ProEco treballen amb el marge general.') if entry['key'] == 'prints' else entry
@@ -5623,7 +5752,42 @@ def ajustos():
                            brand_color_secondary=brand_color_secondary,
                            brand_color_menu=brand_color_menu,
                            empresa_adreca=user_adreca if user_adreca else cfg.get('empresa_adreca',''),
-                           empresa_tel=user_tel if user_tel else cfg.get('empresa_tel',''))
+                           empresa_tel=user_tel if user_tel else cfg.get('empresa_tel',''),
+                           imp_trams=imp_trams)
+
+
+@app.route('/ajustos/impressio-trams', methods=['POST'])
+@login_required
+def ajustos_impressio_trams():
+    """Desa els 6 trams de marge d'impressió de l'usuari logat. Si el camp
+    arriba buit, queda NULL (s'aplicarà el default global del tram)."""
+    valors = []
+    for i in range(1, 7):
+        raw = (request.form.get(f'imp_tram{i}') or '').strip()
+        try:
+            valors.append(float(raw) if raw else None)
+        except ValueError:
+            valors.append(None)
+    execute(
+        'UPDATE usuaris SET imp_tram1=?, imp_tram2=?, imp_tram3=?, '
+        'imp_tram4=?, imp_tram5=?, imp_tram6=? WHERE id=?',
+        valors + [session['user_id']],
+    )
+    flash('Trams d\'impressió actualitzats.', 'ok')
+    return redirect(url_for('ajustos'))
+
+
+@app.route('/ajustos/impressio-trams/reset', methods=['POST'])
+@login_required
+def ajustos_impressio_trams_reset():
+    """Torna els 6 trams a NULL — l'app aplicarà el default global."""
+    execute(
+        'UPDATE usuaris SET imp_tram1=NULL, imp_tram2=NULL, imp_tram3=NULL, '
+        'imp_tram4=NULL, imp_tram5=NULL, imp_tram6=NULL WHERE id=?',
+        [session['user_id']],
+    )
+    flash('Trams d\'impressió restaurats als valors per defecte.', 'ok')
+    return redirect(url_for('ajustos'))
 
 
 import re as _re
@@ -5942,6 +6106,21 @@ def api_closest():
         'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
         'impressio':    _imp_closest(foto_w, foto_h),
     }
+
+    # Enriquir la impressió amb el marge de tram aplicat (PVD→PVP).
+    # 'preu' segueix sent el PVD (per compat amb consumidors antics);
+    # afegim 'pvp' (preu·(1+marge/100)), 'marge_aplicat' i 'tram'.
+    imp_res = result.get('impressio')
+    if imp_res:
+        usuari_actual = query('SELECT * FROM usuaris WHERE id=?', [session.get('user_id')], one=True)
+        tram_info = get_marge_impressio_tram(foto_w * foto_h, usuari_actual)
+        preu_pvd = float(imp_res.get('preu') or 0)
+        marge_aplicat = float(tram_info['marge'])
+        imp_res['marge_aplicat'] = marge_aplicat
+        imp_res['tram'] = tram_info['tram']
+        imp_res['area'] = round(foto_w * foto_h, 2)
+        imp_res['pvp'] = round(preu_pvd * (1 + marge_aplicat / 100), 4)
+
     return jsonify(result)
 
 # â"€â"€ Routes: Email (mailto) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -6426,7 +6605,27 @@ def init_db():
                          ('mirall_multiplo_dm2','6'),
                          ('vidre_tolerancia_cm','2'),
                          ('passpartu_tolerancia_cm','2'),
-                         ('encolat_tolerancia_cm','2')]:
+                         ('encolat_tolerancia_cm','2'),
+                         # Trams àrea per al marge d'impressions (cm²)
+                         ('imp_tram1_area','900'),
+                         ('imp_tram2_area','2000'),
+                         ('imp_tram3_area','4200'),
+                         ('imp_tram4_area','7500'),
+                         ('imp_tram5_area','14400'),
+                         # Trams admin (Objectiu Fotògrafs) — referència
+                         ('imp_tram1_marge_admin','140'),
+                         ('imp_tram2_marge_admin','130'),
+                         ('imp_tram3_marge_admin','120'),
+                         ('imp_tram4_marge_admin','100'),
+                         ('imp_tram5_marge_admin','90'),
+                         ('imp_tram6_marge_admin','80'),
+                         # Trams per defecte distribuïdor nou
+                         ('imp_tram1_marge_default','80'),
+                         ('imp_tram2_marge_default','75'),
+                         ('imp_tram3_marge_default','70'),
+                         ('imp_tram4_marge_default','60'),
+                         ('imp_tram5_marge_default','50'),
+                         ('imp_tram6_marge_default','45')]:
                 cur.execute("INSERT INTO config (clau,valor) VALUES (%s,%s) ON CONFLICT DO NOTHING", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
@@ -6643,7 +6842,24 @@ def init_db():
                          ('mirall_multiplo_dm2','6'),
                          ('vidre_tolerancia_cm','2'),
                          ('passpartu_tolerancia_cm','2'),
-                         ('encolat_tolerancia_cm','2')]:
+                         ('encolat_tolerancia_cm','2'),
+                         ('imp_tram1_area','900'),
+                         ('imp_tram2_area','2000'),
+                         ('imp_tram3_area','4200'),
+                         ('imp_tram4_area','7500'),
+                         ('imp_tram5_area','14400'),
+                         ('imp_tram1_marge_admin','140'),
+                         ('imp_tram2_marge_admin','130'),
+                         ('imp_tram3_marge_admin','120'),
+                         ('imp_tram4_marge_admin','100'),
+                         ('imp_tram5_marge_admin','90'),
+                         ('imp_tram6_marge_admin','80'),
+                         ('imp_tram1_marge_default','80'),
+                         ('imp_tram2_marge_default','75'),
+                         ('imp_tram3_marge_default','70'),
+                         ('imp_tram4_marge_default','60'),
+                         ('imp_tram5_marge_default','50'),
+                         ('imp_tram6_marge_default','45')]:
                 db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES (?,?)", [k, v])
             db.commit()
             _seed_admin_if_configured(db)
