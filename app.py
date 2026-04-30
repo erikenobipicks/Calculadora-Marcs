@@ -3614,35 +3614,83 @@ def admin_normalitzar_doble_vidre():
 @app.route('/admin/seed-imp-trams')
 @admin_required
 def admin_seed_imp_trams():
-    """TEMPORAL: omple imp_tram1..6 d'usuaris existents segons el grup
-    inicial acordat (admin/Fotoimag/La Capsa → trams alts; pros mitjans;
-    inactius → defaults). Idempotent — sobreescriu els valors si ja
-    n'hi havia."""
-    GRUPS = [
-        ('alt',     [1, 7, 9],                      [140, 130, 120, 100, 90, 80]),
-        ('mig',     [3, 8, 13, 17, 19],             [100, 95, 90, 75, 65, 55]),
-        ('default', [4, 5, 6, 10, 11, 12, 14, 16, 18], [80, 75, 70, 60, 50, 45]),
-    ]
+    """TEMPORAL: garanteix que les columnes imp_tram1..6 existeixen i
+    omple els valors segons els grups acordats (admin/Fotoimag/La Capsa →
+    trams alts; pros mitjans; inactius → defaults). Idempotent —
+    sobreescriu els valors si ja n'hi havia.
 
-    results, errors = [], []
+    Cada ALTER i cada UPDATE es fa amb cursor + commit propi i try/except
+    aïllats perquè un error a una transacció no avorti la resta."""
+    db = get_db()
+    schema_actions, errors = [], []
+
+    # 1) ALTERs idempotents per garantir que les columnes hi són
+    alter_stmts = [
+        ("imp_tram1", "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram1 REAL"),
+        ("imp_tram2", "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram2 REAL"),
+        ("imp_tram3", "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram3 REAL"),
+        ("imp_tram4", "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram4 REAL"),
+        ("imp_tram5", "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram5 REAL"),
+        ("imp_tram6", "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram6 REAL"),
+    ]
+    sqlite_fallback = "ALTER TABLE usuaris ADD COLUMN {col} REAL"
+    for col, stmt in alter_stmts:
+        try:
+            cur = db.cursor()
+            cur.execute(stmt)
+            db.commit()
+            schema_actions.append(f"OK {col}: {stmt}")
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            # Fallback per SQLite (no suporta IF NOT EXISTS a ADD COLUMN)
+            try:
+                cur = db.cursor()
+                cur.execute(sqlite_fallback.format(col=col))
+                db.commit()
+                schema_actions.append(f"OK {col} (sqlite fallback)")
+            except Exception as e2:
+                # Probablement la columna ja existeix (cas SQLite quan ja està)
+                try: db.rollback()
+                except Exception: pass
+                schema_actions.append(f"SKIP {col}: {str(e)[:80]} / {str(e2)[:80]}")
+
+    # 2) UPDATEs per grup, cada un amb el seu commit
+    GRUPS = [
+        ('alt',     [1, 7, 9],                            [140, 130, 120, 100, 90, 80]),
+        ('mig',     [3, 8, 13, 17, 19],                   [100, 95, 90, 75, 65, 55]),
+        ('default', [4, 5, 6, 10, 11, 12, 14, 16, 18],    [80, 75, 70, 60, 50, 45]),
+    ]
+    sql_pg = (
+        "UPDATE usuaris SET imp_tram1=%s, imp_tram2=%s, imp_tram3=%s, "
+        "imp_tram4=%s, imp_tram5=%s, imp_tram6=%s WHERE id=%s"
+    )
+    sql_sqlite = (
+        "UPDATE usuaris SET imp_tram1=?, imp_tram2=?, imp_tram3=?, "
+        "imp_tram4=?, imp_tram5=?, imp_tram6=? WHERE id=?"
+    )
+    use_pg = USE_PG
+    results = []
     for nom, ids, valors in GRUPS:
         for uid in ids:
             try:
-                execute(
-                    "UPDATE usuaris SET imp_tram1=?, imp_tram2=?, imp_tram3=?, "
-                    "imp_tram4=?, imp_tram5=?, imp_tram6=? WHERE id=?",
-                    valors + [uid],
-                )
+                cur = db.cursor()
+                cur.execute(sql_pg if use_pg else sql_sqlite, valors + [uid])
+                db.commit()
                 results.append(f"id={uid} grup={nom} → {valors}")
             except Exception as e:
+                try: db.rollback()
+                except Exception: pass
                 errors.append(f"id={uid}: {str(e)[:160]}")
 
-    return '<br>'.join([
-        f"<b>OK: {len(results)} usuaris actualitzats</b>",
-        *results,
-        f"<b>Errors: {len(errors)}</b>",
-        *errors,
-    ])
+    out = []
+    out.append(f"<b>Schema ({len(schema_actions)} accions)</b>")
+    out += schema_actions
+    out.append(f"<b>UPDATEs OK ({len(results)})</b>")
+    out += results
+    out.append(f"<b>Errors ({len(errors)})</b>")
+    out += errors
+    return '<br>'.join(out)
 
 
 @app.route('/admin/auditoria-moldures')
