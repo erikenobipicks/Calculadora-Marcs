@@ -667,6 +667,28 @@ def _is_admin_session():
     return bool(session.get('is_admin'))
 
 
+def _audit_log(action, target_user_id=None, target_username=None, details=''):
+    """Registra una acció administrativa a la taula audit_log. Idempotent
+    davant errors (no peta la request si la taula no existeix encara — el
+    cas freqüent quan encara no s'ha passat /admin/run-migrations)."""
+    actor_id = session.get('user_id')
+    actor_un = session.get('username') or ''
+    if not actor_id:
+        return
+    try:
+        execute(
+            "INSERT INTO audit_log (actor_user_id, actor_username, target_user_id, target_username, action, details) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [actor_id, actor_un, target_user_id, target_username or '', action, details or ''],
+        )
+    except Exception as e:
+        # No volem que un fall a l'audit log faci caure l'acció administrativa.
+        try:
+            print(f'audit_log skip: {e}')
+        except Exception:
+            pass
+
+
 def _row_get(row, key, default=None):
     if row is None:
         return default
@@ -3161,6 +3183,17 @@ def admin_run_migrations():
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             user_id INTEGER
         )""",
+        # Audit log (accions d'admin sobre comptes d'usuari)
+        """CREATE TABLE IF NOT EXISTS audit_log (
+            id SERIAL PRIMARY KEY,
+            actor_user_id INTEGER NOT NULL,
+            actor_username VARCHAR(120),
+            target_user_id INTEGER,
+            target_username VARCHAR(120),
+            action VARCHAR(60) NOT NULL,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
     ]
 
     resultats = []
@@ -4163,8 +4196,17 @@ def admin():
 def admin_usuaris():
     """Pàgina dedicada a gestió d'usuaris (clients professionals). El POST
     continua a /admin/usuari (singular) per compatibilitat amb els forms
-    existents — aquí només renderitzem el llistat."""
-    usuaris = query('SELECT * FROM usuaris ORDER BY nom')
+    existents — aquí només renderitzem el llistat.
+
+    Nota privacitat: els marges (marge, marge_impressio, marge_pro_pct,
+    marge_impressio_pro_pct, margins_json) es consideren dades privades
+    del professional i NO s'inclouen al SELECT, així no arriben mai a la
+    UI d'admin. Cada pro els gestiona des de /ajustos."""
+    usuaris = query("""
+        SELECT id, username, nom, nom_empresa, profile_type, access_status,
+               web_url, instagram, fiscal_id, notes_validacio, is_admin
+        FROM usuaris ORDER BY nom
+    """)
     return render_template('admin_usuaris.html', usuaris=usuaris)
 
 
@@ -4182,15 +4224,27 @@ def admin_usuari():
                  request.form.get('instagram', '').strip(),
                  request.form.get('fiscal_id', '').strip(),
                  request.form.get('notes_validacio', '').strip()])
+        _audit_log('user.create', target_username=request.form.get('username', ''),
+                   details=f"nom={request.form.get('nom','')} is_admin={request.form.get('is_admin','0')}")
         flash(f"Usuari '{request.form['nom']}' creat.", 'ok')
     elif action == 'eliminar':
-        execute('DELETE FROM usuaris WHERE id=?', [request.form['uid']])
+        uid = request.form['uid']
+        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
+        execute('DELETE FROM usuaris WHERE id=?', [uid])
+        _audit_log('user.delete', target_user_id=int(uid) if str(uid).isdigit() else None,
+                   target_username=_row_get(target, 'username', '') if target else '')
         flash('Usuari eliminat.', 'ok')
     elif action == 'canviar_pw':
+        uid = request.form['uid']
+        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
         execute('UPDATE usuaris SET password=? WHERE id=?',
-                [hash_pw(request.form['password']), request.form['uid']])
+                [hash_pw(request.form['password']), uid])
+        _audit_log('user.password_change', target_user_id=int(uid) if str(uid).isdigit() else None,
+                   target_username=_row_get(target, 'username', '') if target else '')
         flash('Contrasenya actualitzada.', 'ok')
     elif action == 'actualitzar_estat':
+        uid = request.form['uid']
+        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
         execute('UPDATE usuaris SET access_status=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=? WHERE id=?',
                 [request.form.get('access_status', 'active'),
                  request.form.get('profile_type', 'professional'),
@@ -4198,9 +4252,29 @@ def admin_usuari():
                  request.form.get('instagram', '').strip(),
                  request.form.get('fiscal_id', '').strip(),
                  request.form.get('notes_validacio', '').strip(),
-                 request.form['uid']])
+                 uid])
+        _audit_log('user.profile_update', target_user_id=int(uid) if str(uid).isdigit() else None,
+                   target_username=_row_get(target, 'username', '') if target else '',
+                   details=f"status={request.form.get('access_status','active')} profile={request.form.get('profile_type','professional')}")
         flash('Perfil professional actualitzat.', 'ok')
     return redirect(url_for('admin_usuaris'))
+
+
+@app.route('/admin/audit-log')
+@admin_required
+def admin_audit_log():
+    """Visor del registre d'accions administratives sobre comptes
+    d'usuari (creacions, eliminacions, canvis de contrasenya/perfil).
+    Pensat com a traça per saber qui ha tocat què."""
+    rows = query("""
+        SELECT id, actor_user_id, actor_username, target_user_id, target_username,
+               action, details, created_at
+        FROM audit_log
+        ORDER BY id DESC
+        LIMIT 200
+    """) or []
+    return render_template('admin_audit_log.html', rows=rows)
+
 
 ADMIN_MARGE_CATEGORIES = [
     ('moldures',  'Moldures'),
@@ -6300,6 +6374,19 @@ def init_db():
                 )""")
             except Exception as e:
                 print("lab_sends table skip:", e)
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS audit_log (
+                    id SERIAL PRIMARY KEY,
+                    actor_user_id INTEGER NOT NULL,
+                    actor_username VARCHAR(120),
+                    target_user_id INTEGER,
+                    target_username VARCHAR(120),
+                    action VARCHAR(60) NOT NULL,
+                    details TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )""")
+            except Exception as e:
+                print("audit_log table skip:", e)
             ddl_cur.close()
             ddl_conn.close()
             print("DDL done, checking admin...")
@@ -6514,6 +6601,16 @@ def init_db():
                 link TEXT,
                 sent_at TEXT,
                 user_id INTEGER
+            )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_user_id INTEGER NOT NULL,
+                actor_username TEXT,
+                target_user_id INTEGER,
+                target_username TEXT,
+                action TEXT NOT NULL,
+                details TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )""")
             db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Audit log</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:1240px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;margin-bottom:.25rem}
+.muted-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
+td{padding:11px 12px;border-bottom:1px solid #F3F1EB;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.mono{font-family:Consolas,monospace;font-size:12px}
+.action-tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700}
+.action-create{background:var(--green-l);color:var(--green)}
+.action-delete{background:var(--red-l);color:var(--red)}
+.action-update,.action-password{background:var(--amber-l);color:var(--amber)}
+.action-other{background:#EEF2FF;color:#4F46E5}
+.empty{padding:2rem;text-align:center;color:var(--hint);font-size:13px}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>
+function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }
+</script>
+
+<div class="container">
+  <div class="page-title">Audit log</div>
+  <div class="muted-sub">Traça d'accions administratives sobre comptes d'usuari (creacions, eliminacions, canvis de contrasenya/perfil). Mostra les 200 entrades més recents.</div>
+
+  <div class="section">
+    {% if rows %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Acció</th>
+            <th>Admin</th>
+            <th>Usuari afectat</th>
+            <th>Detalls</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+        {% set action_cls = 'action-other' %}
+        {% if r.action.startswith('user.create') %}{% set action_cls = 'action-create' %}{% endif %}
+        {% if r.action.startswith('user.delete') %}{% set action_cls = 'action-delete' %}{% endif %}
+        {% if r.action.startswith('user.password') %}{% set action_cls = 'action-password' %}{% endif %}
+        {% if r.action.startswith('user.profile') %}{% set action_cls = 'action-update' %}{% endif %}
+        <tr>
+          <td class="mono" style="white-space:nowrap;color:var(--muted)">{{ r.created_at or '—' }}</td>
+          <td><span class="action-tag {{ action_cls }}">{{ r.action }}</span></td>
+          <td>
+            <strong>{{ r.actor_username or '—' }}</strong>
+            {% if r.actor_user_id %}<div class="mono" style="color:var(--hint)">id {{ r.actor_user_id }}</div>{% endif %}
+          </td>
+          <td>
+            {% if r.target_username %}<strong>{{ r.target_username }}</strong>{% else %}—{% endif %}
+            {% if r.target_user_id %}<div class="mono" style="color:var(--hint)">id {{ r.target_user_id }}</div>{% endif %}
+          </td>
+          <td class="mono" style="color:var(--muted);max-width:520px;word-break:break-word">{{ r.details or '' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Cap entrada al registre encara.</div>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
