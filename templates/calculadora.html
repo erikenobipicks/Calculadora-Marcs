@@ -1617,6 +1617,19 @@ function costImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
   return CLOSEST.impressio?CLOSEST.impressio.preu:(PREUS.impressio||0);
 }
+// PVP per unitat de la impressió segons el mode de visualització:
+//  - Admin en vista taller (cost): PVD sense marge (impressio.preu)
+//  - Vista PVP (client): impressio.pvp del servidor (ja inclou el marge per tram d'àrea)
+//  - Fallback per a calc antiga sense pvp: marge legacy aplicat sobre PVD
+function pvpImpressio(){
+  if(!document.getElementById('chk-impressio').checked) return 0;
+  var c = CLOSEST.impressio;
+  if(!c) return PREUS.impressio || 0;
+  if(IS_ADMIN && adminModeExtra === 0) return c.preu || 0;
+  if(c.pvp != null) return c.pvp;
+  var m = (typeof marge_impressio !== 'undefined' && marge_impressio) ? marge_impressio : marge;
+  return (c.preu || 0) * (1 + (m||0)/100);
+}
 function getReversPeuBasePrice(){
   var chk = document.getElementById('chk-revers-peu');
   if(!chk || !chk.checked) return 0;
@@ -2053,7 +2066,10 @@ function calcular(){
   // PVP net (amb marge, sense IVA, sense descompte)
   var pvpMarc = cMol*(1+marge/100);
   var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra)*(1+marge/100);
-  var pvpImp  = cImpressio*(1+(marge_impressio||marge)/100);
+  // pvpImp: en vista taller (admin cost) usem PVD; en vista PVP usem el pvp del
+  // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
+  // marge legacy ja no s'aplica aquí.
+  var pvpImp  = pvpImpressio();
   // Mode admin: si l'admin escull "client", aplica un +60% extra sobre el PVP
   // per simular el preu al client final. Usuaris no-admin mai toquen aquest factor.
   var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
