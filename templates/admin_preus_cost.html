@@ -102,6 +102,7 @@ tr:hover{background:#faf8f4}
       <option value="">Tots</option>
       <option value="0" {% if verificat=='0' %}selected{% endif %}>Pendents verificar</option>
       <option value="1" {% if verificat=='1' %}selected{% endif %}>Verificats</option>
+      {% if taula == 'moldures' %}<option value="descatalogada" {% if verificat=='descatalogada' %}selected{% endif %}>Descatalogades</option>{% endif %}
     </select>
   </form>
 
@@ -129,7 +130,9 @@ tr:hover{background:#faf8f4}
       <td class="r" id="cost-{{ r.referencia }}">{{ "%.4f"|format(r.preu_cost or 0) }} &euro;</td>
       <td class="r pvd-col" id="pvd-{{ r.referencia }}">{% if r.pvd %}{{ "%.4f"|format(r.pvd) }} &euro;{% else %}&mdash;{% endif %}</td>
       <td class="c">
-        {% if r.cost_verificat %}<span class="badge-ok">&check; verificat</span>
+        {% if r.descatalogada %}
+        <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#FAEAEA;color:#B84040;border:1px solid #E8B4B4" title="{{ r.notes_stock or 'Stock residual, no es reposa' }}">Stock limitat</span>
+        {% elif r.cost_verificat %}<span class="badge-ok">&check; verificat</span>
         {% else %}<span class="badge-pend">&middot; estimat</span>{% endif %}
         {% if r.data_cost %}<div style="font-size:10px;opacity:.5">{{ r.data_cost }}</div>{% endif %}
       </td>

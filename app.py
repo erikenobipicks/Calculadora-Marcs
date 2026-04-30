@@ -2225,7 +2225,7 @@ def lookup():
     is_admin = session.get('is_admin')
     if tipus == 'moldura':
         try:
-            r = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm, descripcio, foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
+            r = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm, descripcio, foto, ref2, descatalogada, notes_stock FROM moldures WHERE LOWER(referencia)=LOWER(?)', [ref], one=True)
             print(f"lookup moldura ref={ref} result={r}")
             if r:
                 pvd = calcular_pvd(_row_get(r, 'preu_cost'), 'moldures')
@@ -2233,7 +2233,9 @@ def lookup():
                 resp = {'ok': True, 'preu': preu, 'gruix': r['gruix'],
                         'merma_pct': _row_get(r, 'merma_pct', 10.0),
                         'minim_cm': _row_get(r, 'minim_cm', 100.0),
-                        'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'], ref2=_row_get(r,'ref2',''))}
+                        'descripcio': r['descripcio'], 'foto': _resolve_moldura_photo(ref, r['foto'], ref2=_row_get(r,'ref2','')),
+                        'descatalogada': bool(_row_get(r, 'descatalogada', False)),
+                        'notes_stock': _row_get(r, 'notes_stock', '') or ''}
                 if is_admin:
                     resp['preu_cost'] = _row_get(r, 'preu_cost')
                 return jsonify(resp)
@@ -2356,7 +2358,7 @@ def admin_preus_cost():
         base_cols += 'descripcio, '
     cols = f'{base_cols}preu_cost, preu_cost_ant, data_cost, cost_verificat, notes_cost, {preu_orig} as preu_original'
     if taula == 'moldures':
-        cols += ', proveidor'
+        cols += ', proveidor, descatalogada, notes_stock'
 
     conditions, args = [], []
     if proveidor and taula == 'moldures':
@@ -2366,6 +2368,8 @@ def admin_preus_cost():
         conditions.append("cost_verificat = 1")
     elif verificat == '0':
         conditions.append("(cost_verificat = 0 OR cost_verificat IS NULL)")
+    elif verificat == 'descatalogada' and taula == 'moldures':
+        conditions.append("descatalogada = TRUE")
 
     where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
     sql = f'SELECT {cols} FROM {taula}{where} ORDER BY cost_verificat ASC, referencia ASC'
@@ -2601,7 +2605,8 @@ def admin_preus_cost_historial():
 @app.route('/api/moldura-options')
 @login_required
 def moldura_options():
-    rows = query("""SELECT referencia, gruix, descripcio, foto, ref2
+    rows = query("""SELECT referencia, gruix, descripcio, foto, ref2,
+                           descatalogada, notes_stock
                     FROM moldures
                     ORDER BY referencia""")
     return jsonify(_serialize_moldures(rows))
@@ -3934,7 +3939,8 @@ def admin_moldura_toggle(ref):
 def api_cerca_moldura():
     q = request.args.get('q','').strip()
     if not q: return jsonify([])
-    rows = query("""SELECT referencia, preu_taller, gruix, descripcio, proveidor 
+    rows = query("""SELECT referencia, preu_taller, gruix, descripcio, proveidor,
+                           descatalogada, notes_stock
                     FROM moldures WHERE LOWER(referencia) LIKE ? OR LOWER(descripcio) LIKE ?
                     ORDER BY referencia LIMIT 20""",
                  [f'%{q.lower()}%', f'%{q.lower()}%'])

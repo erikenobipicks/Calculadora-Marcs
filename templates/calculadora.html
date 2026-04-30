@@ -352,6 +352,9 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
             </div>
             <div class="chip-row" id="chips-pre"></div>
             <div class="desc" id="desc-pre"></div>
+            <div id="aviso-descatalogada-pre" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
+              ⚠ Motllura amb stock limitat — no es reposarà
+            </div>
           </div>
         </div>
         <div class="f">
@@ -363,6 +366,9 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           </div>
           <div class="chip-row" id="chips-marc"></div>
           <div class="desc" id="desc-marc"></div>
+          <div id="aviso-descatalogada-marc" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
+            ⚠ Motllura amb stock limitat — no es reposarà
+          </div>
         </div>
         <div style="display:grid;gap:.75rem;margin-top:.85rem" id="fotos-grid">
           <div id="foto-col-pre" style="display:none">
@@ -1460,9 +1466,15 @@ function togglePremarc(){
 }
 function setChips(t,items){ document.getElementById('chips-'+t).innerHTML=items.map(function(i){return '<span class="chip '+i.cls+'">'+i.txt+'</span>';}).join(''); }
 
+function setDescatalogadaWarning(t, on){
+  var el = document.getElementById('aviso-descatalogada-'+t);
+  if(el){ el.style.display = on ? 'block' : 'none'; }
+}
+
 function lookupRef(t,ref){
   if(!ref||ref==='-'){
     PREUS[t]=0; GRUIX[t]=0; MERMA[t]={pct:10,min:100}; setChips(t,[]);
+    setDescatalogadaWarning(t, false);
     if(t==='pre'){ document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
     if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); setProtterDisabled(false); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
     calcular(); return;
@@ -1473,6 +1485,7 @@ function lookupRef(t,ref){
         PREUS[t]=d.preu; GRUIX[t]=d.gruix;
         MERMA[t]={pct:d.merma_pct||10, min:d.minim_cm||100};
         setChips(t,[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
+        setDescatalogadaWarning(t, !!d.descatalogada);
         if(t==='pre'){
           document.getElementById('desc-pre').textContent=d.descripcio||'';
           document.getElementById('desc-pre').style.color='';
@@ -1487,6 +1500,7 @@ function lookupRef(t,ref){
         }
       } else {
         PREUS[t]=0; GRUIX[t]=0;
+        setDescatalogadaWarning(t, false);
         var msg = (t==='pre'||t==='marc') ? '⚠ Motllura "'+ref+'" no trobada al catàleg' : 'Referència no trobada';
         setChips(t,[{txt: (t==='pre'||t==='marc') ? '⚠ Fora de catàleg' : '⚠ No trobada', cls:'chip-r'}]);
         if(t==='marc'){
