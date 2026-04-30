@@ -151,7 +151,10 @@ tr:hover td{background:#FAFAF8}
                 {% endif %}
               </div>
               <div>
-                <div class="ref-badge">{{ m.referencia }}</div>
+                <div class="ref-badge">
+                  {{ m.referencia }}
+                  {% if m.descatalogada %}<span title="{{ m.notes_stock or 'Stock residual, no es reposa' }}" style="margin-left:.4rem;font-size:.7rem;font-weight:600;padding:.15rem .5rem;border-radius:4px;background:var(--red-l);color:var(--red);border:1px solid #E8B4B4;text-transform:none;letter-spacing:0">Stock limitat</span>{% endif %}
+                </div>
                 {% if m.ref2 %}<div style="font-size:11px;color:var(--hint)">{{ m.ref2 }}</div>{% endif %}
               </div>
             </div>
