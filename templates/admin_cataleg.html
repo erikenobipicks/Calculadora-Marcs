@@ -53,6 +53,10 @@ tr:hover td{background:#FAFAF8}
 .btn-icon{width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;transition:all .15s;text-decoration:none;color:var(--text)}
 .btn-icon:hover{background:#F1EFEA}
 .btn-icon-r:hover{background:var(--red-l);border-color:#E8B4B4}
+.btn-toggle-desc{padding:5px 10px;height:30px;border-radius:6px;border:1px solid #E8B4B4;background:var(--red-l);color:var(--red);font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.btn-toggle-desc:hover{filter:brightness(.97)}
+.btn-toggle-desc.is-on{border-color:#B8DCC9;background:var(--green-l);color:var(--green)}
+.btn-toggle-desc:disabled{opacity:.6;cursor:wait}
 .empty{text-align:center;padding:3rem;color:var(--hint)}
 .footer-bar{margin-top:1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
 .footer-bar p{font-size:12px;color:var(--hint)}
@@ -153,7 +157,7 @@ tr:hover td{background:#FAFAF8}
               <div>
                 <div class="ref-badge">
                   {{ m.referencia }}
-                  {% if m.descatalogada %}<span title="{{ m.notes_stock or 'Stock residual, no es reposa' }}" style="margin-left:.4rem;font-size:.7rem;font-weight:600;padding:.15rem .5rem;border-radius:4px;background:var(--red-l);color:var(--red);border:1px solid #E8B4B4;text-transform:none;letter-spacing:0">Stock limitat</span>{% endif %}
+                  {% if m.descatalogada %}<span class="descat-badge" title="{{ m.notes_stock or 'Stock residual, no es reposa' }}" style="margin-left:.4rem;font-size:.7rem;font-weight:600;padding:.15rem .5rem;border-radius:4px;background:var(--red-l);color:var(--red);border:1px solid #E8B4B4;text-transform:none;letter-spacing:0">Stock limitat</span>{% endif %}
                 </div>
                 {% if m.ref2 %}<div style="font-size:11px;color:var(--hint)">{{ m.ref2 }}</div>{% endif %}
               </div>
@@ -167,6 +171,14 @@ tr:hover td{background:#FAFAF8}
           <td>
             <div class="actions">
               <a href="/admin/cataleg/{{ m.referencia }}/editar" class="btn-icon" title="Editar">E</a>
+              <button type="button"
+                      class="btn-toggle-desc {% if m.descatalogada %}is-on{% endif %}"
+                      data-ref="{{ m.referencia }}"
+                      data-state="{{ '1' if m.descatalogada else '0' }}"
+                      onclick="toggleDescatalogada(this)"
+                      title="{% if m.descatalogada %}Marcar com a disponible{% else %}Marcar com a descatalogada{% endif %}">
+                {% if m.descatalogada %}Reactivar{% else %}Descatalogar{% endif %}
+              </button>
               <button type="button" onclick="eliminarMoldura('{{ m.referencia }}')" class="btn-icon btn-icon-r" title="Eliminar">X</button>
             </div>
           </td>
@@ -243,6 +255,53 @@ function eliminarMoldura(ref){
           setTimeout(function(){ fila.remove(); }, 300);
         }
       }
+    });
+}
+
+function toggleDescatalogada(btn){
+  var ref = btn.dataset.ref;
+  var actual = btn.dataset.state === '1';
+  var verb   = actual ? 'reactivar' : 'descatalogar';
+  if(!confirm('Vols ' + verb + ' la motllura "' + ref + '"?')) return;
+  btn.disabled = true;
+  fetch('/admin/moldura/descatalogada', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ref: ref, descatalogada: !actual})
+  })
+    .then(function(r){return r.json();})
+    .then(function(d){
+      btn.disabled = false;
+      if(!d.ok){ alert('Error: ' + (d.error || 'desconegut')); return; }
+      var nou = !!d.descatalogada;
+      btn.dataset.state = nou ? '1' : '0';
+      btn.classList.toggle('is-on', nou);
+      btn.textContent = nou ? 'Reactivar' : 'Descatalogar';
+      btn.title = nou ? 'Marcar com a disponible' : 'Marcar com a descatalogada';
+      // Actualitzar el badge "Stock limitat" inline a la mateixa fila
+      var fila = document.getElementById('fila-' + ref);
+      if(fila){
+        var badge = fila.querySelector('.ref-badge .descat-badge');
+        if(nou){
+          if(!badge){
+            var refBadge = fila.querySelector('.ref-badge');
+            if(refBadge){
+              var span = document.createElement('span');
+              span.className = 'descat-badge';
+              span.title = d.notes_stock || 'Stock residual, no es reposa';
+              span.style.cssText = 'margin-left:.4rem;font-size:.7rem;font-weight:600;padding:.15rem .5rem;border-radius:4px;background:var(--red-l);color:var(--red);border:1px solid #E8B4B4;text-transform:none;letter-spacing:0';
+              span.textContent = 'Stock limitat';
+              refBadge.appendChild(span);
+            }
+          }
+        } else if(badge){
+          badge.remove();
+        }
+      }
+    })
+    .catch(function(err){
+      btn.disabled = false;
+      alert('Error de xarxa: ' + err);
     });
 }
 </script>

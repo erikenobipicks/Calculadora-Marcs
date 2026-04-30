@@ -693,6 +693,7 @@ var MOLDURA_FILTERS = {color:'', gruix:''};
 var PREUS   = {pre:0, marc:0, muntatge:0, proteccio:0, interior:0, impressio:0};
 var GRUIX   = {pre:0, marc:0};
 var MERMA   = {pre:{pct:10, min:100}, marc:{pct:10, min:100}};
+var DESCATALOGADA = {pre:false, marc:false};
 var CLOSEST = {};
 var muntatge_actiu = 'cap';
 var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid = null;
@@ -1467,8 +1468,25 @@ function togglePremarc(){
 function setChips(t,items){ document.getElementById('chips-'+t).innerHTML=items.map(function(i){return '<span class="chip '+i.cls+'">'+i.txt+'</span>';}).join(''); }
 
 function setDescatalogadaWarning(t, on){
+  DESCATALOGADA[t] = !!on;
   var el = document.getElementById('aviso-descatalogada-'+t);
   if(el){ el.style.display = on ? 'block' : 'none'; }
+}
+
+function refreshDescatalogadaWarnings(){
+  // Re-aplica la visibilitat dels avisos a partir de l'estat global.
+  // S'invoca des de calcular() per garantir que l'avís segueix coherent
+  // encara que algun altre flux reescrigui els nodes.
+  ['marc','pre'].forEach(function(t){
+    var el = document.getElementById('aviso-descatalogada-'+t);
+    if(!el) return;
+    var actiu = !!DESCATALOGADA[t];
+    if(t === 'pre'){
+      var chk = document.getElementById('chk-premarc');
+      if(chk && !chk.checked) actiu = false;
+    }
+    el.style.display = actiu ? 'block' : 'none';
+  });
 }
 
 function lookupRef(t,ref){
@@ -1994,6 +2012,7 @@ function onMarcInput(){
 
 // ── Càlcul ────────────────────────────────────────────────────────────────
 function calcular(){
+  refreshDescatalogadaWarnings();
   var amp  = parseFloat(document.getElementById('amplada').value)||0;
   var alt  = parseFloat(document.getElementById('alcada').value)||0;
   var mW   = parseFloat(document.getElementById('marc-w').value)||amp;
