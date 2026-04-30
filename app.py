@@ -3099,6 +3099,8 @@ def admin_run_migrations():
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_cost TEXT",
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS descatalogada BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_stock TEXT",
         # Vidres
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
@@ -3643,6 +3645,66 @@ def admin_auditoria_marges():
         })
 
     return jsonify({'detall': detall, 'resum': resum})
+
+
+@app.route('/admin/marcar-descatalogades')
+@admin_required
+def admin_marcar_descatalogades():
+    """TEMPORAL: afegeix les columnes 'descatalogada' i 'notes_stock' a
+    moldures (idempotent), i marca com a descatalogades les refs dels
+    proveïdors INTERBAJA / INTRERBAJA."""
+    db = get_db()
+    accions, errors = [], []
+
+    # 1) Garantir columnes (idempotent — IF NOT EXISTS és PG; SQLite cau a try/except)
+    schema_stmts = [
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS descatalogada BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_stock TEXT",
+    ]
+    sqlite_fallback = [
+        "ALTER TABLE moldures ADD COLUMN descatalogada INTEGER DEFAULT 0",
+        "ALTER TABLE moldures ADD COLUMN notes_stock TEXT",
+    ]
+    for i, stmt in enumerate(schema_stmts):
+        try:
+            cur = db.cursor()
+            cur.execute(stmt)
+            db.commit()
+            accions.append(stmt)
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            try:
+                cur = db.cursor()
+                cur.execute(sqlite_fallback[i])
+                db.commit()
+                accions.append(sqlite_fallback[i] + ' (sqlite)')
+            except Exception as e2:
+                errors.append(f"{stmt}: {str(e)[:120]} / fallback: {str(e2)[:120]}")
+
+    # 2) Marcar descatalogades
+    nota = "Motllura descatalogada d'Intermolduras. Només stock residual, no reposar."
+    try:
+        execute(
+            "UPDATE moldures SET descatalogada = ?, notes_stock = ? "
+            "WHERE proveidor IN ('INTERBAJA', 'INTRERBAJA')",
+            (True, nota),
+        )
+        rows = query(
+            "SELECT referencia, proveidor FROM moldures "
+            "WHERE proveidor IN ('INTERBAJA', 'INTRERBAJA') "
+            "ORDER BY proveidor, referencia"
+        ) or []
+        accions.append(f"UPDATE descatalogada=TRUE: {len(rows)} files")
+        for r in rows:
+            accions.append(f"  · {_row_get(r, 'proveidor')} / {_row_get(r, 'referencia')}")
+    except Exception as e:
+        errors.append(f"UPDATE: {str(e)[:160]}")
+
+    out = [f"<b>Accions ({len(accions)})</b>"] + accions
+    if errors:
+        out += [f"<b>Errors ({len(errors)})</b>"] + errors
+    return '<br>'.join(out)
 
 
 @app.route('/admin/db-status')
