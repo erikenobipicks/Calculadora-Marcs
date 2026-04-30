@@ -749,7 +749,7 @@ def get_marge_impressio_tram(area_cm2, usuari):
         float(get_config_value('imp_tram1_area', '900')),
         float(get_config_value('imp_tram2_area', '2000')),
         float(get_config_value('imp_tram3_area', '4200')),
-        float(get_config_value('imp_tram4_area', '7500')),
+        float(get_config_value('imp_tram4_area', '6000')),
         float(get_config_value('imp_tram5_area', '14400')),
         float('inf'),
     ]
@@ -1994,6 +1994,24 @@ def public_professional_summary():
             'imp_tram4': _opt_float('imp_tram4'),
             'imp_tram5': _opt_float('imp_tram5'),
             'imp_tram6': _opt_float('imp_tram6'),
+            # Límits dels trams (cm²) i defaults globals — exposats perquè
+            # el consumidor (web) no hagi de duplicar-los i s'adapti
+            # automàticament si l'admin canvia algun valor a /admin/config.
+            'imp_tram_limits': [
+                float(get_config_value('imp_tram1_area', '900')),
+                float(get_config_value('imp_tram2_area', '2000')),
+                float(get_config_value('imp_tram3_area', '4200')),
+                float(get_config_value('imp_tram4_area', '6000')),
+                float(get_config_value('imp_tram5_area', '14400')),
+            ],
+            'imp_tram_defaults': [
+                float(get_config_value('imp_tram1_marge_default', '80')),
+                float(get_config_value('imp_tram2_marge_default', '75')),
+                float(get_config_value('imp_tram3_marge_default', '70')),
+                float(get_config_value('imp_tram4_marge_default', '60')),
+                float(get_config_value('imp_tram5_marge_default', '50')),
+                float(get_config_value('imp_tram6_marge_default', '45')),
+            ],
         })
     except Exception as exc:
         print(f'professional-summary error: {exc}')
@@ -3262,6 +3280,10 @@ def admin_run_migrations():
             details TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
+        # Migració de l'antic límit del tram 4 (7500 cm² → 6000 cm²).
+        # Només actua si el valor és exactament '7500' per no sobreescriure
+        # personalitzacions explícites. Idempotent.
+        "UPDATE config SET valor='6000' WHERE clau='imp_tram4_area' AND valor='7500'",
     ]
 
     resultats = []
@@ -5794,7 +5816,7 @@ def ajustos():
         float(get_config_value('imp_tram1_area', '900')),
         float(get_config_value('imp_tram2_area', '2000')),
         float(get_config_value('imp_tram3_area', '4200')),
-        float(get_config_value('imp_tram4_area', '7500')),
+        float(get_config_value('imp_tram4_area', '6000')),
         float(get_config_value('imp_tram5_area', '14400')),
         None,
     ]
@@ -6681,7 +6703,7 @@ def init_db():
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),
-                         ('imp_tram4_area','7500'),
+                         ('imp_tram4_area','6000'),
                          ('imp_tram5_area','14400'),
                          # Trams admin (Objectiu Fotògrafs) — referència
                          ('imp_tram1_marge_admin','140'),
@@ -6917,7 +6939,7 @@ def init_db():
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),
-                         ('imp_tram4_area','7500'),
+                         ('imp_tram4_area','6000'),
                          ('imp_tram5_area','14400'),
                          ('imp_tram1_marge_admin','140'),
                          ('imp_tram2_marge_admin','130'),
