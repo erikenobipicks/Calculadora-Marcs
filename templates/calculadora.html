@@ -555,6 +555,19 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <span class="opt-preu" id="preu-impressio">—</span>
             </div>
           </div>
+          <div id="bloc-foto-upload" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
+            <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:.35rem;display:block">Adjuntar foto al pressupost</label>
+            <p style="font-size:11px;color:var(--hint);margin:0 0 .5rem 0">Puja la foto a un servei extern (anònim, caduca en 14 dies). El link s'incrustarà al missatge que s'enviï al client i al taller.</p>
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+              <input type="file" id="foto-file" accept="image/*,application/pdf,.tif,.tiff" style="font-size:13px">
+              <button type="button" id="btn-pujar-foto" onclick="pujarFotoAdjunta()" class="btn btn-sm" style="padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--green-l);color:var(--green);cursor:pointer">Pujar</button>
+              <span id="foto-upload-status" style="font-size:11px;color:var(--hint)"></span>
+            </div>
+            <div id="foto-upload-link" style="display:none;margin-top:.4rem;font-size:12px;word-break:break-all">
+              ✓ <a href="#" target="_blank" id="foto-upload-link-a" style="color:var(--green);font-weight:500"></a>
+              <button type="button" onclick="esborrarFotoAdjunta()" style="margin-left:.5rem;background:transparent;border:none;color:var(--red);cursor:pointer;font-size:11px;text-decoration:underline">treure</button>
+            </div>
+          </div>
         </div>
 
         <!-- Refs seleccionades (per al càlcul) -->
@@ -1938,6 +1951,9 @@ showAlert(lm.print, 'err');
     return;
   }
   document.getElementById('opt-impressio').classList.toggle('selected', chk.checked);
+  // Mostra/amaga el bloc de pujar foto al servei extern
+  var bloc = document.getElementById('bloc-foto-upload');
+  if(bloc) bloc.style.display = chk.checked ? 'block' : 'none';
   if(chk.checked && !CLOSEST.impressio){
     _lastFetchKey=''; fetchClosest();
   } else {
@@ -1945,6 +1961,63 @@ showAlert(lm.print, 'err');
   }
 }
 function onImpressioChange(){ toggleImpressio(); }
+
+// ── Pujada de foto al servei extern (file.io) ─────────────────────────────
+// Anem amb file.io: API simple, CORS suportat, retenció 14 dies, anònim.
+// Si en el futur volem SwissTransfer caldrà fer-ho server-side per CORS.
+var FOTO_UPLOAD_URL = '';  // URL pública retornada pel servei
+function pujarFotoAdjunta(){
+  var inp = document.getElementById('foto-file');
+  var statusEl = document.getElementById('foto-upload-status');
+  var btn = document.getElementById('btn-pujar-foto');
+  if(!inp || !inp.files || !inp.files.length){
+    statusEl.textContent = 'Tria un fitxer primer';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  var f = inp.files[0];
+  var sizeMB = (f.size/1024/1024).toFixed(2);
+  if(f.size > 100*1024*1024){
+    statusEl.textContent = 'Fitxer massa gran (màx 100 MB)';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  statusEl.textContent = 'Pujant ' + sizeMB + ' MB…';
+  statusEl.style.color = 'var(--hint)';
+  btn.disabled = true;
+
+  var fd = new FormData();
+  fd.append('file', f);
+  fetch('https://file.io/?expires=14d', { method: 'POST', body: fd })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.success && d.link){
+        FOTO_UPLOAD_URL = d.link;
+        var box = document.getElementById('foto-upload-link');
+        var a   = document.getElementById('foto-upload-link-a');
+        a.href = d.link;
+        a.textContent = d.link;
+        box.style.display = 'block';
+        statusEl.textContent = 'Pujada OK · ' + sizeMB + ' MB · ' + (f.name||'foto');
+        statusEl.style.color = 'var(--green)';
+      } else {
+        statusEl.textContent = 'Error pujant (servei rebutjat)';
+        statusEl.style.color = 'var(--red)';
+      }
+    })
+    .catch(function(e){
+      statusEl.textContent = 'Error de xarxa: ' + e;
+      statusEl.style.color = 'var(--red)';
+    })
+    .finally(function(){ btn.disabled = false; });
+}
+function esborrarFotoAdjunta(){
+  FOTO_UPLOAD_URL = '';
+  var box = document.getElementById('foto-upload-link');
+  if(box) box.style.display = 'none';
+  var statusEl = document.getElementById('foto-upload-status');
+  if(statusEl){ statusEl.textContent = 'Foto eliminada'; statusEl.style.color = 'var(--hint)'; }
+}
 
 var _marcLookupTimer = null;
 function onMarcInput(){
@@ -2309,6 +2382,9 @@ function buildMailText(){
     lines.push('─────────────────────');
     lines.push('Mides: ' + ample + ' × ' + alcada + ' cm');
     lines.push('(Sense marc — només impressió)');
+    if(typeof FOTO_UPLOAD_URL !== 'undefined' && FOTO_UPLOAD_URL){
+      lines.push('Foto adjunta: ' + FOTO_UPLOAD_URL);
+    }
     if(obs) lines.push('Observacions: ' + obs);
     lines.push('');
     lines.push('COST (sense IVA)');
@@ -2337,6 +2413,9 @@ function buildMailText(){
   lines.push('Muntatge: '  + (muntatgeMap[muntatge]||muntatge||'Estàndard'));
   if(vidre && vidre !== proteccio) lines.push('Vidre ref: ' + vidre);
   if(chkImp)  lines.push('Impressió fotogràfica: sí');
+  if(typeof FOTO_UPLOAD_URL !== 'undefined' && FOTO_UPLOAD_URL){
+    lines.push('Foto adjunta: ' + FOTO_UPLOAD_URL);
+  }
   if(obs) lines.push('Observacions: ' + obs);
   lines.push('');
   lines.push('COST DE PRODUCCIÓ (sense IVA)');
@@ -2725,6 +2804,9 @@ function buildWAtext(){
     if(midaFinal) lines.push(t.midaFinal+': '+midaFinal);
     if(midaFoto) lines.push(t.mides+': '+midaFoto);
     lines.push(t.impressio+': '+t.yes+' (només impressió)');
+    if(typeof FOTO_UPLOAD_URL !== 'undefined' && FOTO_UPLOAD_URL){
+      lines.push('Foto: '+FOTO_UPLOAD_URL);
+    }
     if(obs) lines.push(t.notes+': '+obs);
     lines.push('');
     if(desc>0) lines.push(t.discountApplied+': '+desc+'%');
@@ -2744,6 +2826,9 @@ function buildWAtext(){
   if(nomInterior)  lines.push(t.interior+': '+nomInterior);
   if(chkImp)       lines.push(t.impressio+': '+t.yes);
   if(chkImp)       lines.push(t.printIncluded);
+  if(typeof FOTO_UPLOAD_URL !== 'undefined' && FOTO_UPLOAD_URL){
+    lines.push('Foto: '+FOTO_UPLOAD_URL);
+  }
   if(obs)          lines.push(t.notes+': '+obs);
   lines.push('');
   if(desc>0) lines.push(t.discountApplied+': '+desc+'%');
@@ -2825,6 +2910,10 @@ function buildWAtext_intern(){
   lines.push('');
   lines.push(t.cost+': *' + cTot + ' EUR*');
   lines.push(t.clientPrice+': *' + preuClient + ' EUR (' + t.iva + ')*');
+  if(typeof FOTO_UPLOAD_URL !== 'undefined' && FOTO_UPLOAD_URL){
+    lines.push('');
+    lines.push('Foto adjunta: ' + FOTO_UPLOAD_URL);
+  }
   if(obs){
     lines.push('');
     lines.push(t.notes+': ' + obs);
