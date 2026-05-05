@@ -1382,11 +1382,25 @@ def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', toleranc
 
 
 def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
-    """Calcula cost i PVD del passpartú:
-    1. Min-contain amb tolerància sobre la taula (per àrea més propera) → preu_cost.
-    2. Fórmula NOMÉS com a fallback si cap fila de la taula cobreix la mida.
+    """Calcula cost i PVD del passpartú.
+
+    Tipus 'simple':
+      1. Min-contain amb tolerància sobre la taula 1PAS (per àrea més
+         propera) → preu_cost.
+      2. Fórmula NOMÉS com a fallback si cap fila no cobreix la mida.
+
+    Tipus 'doble':
+      1. Calcular el cost del simple per a la mateixa mida (recursivament,
+         sense incloure-hi finestres extra) → cost_simple.
+      2. cost_doble_base = cost_simple · 2.
+      3. Si hi ha fila DOBPAS a la taula i ratio (àrea_taula/àrea_sol) ≤
+         encolat_ratio_max (default 1.40) → usar preu_cost de taula.
+      4. Si la fila és massa gran o no n'hi ha → usar simple · 2.
+    Així el doble queda sempre coherent amb el simple per a mides on la
+    taula salta a una talla força més gran que la sol·licitada.
+
     Les finestres extra (cost_extra) sempre s'afegeixen al final.
-    Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula', 'ref'}."""
+    Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula'|'simple_x2', 'ref'}."""
     cost_hora    = float(get_config_value('cost_hora_taller', '25'))
     temps_simple = float(get_config_value('passpartu_temps_simple', '9'))
     temps_doble  = float(get_config_value('passpartu_temps_doble', '16'))
@@ -1395,11 +1409,41 @@ def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     minim_mat    = float(get_config_value('passpartu_minim_material', '0.50'))
     marge_pas    = float(get_config_value('marge_admin_passpartu_pct', '60'))
     tolerancia   = float(get_config_value('passpartu_tolerancia_cm', '2'))
+    ratio_max    = float(get_config_value('encolat_ratio_max', '1.40'))
 
-    prefix = '1PAS' if tipus == 'simple' else 'DOBPAS'
     cost_extra = finestres_extra * (temps_extra * cost_hora / 60)
 
-    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix=prefix, tolerancia=tolerancia)
+    if tipus == 'doble':
+        # 1) Cost del simple sense extres (recursió controlada — el simple
+        # no torna a entrar en aquest branch).
+        simple = calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0)
+        cost_simple_x2 = round(float(simple.get('cost') or 0) * 2, 4)
+
+        # 2) Mirar la taula DOBPAS (només si el ratio està dins del threshold)
+        fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='DOBPAS', tolerancia=tolerancia)
+        use_taula = False
+        if fila and _row_get(fila, 'preu_cost') is not None:
+            rw, rh = _parse_dims(fila['referencia'])
+            if rw and rh:
+                area_sol = max(1.0, float(amplada) * float(alcada))
+                ratio = (rw * rh) / area_sol
+                if ratio <= ratio_max:
+                    use_taula = True
+
+        if use_taula:
+            cost = round(float(fila['preu_cost']) + cost_extra, 4)
+            origen = 'taula'
+            ref = fila['referencia']
+        else:
+            cost = round(cost_simple_x2 + cost_extra, 4)
+            origen = 'simple_x2'
+            ref = f'dobpas-{amplada}x{alcada}'
+
+        pvd = round(cost * (1 + marge_pas / 100), 4)
+        return {'cost': cost, 'pvd': pvd, 'origen': origen, 'ref': ref}
+
+    # Tipus 'simple'
+    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', tolerancia=tolerancia)
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost = round(float(fila['preu_cost']) + cost_extra, 4)
         origen = 'taula'
@@ -1407,8 +1451,7 @@ def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     else:
         area     = amplada * alcada
         cost_mat = max(area * cost_cm2, minim_mat)
-        minuts   = temps_doble if tipus == 'doble' else temps_simple
-        cost_mo  = minuts * cost_hora / 60
+        cost_mo  = temps_simple * cost_hora / 60
         cost = round(cost_mat + cost_mo + cost_extra, 4)
         origen = 'formula'
         ref = f'pas-{amplada}x{alcada}'
