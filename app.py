@@ -3909,6 +3909,132 @@ def admin_auditoria_marges():
     return jsonify({'detall': detall, 'resum': resum})
 
 
+@app.route('/admin/auditoria-vidre-protter')
+@admin_required
+def admin_auditoria_vidre_protter():
+    """TEMPORAL: taula HTML comparant per a un conjunt de mides
+    representatives el cost i PVD de vidre vs protter (i els components
+    foam/laminat per separat). Mostra també la mà d'obra de fórmula
+    per a foam i laminat."""
+    MIDES = [(30,40),(40,50),(46,61),(50,70),(58,140),
+             (60,80),(70,100),(80,120),(90,150),(100,150)]
+    MIDES = sorted(MIDES, key=lambda wh: wh[0]*wh[1])
+
+    # Temps base + variables per a calcular MO de fórmula explícitament
+    cost_hora    = float(get_config_value('cost_hora_taller', '25'))
+    foam_tb      = float(get_config_value('foam_temps_base_min', '9'))
+    foam_tv      = float(get_config_value('foam_temps_var_cm2', '0.0015'))
+    lam_tb       = float(get_config_value('laminat_temps_base_min', '12'))
+    lam_tv       = float(get_config_value('laminat_temps_var_cm2', '0.0012'))
+
+    def _mo(temps_base, temps_var, area):
+        return round(((temps_base + area * temps_var) * cost_hora) / 60, 4)
+
+    def _marge_pct(cost, pvd):
+        if not cost or cost <= 0: return None
+        return round((float(pvd) / float(cost) - 1) * 100, 1)
+
+    rows = []
+    for w, h in MIDES:
+        area = w * h
+        v = calcular_cost_vidre(w, h) or {}
+        p = calcular_cost_protter(w, h, tipus='semibrillo') or {}
+        f = calcular_cost_foam(w, h) or {}
+        l = calcular_cost_laminat(w, h, tipus='semibrillo') or {}
+
+        v_pvd  = float(v.get('pvd') or 0)
+        v_cost = float(v.get('cost') or 0)
+        p_pvd  = float(p.get('pvd') or 0)
+        p_cost = float(p.get('cost') or 0)
+        f_pvd  = float(f.get('pvd') or 0)
+        l_pvd  = float(l.get('pvd') or 0)
+        diff_eur = round(p_pvd - v_pvd, 2)
+        diff_pct = round((p_pvd - v_pvd) / v_pvd * 100, 1) if v_pvd > 0 else None
+
+        rows.append({
+            'w': w, 'h': h, 'area': area,
+            'v_ref': v.get('ref') or '—', 'v_origen': v.get('origen') or '—',
+            'v_cost': v_cost, 'v_pvd': v_pvd, 'v_marge': _marge_pct(v_cost, v_pvd),
+            'p_ref': p.get('ref') or '—', 'p_origen': p.get('origen') or '—',
+            'p_cost': p_cost, 'p_pvd': p_pvd, 'p_marge': _marge_pct(p_cost, p_pvd),
+            'f_pvd': f_pvd, 'f_origen': f.get('origen') or '—',
+            'l_pvd': l_pvd, 'l_origen': l.get('origen') or '—',
+            'mo_foam': _mo(foam_tb, foam_tv, area),
+            'mo_lam':  _mo(lam_tb,  lam_tv,  area),
+            'diff_eur': diff_eur, 'diff_pct': diff_pct,
+        })
+
+    # Render HTML inline (route temporal)
+    def _eur(v): return f'{v:.2f} €' if isinstance(v, (int, float)) and v > 0 else ('0,00 €' if isinstance(v, (int, float)) else '—')
+    def _pct(v): return f'{v:.1f} %' if isinstance(v, (int, float)) else '—'
+    def _diff(v):
+        if not isinstance(v, (int, float)): return '—'
+        s = '+' if v > 0 else ''
+        return f'{s}{v:.2f} €'
+
+    html = ['<!DOCTYPE html><html><head><meta charset="UTF-8">',
+            '<title>Auditoria vidre vs protter</title>',
+            '<style>',
+            'body{font-family:system-ui,sans-serif;background:#F8F7F4;color:#1C1B18;margin:0;padding:1.5rem 2rem;max-width:1480px}',
+            'h1{font-size:24px;margin:0 0 .25rem}',
+            'p.muted{color:#6B6860;font-size:13px;margin:0 0 1.5rem}',
+            'table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden;font-size:12px}',
+            'th{background:#F5F4F1;text-align:left;padding:8px 8px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#6B6860;border-bottom:1px solid #E5E2DB;white-space:nowrap}',
+            'td{padding:8px;border-bottom:1px solid #F3F1EB;font-family:Consolas,monospace}',
+            'td.r{text-align:right}',
+            'tr:last-child td{border-bottom:none}',
+            'tr.protter-cheaper td{background:#E8F3EE}',
+            'tr.vidre-cheaper td{background:#FAEAEA}',
+            '.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;background:#EEF2FF;color:#4F46E5}',
+            '.tag.formula{background:#FDF3E8;color:#C8873A}',
+            '</style></head><body>',
+            '<h1>Auditoria vidre vs protter</h1>',
+            '<p class="muted">Comparativa per a 10 mides representatives. PVD = preu venda al pro (cost · marge admin). Marge = (PVD/cost − 1)·100. MO foam/laminat es calcula sempre amb la fórmula (independentment de si la funció ha agafat taula o fórmula com a cost).</p>',
+            '<table><thead><tr>',
+            '<th>Mida</th><th class="r">Àrea</th>',
+            '<th colspan="3">Vidre</th>',
+            '<th colspan="3">Protter (foam+lam)</th>',
+            '<th class="r">Diff PVD</th><th class="r">Diff %</th>',
+            '<th class="r">Foam PVD</th><th class="r">Lam PVD</th>',
+            '<th class="r">MO foam</th><th class="r">MO lam</th>',
+            '</tr><tr>',
+            '<th></th><th></th>',
+            '<th class="r">Cost</th><th class="r">PVD</th><th class="r">Marge</th>',
+            '<th class="r">Cost</th><th class="r">PVD</th><th class="r">Marge</th>',
+            '<th></th><th></th><th></th><th></th><th></th><th></th>',
+            '</tr></thead><tbody>']
+
+    for r in rows:
+        diff = r['diff_eur']
+        if diff < 0: cls = 'protter-cheaper'
+        elif diff > 0: cls = 'vidre-cheaper'
+        else: cls = ''
+        v_origen_tag = f'<span class="tag {("formula" if r["v_origen"]=="formula" else "")}">{r["v_origen"]}</span>'
+        p_origen_tag = f'<span class="tag {("formula" if r["p_origen"]=="formula" else "")}">{r["p_origen"]}</span>'
+        html.append(
+            f'<tr class="{cls}">'
+            f'<td>{r["w"]}×{r["h"]}</td>'
+            f'<td class="r">{r["area"]}</td>'
+            f'<td class="r">{_eur(r["v_cost"])}</td>'
+            f'<td class="r">{_eur(r["v_pvd"])}<br>{v_origen_tag}<br><small style="color:#9E9B94">{r["v_ref"]}</small></td>'
+            f'<td class="r">{_pct(r["v_marge"])}</td>'
+            f'<td class="r">{_eur(r["p_cost"])}</td>'
+            f'<td class="r">{_eur(r["p_pvd"])}<br><small style="color:#9E9B94">f:{r["f_origen"]} l:{r["l_origen"]}</small></td>'
+            f'<td class="r">{_pct(r["p_marge"])}</td>'
+            f'<td class="r"><strong>{_diff(diff)}</strong></td>'
+            f'<td class="r">{_pct(r["diff_pct"])}</td>'
+            f'<td class="r">{_eur(r["f_pvd"])}</td>'
+            f'<td class="r">{_eur(r["l_pvd"])}</td>'
+            f'<td class="r">{_eur(r["mo_foam"])}</td>'
+            f'<td class="r">{_eur(r["mo_lam"])}</td>'
+            f'</tr>'
+        )
+    html.append('</tbody></table>')
+    html.append('<p class="muted" style="margin-top:1rem">Files verdes: protter més barat que vidre. Files vermelles: vidre més barat. Tags <span class="tag">taula</span>/<span class="tag formula">formula</span> indiquen l\'origen del cost en cada càlcul.</p>')
+    html.append('</body></html>')
+    return ''.join(html)
+
+
 @app.route('/admin/auditoria-preus')
 @admin_required
 def admin_auditoria_preus():
