@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Generador de tarifes</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:1240px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;margin-bottom:.25rem}
+.muted{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+.section-title{font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;background:#fff}
+textarea{resize:vertical;min-height:60px}
+input:focus,select:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.toggle{display:inline-flex;border:1px solid var(--border);border-radius:999px;background:#fff;padding:3px;gap:3px}
+.toggle label{margin:0;cursor:pointer;padding:7px 14px;border-radius:999px;font-size:12px;font-weight:700;color:var(--muted)}
+.toggle input{display:none}
+.toggle input:checked+span{background:var(--text);color:#fff}
+.toggle span{display:inline-block;padding:7px 14px;border-radius:999px}
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem}
+.product-row{display:flex;align-items:center;gap:.55rem;padding:.55rem .75rem;border:1px solid var(--border);border-radius:8px;background:#fcfbf8;cursor:pointer;font-size:13px}
+.product-row input{width:auto}
+.row-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+.result-section h3{font-family:'DM Serif Display',serif;font-size:20px;font-weight:400;margin:1.5rem 0 .5rem;color:var(--green)}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
+th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:10px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
+td{padding:8px 10px;border-bottom:1px solid #F3F1EB;font-family:Consolas,monospace}
+td.r{text-align:right}
+tr:last-child td{border-bottom:none}
+.alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>
+function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }
+function setPvpVisibility(){
+  var v = document.querySelector('input[name="vista"]:checked');
+  document.getElementById('user-block').style.display = (v && v.value==='PVP') ? '' : 'none';
+}
+</script>
+
+<div class="container">
+  <div class="page-title">Generador de tarifes</div>
+  <div class="muted">Construeix la tarifa de venda (PVP) o de cost (PVD) per a un conjunt de productes i mides. Sortida online, PDF o Excel.</div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="alert-ok">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <form method="post" action="/admin/tarifes">
+
+    <div class="section">
+      <div class="section-title">Configuració</div>
+      <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-end;margin-bottom:.5rem">
+        <div>
+          <label style="margin-bottom:.4rem">Vista</label>
+          <div class="toggle">
+            <label><input type="radio" name="vista" value="PVD" {% if (saved.vista or 'PVD')=='PVD' %}checked{% endif %} onchange="setPvpVisibility()"><span>PVD</span></label>
+            <label><input type="radio" name="vista" value="PVP" {% if saved.vista=='PVP' %}checked{% endif %} onchange="setPvpVisibility()"><span>PVP</span></label>
+          </div>
+        </div>
+        <div id="user-block" style="min-width:240px;{% if (saved.vista or 'PVD')!='PVP' %}display:none{% endif %}">
+          <label>Usuari (per al càlcul PVP)</label>
+          <select name="user_id">
+            <option value="">— sense marge addicional —</option>
+            {% for u in usuaris %}
+            <option value="{{ u.id }}" {% if saved.user_id and saved.user_id|string == u.id|string %}selected{% endif %}>
+              {{ u.nom or u.username }}{% if u.nom_empresa %} · {{ u.nom_empresa }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Productes</div>
+      <div class="product-grid">
+        {% for key, label, _ in products %}
+        <label class="product-row">
+          <input type="checkbox" name="products" value="{{ key }}"
+                 {% if saved.products and key in saved.products %}checked{% elif not saved.products %}checked{% endif %}>
+          <span>{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Mides personalitzades (opcional)</div>
+      <p class="muted" style="margin-bottom:.6rem">Mides addicionals a calcular per fórmula, separades per comes o salts de línia. Format: <code>WxH</code>, p. ex. <code>46x61, 58x140</code>. Les mides estàndard del catàleg de cada producte ja s'inclouen automàticament.</p>
+      <textarea name="custom_sizes" placeholder="46x61, 58x140, 65x95">{{ saved.custom_sizes or '' }}</textarea>
+    </div>
+
+    <div class="row-actions">
+      <button type="submit" name="format" value="online" class="btn btn-primary">Veure online</button>
+      <button type="submit" name="format" value="pdf" class="btn btn-ghost">📄 Descarregar PDF</button>
+      <button type="submit" name="format" value="excel" class="btn btn-ghost">📊 Descarregar Excel</button>
+    </div>
+  </form>
+
+  {% if result %}
+  <div class="section result-section" style="margin-top:1.5rem">
+    <div class="section-title">Resultat — Tarifa {{ result.vista }}{% if result.user_label %} · {{ result.user_label }}{% endif %}</div>
+
+    {% for sec in result.data %}
+    <h3>{{ sec.label }}</h3>
+    {% if sec.rows %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Referència</th><th>Mida</th>
+          <th class="r">Preu sense IVA</th>
+          <th class="r">Preu amb IVA (21%)</th>
+          <th>Origen</th>
+        </tr></thead>
+        <tbody>
+        {% for r in sec.rows %}
+        {% set preu = r.pvp if result.vista == 'PVP' else r.pvd %}
+        <tr>
+          <td>{{ r.ref }}</td>
+          <td class="r">{{ r.mida_label }}</td>
+          <td class="r">{{ "%.2f"|format(preu)|replace(".", ",") }} €</td>
+          <td class="r">{{ "%.2f"|format(preu * 1.21)|replace(".", ",") }} €</td>
+          <td><small style="color:var(--hint)">{{ r.origen }}</small></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">— Sense mides per a aquest producte —</p>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>
