@@ -4035,6 +4035,209 @@ def admin_auditoria_vidre_protter():
     return ''.join(html)
 
 
+@app.route('/admin/auditoria-general')
+@admin_required
+def admin_auditoria_general():
+    """TEMPORAL: auditoria completa del càlcul per a un conjunt de
+    mides representatives. Per cada mida calcula vidre, doble vidre,
+    passpartú simple/doble, foam, laminat, protter i impressió;
+    per a cadascú mostra ref/origen/cost/PVD/marge i destaca anomalies.
+
+    Comprovacions de coherència:
+      - DV cost ≈ vidre cost × 2 + 2,08 € (±0,10)
+      - DOBPAS cost ≈ 1PAS cost × 2 (±0,05)
+      - Protter cost ≈ foam cost + laminat cost (±0,10)
+      - Marge admin: dins de 55-65% (avís) o esperat (60%)
+      - Origen 'taula' amb àrea_taula/àrea_sol > 1,40 (incoherent
+        amb el threshold del PR #126)"""
+    MIDES = [(20,25),(30,40),(40,50),(46,61),(50,70),
+             (60,80),(70,100),(80,120),(90,150),(100,150)]
+    MIDES = sorted(MIDES, key=lambda wh: wh[0]*wh[1])
+
+    DV_OFFSET = 2.0833    # 5 min · 25/60 (vegeu /admin/normalitzar-doble-vidre)
+    RATIO_MAX = float(get_config_value('encolat_ratio_max', '1.40'))
+    MARGE_OK_LO, MARGE_OK_HI = 55, 65
+
+    usuari_actual = query('SELECT * FROM usuaris WHERE id=?', [session.get('user_id')], one=True)
+
+    def _ratio_taula(ref, w, h):
+        try:
+            rw, rh = _parse_dims(ref or '')
+            if rw and rh and w and h:
+                return (rw * rh) / max(1.0, float(w) * float(h))
+        except Exception:
+            pass
+        return None
+
+    def _marge_pct(cost, pvd):
+        if not cost or float(cost) <= 0:
+            return None
+        return (float(pvd) / float(cost) - 1) * 100
+
+    def _comp(d, w, h):
+        """Estructura uniforme per a tots els components."""
+        if not isinstance(d, dict):
+            return None
+        cost = float(d.get('cost') or 0)
+        pvd  = float(d.get('pvd')  or 0)
+        ref  = d.get('ref') or '—'
+        origen = d.get('origen') or '—'
+        ratio  = _ratio_taula(ref, w, h) if origen == 'taula' else None
+        return {
+            'ref': ref, 'origen': origen,
+            'cost': cost, 'pvd': pvd,
+            'marge': _marge_pct(cost, pvd),
+            'ratio': ratio,
+        }
+
+    rows = []
+    for w, h in MIDES:
+        area = w * h
+        v   = _comp(calcular_cost_vidre(w, h), w, h)
+        dv  = _comp(calcular_cost_doble_vidre(w, h), w, h)
+        pas = _comp(calcular_cost_passpartu(w, h, tipus='simple'), w, h)
+        dpas= _comp(calcular_cost_passpartu(w, h, tipus='doble'), w, h)
+        fm  = _comp(calcular_cost_foam(w, h), w, h)
+        lm  = _comp(calcular_cost_laminat(w, h, tipus='semibrillo'), w, h)
+        prt = _comp(calcular_cost_protter(w, h, tipus='semibrillo'), w, h)
+
+        # Impressió: _imp_closest retorna {ref, preu, origen, area} (sense cost
+        # separat). Calculem el tram per saber el % de marge.
+        imp_raw = _imp_closest(w, h) or {}
+        tram_info = get_marge_impressio_tram(area, usuari_actual) or {}
+        imp = {
+            'ref': imp_raw.get('ref') or '—',
+            'origen': imp_raw.get('origen') or '—',
+            'pvd': float(imp_raw.get('preu') or 0),
+            'tram': tram_info.get('tram'),
+            'marge': float(tram_info.get('marge') or 0),
+            'ratio': _ratio_taula(imp_raw.get('ref') or '', w, h) if imp_raw.get('origen') == 'taula' else None,
+        }
+
+        # Comprovacions de coherència
+        warn = []
+        # 1) DV ≈ V·2 + offset
+        if v and dv and v['cost'] > 0:
+            esperat_dv = v['cost'] * 2 + DV_OFFSET
+            if abs(dv['cost'] - esperat_dv) > 0.10:
+                warn.append(f"DV cost {dv['cost']:.2f}€ ≠ esperat {esperat_dv:.2f}€ (Δ={dv['cost']-esperat_dv:+.2f})")
+        # 2) DOBPAS ≈ 1PAS · 2
+        if pas and dpas and pas['cost'] > 0:
+            esperat_dpas = pas['cost'] * 2
+            if abs(dpas['cost'] - esperat_dpas) > 0.05:
+                warn.append(f"DOBPAS cost {dpas['cost']:.2f}€ ≠ 1PAS·2 = {esperat_dpas:.2f}€ (Δ={dpas['cost']-esperat_dpas:+.2f})")
+        # 3) Protter ≈ foam + laminat
+        if prt and fm and lm:
+            esperat_prt = fm['cost'] + lm['cost']
+            if abs(prt['cost'] - esperat_prt) > 0.10:
+                warn.append(f"Protter cost {prt['cost']:.2f}€ ≠ foam+lam = {esperat_prt:.2f}€ (Δ={prt['cost']-esperat_prt:+.2f})")
+        # 4) Marges fora de rang 55-65%
+        for lbl, c in [('vidre', v), ('DV', dv), ('1PAS', pas), ('DOBPAS', dpas),
+                       ('foam', fm), ('laminat', lm), ('protter', prt)]:
+            if c and isinstance(c.get('marge'), float):
+                if not (MARGE_OK_LO <= c['marge'] <= MARGE_OK_HI):
+                    warn.append(f"Marge {lbl} {c['marge']:.1f}% fora de {MARGE_OK_LO}-{MARGE_OK_HI}%")
+        # 5) Origen taula amb ratio > threshold
+        for lbl, c in [('vidre', v), ('DV', dv), ('1PAS', pas), ('DOBPAS', dpas),
+                       ('foam', fm), ('laminat', lm), ('impressió', imp)]:
+            if c and c.get('origen') == 'taula' and c.get('ratio') and c['ratio'] > RATIO_MAX:
+                warn.append(f"{lbl} taula ratio {c['ratio']:.2f} > {RATIO_MAX}")
+
+        rows.append({
+            'w': w, 'h': h, 'area': area,
+            'v': v, 'dv': dv, 'pas': pas, 'dpas': dpas,
+            'fm': fm, 'lm': lm, 'prt': prt, 'imp': imp,
+            'warn': warn,
+        })
+
+    # ---------- Render ----------
+    def _eur(v):
+        if v is None or not isinstance(v, (int, float)): return '—'
+        return f'{v:.2f} €'
+    def _pct(v):
+        if v is None or not isinstance(v, (int, float)): return '—'
+        return f'{v:.1f} %'
+    def _origen_tag(c):
+        if not c: return '—'
+        o = c.get('origen') or '—'
+        cls = 'tag-formula' if o == 'formula' else ('tag-taula' if o == 'taula' else 'tag-other')
+        ref = c.get('ref') or ''
+        return f'<span class="tag {cls}">{o}</span><br><small style="color:#9E9B94">{ref}</small>'
+
+    def _row_color(c):
+        """Tornar el color de fons d'una cel·la segons marge/ratio."""
+        if not c: return ''
+        m = c.get('marge')
+        r = c.get('ratio')
+        if isinstance(m, (int, float)) and not (MARGE_OK_LO <= m <= MARGE_OK_HI):
+            return 'bad'
+        if c.get('origen') == 'taula' and isinstance(r, (int, float)) and r > RATIO_MAX:
+            return 'warn'
+        return 'ok'
+
+    html = ['<!DOCTYPE html><html><head><meta charset="UTF-8">',
+            '<title>Auditoria general del càlcul</title>',
+            '<style>',
+            'body{font-family:system-ui,sans-serif;background:#F8F7F4;color:#1C1B18;margin:0;padding:1.5rem 2rem;max-width:1900px}',
+            'h1{font-size:24px;margin:0 0 .25rem}',
+            'h3{font-size:14px;margin:1.25rem 0 .35rem;color:#1A6B45}',
+            'p.muted{color:#6B6860;font-size:13px;margin:0 0 1.5rem;line-height:1.55}',
+            'table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden;font-size:11px;margin-bottom:1.5rem}',
+            'th{background:#F5F4F1;text-align:left;padding:6px 6px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#6B6860;border-bottom:1px solid #E5E2DB;white-space:nowrap}',
+            'td{padding:6px;border-bottom:1px solid #F3F1EB;font-family:Consolas,monospace;vertical-align:top}',
+            'td.r{text-align:right}',
+            'tr:last-child td{border-bottom:none}',
+            'td.ok{background:#F4FBF7}',
+            'td.warn{background:#FDF3E8}',
+            'td.bad{background:#FAEAEA;color:#B84040;font-weight:700}',
+            '.tag{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700}',
+            '.tag-taula{background:#EEF2FF;color:#4F46E5}',
+            '.tag-formula{background:#FDF3E8;color:#C8873A}',
+            '.tag-other{background:#F1ECE3;color:#6B6860}',
+            '.alert{background:#FAEAEA;border:1px solid #E8B4B4;color:#B84040;padding:.4rem .6rem;font-size:11px;border-radius:6px;margin:.4rem 0}',
+            '.alert-row{font-size:10px;color:#B84040;line-height:1.4}',
+            '</style></head><body>',
+            '<h1>Auditoria general del càlcul</h1>',
+            f'<p class="muted">Auditoria de {len(MIDES)} mides per a tots els components. ',
+            f'Threshold ratio (encolat_ratio_max) = {RATIO_MAX}. Marge esperat = {MARGE_OK_LO}-{MARGE_OK_HI}%. ',
+            'Cel·les <strong>verdes</strong>: marge i origen OK. <strong>Groc</strong>: avís (taula amb ratio alt). <strong>Vermell</strong>: error (marge fora de rang).</p>']
+
+    # Capçalera
+    html.append('<table><thead><tr>')
+    html.append('<th>Mida</th><th class="r">Àrea</th>')
+    for lbl in ['Vidre','DV','1PAS','DOBPAS','Foam','Laminat','Protter','Impressió']:
+        html.append(f'<th>{lbl}<br>ref · origen</th><th class="r">PVD</th><th class="r">Marge</th>')
+    html.append('</tr></thead><tbody>')
+
+    for r in rows:
+        cells = []
+        cells.append(f'<td>{r["w"]}×{r["h"]}</td>')
+        cells.append(f'<td class="r">{r["area"]}</td>')
+        for key in ['v','dv','pas','dpas','fm','lm','prt','imp']:
+            c = r.get(key)
+            cls = _row_color(c)
+            cells.append(f'<td>{_origen_tag(c)}</td>')
+            cells.append(f'<td class="r {cls}">{_eur(c["pvd"]) if c else "—"}</td>')
+            if key == 'imp':
+                # Impressió mostra tram + marge
+                if c:
+                    tram_str = (f'tram {c["tram"]}<br>' if c.get('tram') else '')
+                    cells.append(f'<td class="r {cls}">{tram_str}{_pct(c["marge"])}</td>')
+                else:
+                    cells.append('<td class="r">—</td>')
+            else:
+                cells.append(f'<td class="r {cls}">{_pct(c["marge"]) if c else "—"}</td>')
+        html.append('<tr>' + ''.join(cells) + '</tr>')
+        # Files d'avís per a aquesta mida
+        if r['warn']:
+            warn_cell = '<br>'.join(f'⚠ {msg}' for msg in r['warn'])
+            html.append(f'<tr><td colspan="26" class="alert-row">{warn_cell}</td></tr>')
+
+    html.append('</tbody></table>')
+    html.append('</body></html>')
+    return ''.join(html)
+
+
 @app.route('/admin/dump-pro')
 @admin_required
 def admin_dump_pro():
