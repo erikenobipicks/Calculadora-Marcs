@@ -701,7 +701,8 @@ var muntatge_actiu = 'cap';
 var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid = null;
 // Descomptes combo (% sobre subtotal PVP). Defaults sincronitzats amb config BD;
 // /api/marge sobreescriu amb els valors actuals.
-var COMBO_DESC = {marc_imp_protter:6, marc_imp_foam:5, marc_imp:3, marc_suport:3};
+// minim_pvp: si el subtotal PVP és inferior a aquest mínim, no s'aplica el combo.
+var COMBO_DESC = {marc_imp_protter:6, marc_imp_foam:5, marc_imp:3, marc_suport:3, minim_pvp:80};
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
@@ -1246,6 +1247,7 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
     COMBO_DESC.marc_imp_foam    = Number(d.combo_desc.marc_imp_foam)||0;
     COMBO_DESC.marc_imp         = Number(d.combo_desc.marc_imp)||0;
     COMBO_DESC.marc_suport      = Number(d.combo_desc.marc_suport)||0;
+    if(d.combo_desc.minim_pvp != null) COMBO_DESC.minim_pvp = Number(d.combo_desc.minim_pvp)||0;
   }
   applyCommercialMarginOverrides();
   document.getElementById('marge_val').value = marge;
@@ -2114,6 +2116,13 @@ function calcular(){
   } else if(teMarc && (teFoam || teProtter)){
     comboPct = COMBO_DESC.marc_suport;
     comboLbl = 'Descompte pack (marc + suport)';
+  }
+  // Mínim de subtotal PVP per aplicar el combo. Si pNet < minim_pvp,
+  // el descompte queda invalidat (s'amaga la línia al resum).
+  var comboMinim = Number(COMBO_DESC.minim_pvp)||0;
+  if(comboPct > 0 && pNet < comboMinim){
+    comboPct = 0;
+    comboLbl = '';
   }
   var comboEur     = pNet * (comboPct/100);
   var pNetAfterCombo = pNet - comboEur;

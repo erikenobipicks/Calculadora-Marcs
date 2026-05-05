@@ -2834,6 +2834,7 @@ def get_marge():
             'marc_imp_foam':    float(get_config_value('combo_desc_marc_imp_foam', '5')),
             'marc_imp':         float(get_config_value('combo_desc_marc_imp', '3')),
             'marc_suport':      float(get_config_value('combo_desc_marc_suport', '3')),
+            'minim_pvp':        float(get_config_value('combo_desc_minim_pvp', '80')),
         },
     })
 
@@ -3379,6 +3380,8 @@ def admin_run_migrations():
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_imp_foam', '5')",
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_imp', '3')",
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_suport', '3')",
+        # Mínim de subtotal PVP perquè s'apliqui el descompte combo (€).
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_minim_pvp', '80')",
     ]
 
     resultats = []
@@ -5118,6 +5121,16 @@ def admin_config():
                 execute(
                     "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
                     [f'marge_admin_{cat}_pct', str(val)],
+                )
+        # Descomptes combo per combinació de productes + mínim de subtotal.
+        for clau in ('combo_desc_marc_imp_protter', 'combo_desc_marc_imp_foam',
+                     'combo_desc_marc_imp', 'combo_desc_marc_suport',
+                     'combo_desc_minim_pvp'):
+            val = request.form.get(clau)
+            if val is not None and val != '':
+                execute(
+                    "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                    [clau, str(val).strip()],
                 )
         if request.form.get('save_gmail'):
             gu = request.form.get('gmail_user','').strip()
@@ -7401,6 +7414,7 @@ def init_db():
                          ('combo_desc_marc_imp_foam','5'),
                          ('combo_desc_marc_imp','3'),
                          ('combo_desc_marc_suport','3'),
+                         ('combo_desc_minim_pvp','80'),
                          # Trams àrea per al marge d'impressions (cm²)
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
@@ -7646,6 +7660,7 @@ def init_db():
                          ('combo_desc_marc_imp_foam','5'),
                          ('combo_desc_marc_imp','3'),
                          ('combo_desc_marc_suport','3'),
+                         ('combo_desc_minim_pvp','80'),
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),
