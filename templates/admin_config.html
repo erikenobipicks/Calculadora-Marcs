@@ -83,6 +83,33 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     </div>
 
     <div class="section">
+      <div class="section-title">Descompte pack per combinació de productes</div>
+      <p class="muted" style="margin-bottom:1rem">Descompte automàtic aplicat al subtotal PVP segons quins components hi ha al pressupost. Només s'aplica si el subtotal supera el mínim configurat.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));gap:1rem">
+        <div>
+          <label>Marc + impressió + protter (%)</label>
+          <input type="number" name="combo_desc_marc_imp_protter" value="{{ config.get('combo_desc_marc_imp_protter', '6') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Marc + impressió + foam (%)</label>
+          <input type="number" name="combo_desc_marc_imp_foam" value="{{ config.get('combo_desc_marc_imp_foam', '5') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Marc + impressió (%)</label>
+          <input type="number" name="combo_desc_marc_imp" value="{{ config.get('combo_desc_marc_imp', '3') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Marc + suport (foam/protter) (%)</label>
+          <input type="number" name="combo_desc_marc_suport" value="{{ config.get('combo_desc_marc_suport', '3') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Mínim PVP per aplicar el descompte (€)</label>
+          <input type="number" name="combo_desc_minim_pvp" value="{{ config.get('combo_desc_minim_pvp', '80') }}" min="0" step="1">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-title">Marge professional per defecte i flag global</div>
       <label>Marge de benefici per defecte (%)</label>
       <p class="hint">S'aplica als comptes nous. Recomanació: 60. Per editar el marge d'un usuari concret, vés a <a href="/admin/usuaris">Clients</a>.</p>
