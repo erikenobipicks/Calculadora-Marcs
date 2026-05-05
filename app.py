@@ -1459,22 +1459,40 @@ def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
 
 
 def calcular_cost_foam(amplada, alcada):
-    """Encolat en foam adhesiu (ProEco és àlies del mateix producte):
-    1. Min-contain amb tolerància sobre la taula (per àrea més propera) → preu_cost.
-    2. Fórmula NOMÉS com a fallback si cap fila de la taula cobreix la mida."""
+    """Encolat en foam adhesiu (ProEco és àlies del mateix producte) — lògica
+    híbrida amb threshold:
+      1. Min-contain amb tolerància sobre la taula (per àrea més propera).
+      2. Si hi ha fila i la seva àrea no excedeix 'encolat_ratio_max' (default
+         1.40) vegades l'àrea sol·licitada → usa preu_cost de taula.
+      3. Si la fila és massa gran (ratio > threshold) o no n'hi ha → fórmula.
+    Així stock pre-tallat segueix guanyant per a mides properes (ENC30x40 per
+    a 30×40 → ratio 1.0), però per a mides força més petites que la fila
+    stockada (58×140 → ENC80x150 → ratio 1.48) caiem a fórmula."""
     marge      = float(get_config_value('marge_admin_encolat_pct', '60'))
     tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
+    ratio_max  = float(get_config_value('encolat_ratio_max', '1.40'))
     cost_cm2   = float(get_config_value('foam_cost_cm2', '0.001143'))
     temps_base = float(get_config_value('foam_temps_base_min', '9'))
     temps_var  = float(get_config_value('foam_temps_var_cm2', '0.0015'))
 
+    cost_formula = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+    area_sol = max(1.0, float(amplada) * float(alcada))
+
     fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='ENC', tolerancia=tolerancia)
+    use_taula = False
     if fila and _row_get(fila, 'preu_cost') is not None:
+        rw, rh = _parse_dims(fila['referencia'])
+        if rw and rh:
+            ratio = (rw * rh) / area_sol
+            if ratio <= ratio_max:
+                use_taula = True
+
+    if use_taula:
         cost = round(float(fila['preu_cost']), 4)
         origen = 'taula'
         ref = fila['referencia']
     else:
-        cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+        cost = cost_formula
         origen = 'formula'
         ref = f'foam-{amplada}x{alcada}'
 
@@ -1483,10 +1501,12 @@ def calcular_cost_foam(amplada, alcada):
 
 
 def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
-    """Laminat Protter. tipus: 'semibrillo' | 'mate'
-    1. Min-contain sobre encolat_pro (refs PRO%) — usa preu_cost com a base semibrillo
-       i aplica diferencial per mate
-    2. Fórmula fallback per mides fora de taula"""
+    """Laminat Protter — lògica híbrida amb threshold (vegeu calcular_cost_foam):
+      1. Min-contain amb tolerància sobre encolat_pro (refs PRO%).
+      2. Si fila trobada i la seva àrea ≤ encolat_ratio_max × àrea sol·licitada
+         (default 1.40) → usar preu_cost de taula (amb diferencial mate).
+      3. Si massa gran o no hi ha → fórmula.
+    tipus: 'semibrillo' | 'mate'."""
     marge = float(get_config_value('marge_admin_encolat_pct', '60'))
     cost_cm2_semi = float(get_config_value('laminat_semibrillo_cost_cm2', '0.000504'))
     cost_cm2_mate = float(get_config_value('laminat_mate_cost_cm2', '0.000685'))
@@ -1494,9 +1514,21 @@ def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
     temps_var     = float(get_config_value('laminat_temps_var_cm2', '0.0012'))
     cost_cm2 = cost_cm2_mate if tipus == 'mate' else cost_cm2_semi
     tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
+    ratio_max  = float(get_config_value('encolat_ratio_max', '1.40'))
+
+    cost_formula = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+    area_sol = max(1.0, float(amplada) * float(alcada))
 
     fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='PRO', tolerancia=tolerancia)
+    use_taula = False
     if fila and _row_get(fila, 'preu_cost') is not None:
+        rw, rh = _parse_dims(fila['referencia'])
+        if rw and rh:
+            ratio = (rw * rh) / area_sol
+            if ratio <= ratio_max:
+                use_taula = True
+
+    if use_taula:
         cost_base = float(fila['preu_cost'])
         if tipus == 'mate':
             area = amplada * alcada
@@ -1508,9 +1540,8 @@ def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
         return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'taula', 'ref': fila['referencia']}
 
     # Fallback fórmula
-    cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
-    pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'formula', 'ref': f'laminat-{tipus}-{amplada}x{alcada}'}
+    pvd = round(cost_formula * (1 + marge / 100), 4)
+    return {'cost': cost_formula, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'formula', 'ref': f'laminat-{tipus}-{amplada}x{alcada}'}
 
 
 def calcular_cost_protter(amplada, alcada, tipus='semibrillo'):
@@ -3284,6 +3315,9 @@ def admin_run_migrations():
         # Només actua si el valor és exactament '7500' per no sobreescriure
         # personalitzacions explícites. Idempotent.
         "UPDATE config SET valor='6000' WHERE clau='imp_tram4_area' AND valor='7500'",
+        # Threshold ratio per a la lògica híbrida d'encolat (foam/laminat).
+        # Si la fila de taula és més de 1.40× l'àrea sol·licitada, fem fórmula.
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('encolat_ratio_max', '1.40')",
     ]
 
     resultats = []
@@ -6878,6 +6912,7 @@ def init_db():
                          ('vidre_tolerancia_cm','2'),
                          ('passpartu_tolerancia_cm','2'),
                          ('encolat_tolerancia_cm','2'),
+                         ('encolat_ratio_max','1.40'),
                          # Trams àrea per al marge d'impressions (cm²)
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
@@ -7115,6 +7150,7 @@ def init_db():
                          ('vidre_tolerancia_cm','2'),
                          ('passpartu_tolerancia_cm','2'),
                          ('encolat_tolerancia_cm','2'),
+                         ('encolat_ratio_max','1.40'),
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),
