@@ -4035,6 +4035,26 @@ def admin_auditoria_vidre_protter():
     return ''.join(html)
 
 
+@app.route('/admin/dump-pro')
+@admin_required
+def admin_dump_pro():
+    """TEMPORAL: dump JSON de totes les files PRO* d'encolat_pro
+    (laminat Protter), ordenades per referencia."""
+    rows = query(
+        "SELECT referencia, preu, preu_cost FROM encolat_pro "
+        "WHERE UPPER(referencia) LIKE 'PRO%' ORDER BY referencia"
+    ) or []
+    return jsonify([
+        {
+            'ref': _row_get(r, 'referencia'),
+            'preu': float(_row_get(r, 'preu') or 0),
+            'preu_cost': float(_row_get(r, 'preu_cost') or 0)
+                if _row_get(r, 'preu_cost') is not None else None,
+        }
+        for r in rows
+    ])
+
+
 @app.route('/admin/auditoria-preus')
 @admin_required
 def admin_auditoria_preus():
