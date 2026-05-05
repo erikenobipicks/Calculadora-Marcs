@@ -1753,6 +1753,9 @@ function applyIncompatibilities(){
   var hasPasspartu = interior==='passpartu'||interior==='doble_pas';
   var hasProeco    = interior==='proeco';
   var hasDoblVidre = proteccio==='doble_vidre';
+  // Qualsevol protecció de vidre (simple, doble, mirall o conservar)
+  // és incompatible amb foam/protter — el marc ja porta protecció.
+  var hasVidre     = proteccio==='vidre'||proteccio==='doble_vidre'||proteccio==='mirall'||proteccio==='conservar';
   var hasMarc      = document.getElementById('marc_principal').value.trim()!=='';
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
@@ -1762,8 +1765,8 @@ function applyIncompatibilities(){
   updatePieceContextVisibility();
 
   var rules = {
-    encolat:           hasProeco||hasDoblVidre||hasPasspartu,
-    protter:           hasProeco||hasDoblVidre||hasPasspartu,
+    encolat:           hasProeco||hasPasspartu||hasVidre,
+    protter:           hasProeco||hasPasspartu||hasVidre,
     laminat:           hasProeco||hasDoblVidre||hasPasspartu,
     'muntatge-cap':    false,
     vidre:             hasProeco,
