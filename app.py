@@ -3318,6 +3318,11 @@ def admin_run_migrations():
         # Threshold ratio per a la lògica híbrida d'encolat (foam/laminat).
         # Si la fila de taula és més de 1.40× l'àrea sol·licitada, fem fórmula.
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('encolat_ratio_max', '1.40')",
+        # Costos €/cm² per a la fórmula d'impressions per àrea (vegeu _imp_closest).
+        # Reusa el threshold encolat_ratio_max — mateix patró taula/fórmula.
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_lustre_cost_cm2', '0.000703')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_silk_cost_cm2', '0.000756')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_matte_cost_cm2', '0.000447')",
     ]
 
     resultats = []
@@ -6308,12 +6313,83 @@ def _find_min_contain(rows, w, h, prefix=None):
     # Fallback: if nothing contains it, take the largest available
     return max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
 
-def _imp_closest(fw, fh):
-    rows = [dict(r) for r in query('SELECT * FROM impressio')]
-    r = _find_min_contain(rows, fw, fh)
-    if r:
-        return {'ref': r['referencia'], 'preu': r.get('preu', 0)}
-    return None
+def _imp_closest(fw, fh, paper='lustre'):
+    """Tarifa d'impressió fotogràfica amb lògica híbrida + threshold:
+      1. Min-contain sobre la taula 'impressio'.
+      2. Si fila trobada i àrea_taula / àrea_sol ≤ encolat_ratio_max
+         (default 1.40) → usar preu de taula directament.
+      3. Si massa gran o no hi ha → calcular per fórmula:
+            cost_real = àrea_sol · cost_cm2(paper)
+            factor    = preu(ref_calibration) / (àrea_calib · cost_cm2)
+            preu      = round(cost_real · factor, 2)
+         on ref_calibration és la fila de taula amb àrea més propera per
+         sota a la sol·licitada (fallback: la fila més petita disponible).
+
+    Retorna {ref, preu, origen, area} o None si no hi ha cap fila ni
+    càlcul possible. /api/closest enriqueix amb tram, marge, pvp."""
+    rows = [dict(r) for r in query('SELECT * FROM impressio')] or []
+    if not rows:
+        return None
+
+    area_sol = max(1.0, float(fw) * float(fh))
+    ratio_max = float(get_config_value('encolat_ratio_max', '1.40'))
+
+    # 1) Min-contain
+    fila = _find_min_contain(rows, fw, fh)
+
+    # 2) Si la fila és prou ajustada, usar taula
+    if fila:
+        rw, rh = _parse_dims(fila['referencia'])
+        if rw and rh:
+            ratio = (rw * rh) / area_sol
+            if ratio <= ratio_max:
+                return {
+                    'ref': fila['referencia'],
+                    'preu': float(fila.get('preu') or 0),
+                    'origen': 'taula',
+                    'area': round(area_sol, 2),
+                }
+
+    # 3) Fórmula
+    cost_cm2 = float(get_config_value(f'imp_{paper}_cost_cm2',
+                                      get_config_value('imp_lustre_cost_cm2', '0.000703')))
+    cost_real = area_sol * cost_cm2
+
+    # Calibració del factor: fila amb àrea més propera per sota
+    calib = None
+    smallest = None
+    for r in rows:
+        try:
+            preu_r = float(r.get('preu') or 0)
+        except (TypeError, ValueError):
+            continue
+        if preu_r <= 0:
+            continue
+        rw, rh = _parse_dims(r.get('referencia') or '')
+        if not rw or not rh:
+            continue
+        a = rw * rh
+        if smallest is None or a < smallest[1]:
+            smallest = (r, a, preu_r)
+        if a <= area_sol:
+            if calib is None or a > calib[1]:
+                calib = (r, a, preu_r)
+
+    if calib is None:
+        calib = smallest
+    if calib is None:
+        return None  # no hi ha cap fila utilitzable per calibrar
+
+    _r, calib_area, calib_preu = calib
+    factor = calib_preu / (calib_area * cost_cm2) if calib_area > 0 and cost_cm2 > 0 else 1.0
+    preu_formula = round(cost_real * factor, 2)
+
+    return {
+        'ref': f'imp-{int(fw)}x{int(fh)}',
+        'preu': preu_formula,
+        'origen': 'formula',
+        'area': round(area_sol, 2),
+    }
 
 
 def _laminate_only_closest(fw, fh):
@@ -6913,6 +6989,9 @@ def init_db():
                          ('passpartu_tolerancia_cm','2'),
                          ('encolat_tolerancia_cm','2'),
                          ('encolat_ratio_max','1.40'),
+                         ('imp_lustre_cost_cm2','0.000703'),
+                         ('imp_silk_cost_cm2','0.000756'),
+                         ('imp_matte_cost_cm2','0.000447'),
                          # Trams àrea per al marge d'impressions (cm²)
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
@@ -7151,6 +7230,9 @@ def init_db():
                          ('passpartu_tolerancia_cm','2'),
                          ('encolat_tolerancia_cm','2'),
                          ('encolat_ratio_max','1.40'),
+                         ('imp_lustre_cost_cm2','0.000703'),
+                         ('imp_silk_cost_cm2','0.000756'),
+                         ('imp_matte_cost_cm2','0.000447'),
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),
