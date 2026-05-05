@@ -5105,6 +5105,360 @@ ADMIN_MARGE_CATEGORIES = [
 ]
 
 
+# ── Tarifes generador ─────────────────────────────────────────────────────
+TARIFA_PRODUCTS = [
+    ('impressio',     'Impressions fotogràfiques',  'imp'),
+    ('vidre',         'Vidre simple',                'vidre'),
+    ('doble_vidre',   'Doble vidre',                 'doble_vidre'),
+    ('mirall',        'Mirall',                      'mirall'),
+    ('passpartu',     'Passpartú simple',            'pas'),
+    ('doble_pas',     'Doble passpartú',             'dobpas'),
+    ('foam',          'Encolat foam',                'foam'),
+    ('laminat_semi',  'Laminat SemiBrillo',          'lamS'),
+    ('laminat_mate',  'Laminat Mate',                'lamM'),
+    ('protter_semi',  'Protter SemiBrillo',          'protS'),
+    ('protter_mate',  'Protter Mate',                'protM'),
+]
+
+
+def _tarifa_default_sizes(product):
+    """Retorna llista de (w, h) per defecte d'un producte, llegint la BD."""
+    sizes = []
+    if product == 'impressio':
+        rows = query("SELECT referencia FROM impressio") or []
+    elif product == 'vidre':
+        rows = query("SELECT referencia FROM vidres "
+                     "WHERE UPPER(referencia) NOT LIKE 'DV-%' "
+                     "AND UPPER(referencia) NOT LIKE 'MIR-%'") or []
+    elif product == 'doble_vidre':
+        rows = query("SELECT referencia FROM vidres WHERE UPPER(referencia) LIKE 'DV-%'") or []
+    elif product == 'mirall':
+        rows = query("SELECT referencia FROM vidres WHERE UPPER(referencia) LIKE 'MIR-%'") or []
+    elif product == 'passpartu':
+        rows = query("SELECT referencia FROM passpartout WHERE UPPER(referencia) LIKE '1PAS%'") or []
+    elif product == 'doble_pas':
+        rows = query("SELECT referencia FROM passpartout WHERE UPPER(referencia) LIKE 'DOBPAS%'") or []
+    elif product in ('foam',):
+        rows = query("SELECT referencia FROM encolat_pro WHERE UPPER(referencia) LIKE 'ENC%'") or []
+    elif product in ('laminat_semi', 'laminat_mate', 'protter_semi', 'protter_mate'):
+        rows = query("SELECT referencia FROM encolat_pro WHERE UPPER(referencia) LIKE 'PRO%'") or []
+    else:
+        rows = []
+    seen = set()
+    for r in rows:
+        ref = _row_get(r, 'referencia') or ''
+        rw, rh = _parse_dims(ref)
+        if rw and rh and (rw, rh) not in seen:
+            seen.add((rw, rh))
+            sizes.append((rw, rh))
+    sizes.sort(key=lambda wh: wh[0] * wh[1])
+    return sizes
+
+
+def _tarifa_compute_one(product, w, h, usuari):
+    """Computa cost/PVD/PVP per a un sol producte+mida.
+    Retorna {ref, w, h, pvd, pvp, origen} o None si error."""
+    try:
+        if product == 'impressio':
+            r = _imp_closest(w, h) or {}
+            pvd = float(r.get('preu') or 0)
+            ref = r.get('ref') or f'imp-{w}x{h}'
+            origen = r.get('origen') or '—'
+            tram = get_marge_impressio_tram(w * h, usuari) or {}
+            pvp = round(pvd * (1 + float(tram.get('marge') or 0) / 100), 2)
+        else:
+            if product == 'vidre':
+                d = calcular_cost_vidre(w, h)
+            elif product == 'doble_vidre':
+                d = calcular_cost_doble_vidre(w, h)
+            elif product == 'mirall':
+                d = calcular_cost_mirall(w, h)
+            elif product == 'passpartu':
+                d = calcular_cost_passpartu(w, h, tipus='simple')
+            elif product == 'doble_pas':
+                d = calcular_cost_passpartu(w, h, tipus='doble')
+            elif product == 'foam':
+                d = calcular_cost_foam(w, h)
+            elif product == 'laminat_semi':
+                d = calcular_cost_laminat(w, h, tipus='semibrillo')
+            elif product == 'laminat_mate':
+                d = calcular_cost_laminat(w, h, tipus='mate')
+            elif product == 'protter_semi':
+                d = calcular_cost_protter(w, h, tipus='semibrillo')
+            elif product == 'protter_mate':
+                d = calcular_cost_protter(w, h, tipus='mate')
+            else:
+                return None
+            d = d or {}
+            pvd = float(d.get('pvd') or 0)
+            ref = d.get('ref') or '—'
+            origen = d.get('origen') or '—'
+            # PVP = PVD · (1 + marge_user/100). Marge legacy o pro_pct.
+            user_marge = _get_marge_value(usuari) if usuari else 0.0
+            pvp = round(pvd * (1 + user_marge / 100), 2)
+        return {
+            'ref': ref, 'w': w, 'h': h,
+            'mida_label': f'{w}×{h} cm',
+            'pvd': round(pvd, 2),
+            'pvp': pvp,
+            'origen': origen,
+        }
+    except Exception as e:
+        print(f'tarifa_compute_one error {product} {w}×{h}: {e}')
+        return None
+
+
+def _tarifa_parse_custom_sizes(text):
+    """Parseja un text 'WxH, WxH, ...' a llista de tuples (w, h)."""
+    import re
+    result = []
+    for token in (text or '').replace('\n', ',').split(','):
+        token = token.strip().lower().replace('×', 'x')
+        if not token: continue
+        m = re.match(r'(\d+)\s*x\s*(\d+)', token)
+        if m:
+            try:
+                result.append((int(m.group(1)), int(m.group(2))))
+            except ValueError:
+                continue
+    return result
+
+
+def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
+    """Per a cada producte seleccionat, collect [{mida, pvd, pvp, ...}]."""
+    result = []
+    for prod_key, label, _short in TARIFA_PRODUCTS:
+        if prod_key not in products:
+            continue
+        sizes = _tarifa_default_sizes(prod_key)
+        # Afegir custom (sense duplicar)
+        seen = set(sizes)
+        for wh in custom_sizes_per_product.get(prod_key, []):
+            if wh not in seen:
+                sizes.append(wh)
+                seen.add(wh)
+        sizes.sort(key=lambda wh: wh[0] * wh[1])
+
+        rows = []
+        for w, h in sizes:
+            r = _tarifa_compute_one(prod_key, w, h, usuari)
+            if r:
+                rows.append(r)
+        result.append({'key': prod_key, 'label': label, 'rows': rows})
+    return result
+
+
+def _tarifa_build_pdf(data, vista, user_label, brand_color):
+    """Genera un PDF A4 portrait amb una secció per producte."""
+    from reportlab.platypus import PageBreak
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm,
+                            topMargin=12*mm, bottomMargin=12*mm)
+    dark = colors.HexColor('#1C1B18')
+    green = colors.HexColor(brand_color or '#1A6B45')
+    border = colors.HexColor('#E5E2DB')
+    light = colors.HexColor('#F5F4F1')
+    muted = colors.HexColor('#6B6860')
+
+    def p(txt, *, bold=False, size=9, color=dark, align=0):
+        return Paragraph(str(txt), ParagraphStyle(
+            name=f't-{size}-{int(bold)}-{align}',
+            fontName='DejaVu-Bold' if bold else 'DejaVu',
+            fontSize=size, leading=size + 2, textColor=color, alignment=align,
+        ))
+
+    avui = datetime.now().strftime('%d/%m/%Y')
+    story = [
+        p(f"Tarifa {vista}", bold=True, size=18, color=green),
+        Spacer(1, 1*mm),
+        p(f"Reus Revela · {avui}" + (f" · {user_label}" if user_label else ''),
+          size=9, color=muted),
+        Spacer(1, 5*mm),
+    ]
+
+    for i, sec in enumerate(data):
+        if i > 0:
+            story.append(PageBreak())
+        story.append(p(sec['label'], bold=True, size=14, color=dark))
+        story.append(Spacer(1, 2*mm))
+        if not sec['rows']:
+            story.append(p('— Sense mides per a aquest producte —', size=9, color=muted))
+            continue
+        cells = [[p('Referència', bold=True, size=8, color=colors.white, align=TA_CENTER),
+                  p('Mida', bold=True, size=8, color=colors.white, align=TA_CENTER),
+                  p('Preu sense IVA', bold=True, size=8, color=colors.white, align=TA_CENTER),
+                  p('Preu amb IVA (21%)', bold=True, size=8, color=colors.white, align=TA_CENTER)]]
+        col = 'pvp' if vista.upper() == 'PVP' else 'pvd'
+        for r in sec['rows']:
+            preu = float(r.get(col) or 0)
+            cells.append([
+                p(r['ref'], size=8),
+                p(r['mida_label'], size=8, align=TA_RIGHT),
+                p(f'{preu:.2f} €', size=8, align=TA_RIGHT),
+                p(f'{preu * 1.21:.2f} €', size=8, align=TA_RIGHT),
+            ])
+        table = Table(cells, repeatRows=1, colWidths=[55*mm, 30*mm, 40*mm, 40*mm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), dark),
+            ('BOX', (0, 0), (-1, -1), 0.4, border),
+            ('INNERGRID', (0, 0), (-1, -1), 0.3, border),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, light]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(table)
+
+    story.append(Spacer(1, 6*mm))
+    story.append(p(f'Preus vigents a {avui}. Sense IVA llevat que s\'indiqui.',
+                   size=8, color=muted, align=TA_CENTER))
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+def _tarifa_build_excel(data, vista, user_label):
+    """Genera un Excel amb un full per producte."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    wb = Workbook()
+    wb.remove(wb.active)
+    avui = datetime.now().strftime('%d/%m/%Y')
+
+    head_fill = PatternFill('solid', fgColor='1C1B18')
+    head_font = Font(bold=True, color='FFFFFF', size=10)
+    info_font = Font(italic=True, color='6B6860')
+    title_font = Font(bold=True, size=14, color='1A6B45')
+    thin = Side(border_style='thin', color='E5E2DB')
+    bd = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    col = 'pvp' if vista.upper() == 'PVP' else 'pvd'
+    for sec in data:
+        sheet_name = sec['label'][:30]
+        ws = wb.create_sheet(title=sheet_name)
+        ws['A1'] = f'Tarifa {vista} · {sec["label"]}'
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:D1')
+        ws['A2'] = f'Reus Revela · {avui}' + (f' · {user_label}' if user_label else '')
+        ws['A2'].font = info_font
+        ws.merge_cells('A2:D2')
+
+        # Headers a la fila 4
+        for idx, label in enumerate(['Referència', 'Mida', 'Preu sense IVA', 'Preu amb IVA (21%)'], start=1):
+            c = ws.cell(row=4, column=idx, value=label)
+            c.fill = head_fill; c.font = head_font; c.border = bd
+            c.alignment = Alignment(horizontal='center', vertical='center')
+
+        for i, r in enumerate(sec['rows'], start=5):
+            preu = float(r.get(col) or 0)
+            ws.cell(row=i, column=1, value=r['ref']).border = bd
+            ws.cell(row=i, column=2, value=r['mida_label']).border = bd
+            cell3 = ws.cell(row=i, column=3, value=preu); cell3.border = bd; cell3.number_format = '#,##0.00 €'
+            cell4 = ws.cell(row=i, column=4, value=preu * 1.21); cell4.border = bd; cell4.number_format = '#,##0.00 €'
+            ws.cell(row=i, column=2).alignment = Alignment(horizontal='right')
+
+        ws.column_dimensions['A'].width = 24
+        ws.column_dimensions['B'].width = 14
+        ws.column_dimensions['C'].width = 18
+        ws.column_dimensions['D'].width = 22
+
+    if not wb.sheetnames:
+        wb.create_sheet('Tarifa').append(['Sense dades'])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _tarifa_save_config(payload):
+    """Desa la última configuració del generador a config['tarifes_config']."""
+    try:
+        execute(
+            "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+            ['tarifes_config', json.dumps(payload, ensure_ascii=False)],
+        )
+    except Exception as e:
+        print(f'tarifes_save_config skip: {e}')
+
+
+def _tarifa_load_config():
+    raw = get_config_value('tarifes_config', '')
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) or {}
+    except Exception:
+        return {}
+
+
+@app.route('/admin/tarifes', methods=['GET', 'POST'])
+@admin_required
+def admin_tarifes():
+    """Generador de tarifes (PVD/PVP) amb sortida online, PDF o Excel."""
+    usuaris = query("SELECT id, username, nom, nom_empresa FROM usuaris "
+                    "WHERE access_status='active' ORDER BY nom") or []
+    saved = _tarifa_load_config()
+
+    if request.method == 'GET':
+        return render_template(
+            'admin_tarifes.html',
+            usuaris=usuaris, products=TARIFA_PRODUCTS,
+            saved=saved, result=None,
+        )
+
+    # POST → processar
+    vista = (request.form.get('vista') or 'PVD').upper()
+    if vista not in ('PVD', 'PVP'):
+        vista = 'PVD'
+    user_id = request.form.get('user_id') or ''
+    products_sel = request.form.getlist('products')
+    custom_global = _tarifa_parse_custom_sizes(request.form.get('custom_sizes', ''))
+    fmt = (request.form.get('format') or 'online').lower()
+
+    # Cada producte selecciona també les seves mides custom (si el form les porta).
+    # MVP: usem el mateix conjunt custom per a tots els productes.
+    custom_per_product = {p: list(custom_global) for p, _, _ in TARIFA_PRODUCTS}
+
+    usuari = None
+    user_label = ''
+    if vista == 'PVP' and user_id:
+        usuari = query('SELECT * FROM usuaris WHERE id=?', [user_id], one=True)
+        if usuari:
+            user_label = (_row_get(usuari, 'nom_empresa') or _row_get(usuari, 'nom') or '').strip()
+
+    data = _tarifa_collect_data(products_sel, custom_per_product, usuari)
+
+    # Desar config (MVP: només els productes seleccionats i el text de mides)
+    _tarifa_save_config({
+        'vista': vista, 'user_id': user_id,
+        'products': products_sel, 'custom_sizes': request.form.get('custom_sizes', ''),
+    })
+
+    if fmt == 'pdf':
+        brand = _normalize_hex_color(get_config_value('brand_color', DEFAULT_BRAND_COLOR))
+        pdf = _tarifa_build_pdf(data, vista, user_label, brand)
+        return send_file(pdf, mimetype='application/pdf', as_attachment=True,
+                         download_name=f'tarifa-{vista.lower()}-{datetime.now().strftime("%Y%m%d")}.pdf')
+    if fmt == 'excel':
+        xlsx = _tarifa_build_excel(data, vista, user_label)
+        return send_file(xlsx, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True,
+                         download_name=f'tarifa-{vista.lower()}-{datetime.now().strftime("%Y%m%d")}.xlsx')
+
+    # Online
+    return render_template(
+        'admin_tarifes.html',
+        usuaris=usuaris, products=TARIFA_PRODUCTS,
+        saved={'vista': vista, 'user_id': user_id,
+               'products': products_sel,
+               'custom_sizes': request.form.get('custom_sizes', '')},
+        result={'vista': vista, 'user_label': user_label, 'data': data},
+    )
+
+
 @app.route('/admin/config', methods=['GET', 'POST'])
 @admin_required
 def admin_config():
