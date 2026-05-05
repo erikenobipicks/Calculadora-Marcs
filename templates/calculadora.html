@@ -626,6 +626,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           </div>
         </div>
         <div class="res-body">
+          <div class="r-row"><span class="r-lbl">Subtotal PVP</span><span class="r-val" id="r-subtotal">0,00 €</span></div>
+          <div class="r-row" id="r-row-combo" style="display:none"><span class="r-lbl" id="r-lbl-combo">Descompte pack</span><span class="r-val" style="color:var(--amber)" id="r-combo">— €</span></div>
           <div class="r-row"><span class="r-lbl" id="r-lbl-net">Preu net PVP (sense IVA)</span><span class="r-val" id="r-net">0,00 €</span></div>
           <div class="r-row" id="r-row-desc" style="display:none"><span class="r-lbl" id="r-lbl-desc">Descompte</span><span class="r-val" style="color:var(--amber)" id="r-desc">— €</span></div>
           <div class="r-row"><span class="r-lbl">IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
@@ -697,6 +699,9 @@ var DESCATALOGADA = {pre:false, marc:false};
 var CLOSEST = {};
 var muntatge_actiu = 'cap';
 var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid = null;
+// Descomptes combo (% sobre subtotal PVP). Defaults sincronitzats amb config BD;
+// /api/marge sobreescriu amb els valors actuals.
+var COMBO_DESC = {marc_imp_protter:6, marc_imp_foam:5, marc_imp:3, marc_suport:3};
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
@@ -1234,6 +1239,14 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
   empresa_nom    = d.empresa_nom    || 'Reus Revela';
   empresa_adreca = d.empresa_adreca || '';
   empresa_tel    = d.empresa_tel    || '';
+  // Descomptes combo (en %) per combinació de productes — aplicats al
+  // subtotal PVP abans del descompte manual del client.
+  if(d.combo_desc){
+    COMBO_DESC.marc_imp_protter = Number(d.combo_desc.marc_imp_protter)||0;
+    COMBO_DESC.marc_imp_foam    = Number(d.combo_desc.marc_imp_foam)||0;
+    COMBO_DESC.marc_imp         = Number(d.combo_desc.marc_imp)||0;
+    COMBO_DESC.marc_suport      = Number(d.combo_desc.marc_suport)||0;
+  }
   applyCommercialMarginOverrides();
   document.getElementById('marge_val').value = marge;
   calcular();
@@ -2077,9 +2090,34 @@ function calcular(){
   var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
   var pNet    = (pvpMarc+pvpExt)*qty*factorModeAdmin + pvpImp*qty;
 
-  // Descompte sobre PVP, mai sobre cost
-  var descEur  = pNet*(desc/100);
-  var pNetDisc = pNet-descEur;
+  // Descompte combo (per combinació de productes). Detectem components
+  // i apliquem el % corresponent ABANS del descompte manual del client.
+  var teMarc        = (PREUS.marc||0) > 0 || (document.getElementById('marc_principal').value||'').trim() !== '';
+  var teImpressio   = !!document.getElementById('chk-impressio').checked;
+  var muntatgeSel   = (document.querySelector('input[name="muntatge"]:checked')||{}).value || '';
+  var interiorSel2  = (document.querySelector('input[name="interior"]:checked')||{}).value || '';
+  var teProtter     = muntatgeSel === 'protter';
+  var teFoam        = (muntatgeSel === 'encolat' || interiorSel2 === 'proeco') && !teProtter;
+  var comboPct = 0, comboLbl = '';
+  if(teMarc && teImpressio && teProtter){
+    comboPct = COMBO_DESC.marc_imp_protter;
+    comboLbl = 'Descompte pack (marc + impressió + protter)';
+  } else if(teMarc && teImpressio && teFoam){
+    comboPct = COMBO_DESC.marc_imp_foam;
+    comboLbl = 'Descompte pack (marc + impressió + foam)';
+  } else if(teMarc && teImpressio){
+    comboPct = COMBO_DESC.marc_imp;
+    comboLbl = 'Descompte pack (marc + impressió)';
+  } else if(teMarc && (teFoam || teProtter)){
+    comboPct = COMBO_DESC.marc_suport;
+    comboLbl = 'Descompte pack (marc + suport)';
+  }
+  var comboEur     = pNet * (comboPct/100);
+  var pNetAfterCombo = pNet - comboEur;
+
+  // Descompte manual del client (s'aplica sobre el subtotal ja amb combo).
+  var descEur  = pNetAfterCombo*(desc/100);
+  var pNetDisc = pNetAfterCombo-descEur;
   var pFin     = pNetDisc*1.21;
   var pIva     = pNetDisc*0.21;
   var pend     = pFin-ent;
@@ -2088,11 +2126,23 @@ function calcular(){
   var isCost=rmode==='cost';
   var cTotQty=cTot*qty;
 
-  document.getElementById('r-net').textContent    = fmt(isCost?cTotQty:pNet);
+  // Subtotal abans de qualsevol descompte (només mode PVP).
+  var elSubtotal = document.getElementById('r-subtotal');
+  if(elSubtotal) elSubtotal.textContent = fmt(isCost?cTotQty:pNet);
+  document.getElementById('r-net').textContent    = fmt(isCost?cTotQty:pNetAfterCombo);
   document.getElementById('r-iva').textContent    = fmt(isCost?cTotQty*0.21:pIva);
   document.getElementById('r-final').textContent  = fmt(isCost?cTotQty*1.21:pFin);
   document.getElementById('r-pend').textContent   = isCost?'—':fmt(pend);
   document.getElementById('r-lbl-net').textContent= isCost?'Cost net (sense IVA)':'Preu net PVP (sense IVA)';
+
+  // Línia de descompte combo (només mode PVP, només si comboPct > 0)
+  var showCombo = !isCost && comboPct > 0;
+  var elComboRow = document.getElementById('r-row-combo');
+  if(elComboRow) elComboRow.style.display = showCombo ? '' : 'none';
+  if(showCombo){
+    document.getElementById('r-lbl-combo').textContent = comboLbl + ' (-'+comboPct+'%)';
+    document.getElementById('r-combo').textContent = '- '+fmt(comboEur);
+  }
 
   var showDesc=desc>0&&!isCost;
   document.getElementById('r-row-desc').style.display=showDesc?'':'none';
@@ -2111,6 +2161,9 @@ function calcular(){
     preu_final:pFin,
     pendent:pend,
     descEur:descEur,
+    combo_pct:comboPct,
+    combo_eur:comboEur,
+    combo_label:comboLbl,
     cost_produccio: cTot*qty,
     revers_peu_preu: parseFloat(((((cRevers*(1+marge/100))*1.21)*qty) || 0).toFixed(2))
   };

@@ -2784,6 +2784,14 @@ def get_marge():
         'empresa_nom': nom_emp,
         'empresa_adreca': user_adreca if user_adreca else cfg.get('empresa_adreca',''),
         'empresa_tel':    user_tel    if user_tel    else cfg.get('empresa_tel',''),
+        # Descomptes per combinació de productes (en %). El front els
+        # aplica al subtotal PVP abans del descompte manual del client.
+        'combo_desc': {
+            'marc_imp_protter': float(get_config_value('combo_desc_marc_imp_protter', '6')),
+            'marc_imp_foam':    float(get_config_value('combo_desc_marc_imp_foam', '5')),
+            'marc_imp':         float(get_config_value('combo_desc_marc_imp', '3')),
+            'marc_suport':      float(get_config_value('combo_desc_marc_suport', '3')),
+        },
     })
 
 
@@ -3323,6 +3331,11 @@ def admin_run_migrations():
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_lustre_cost_cm2', '0.000703')",
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_silk_cost_cm2', '0.000756')",
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_matte_cost_cm2', '0.000447')",
+        # Descomptes per combinació de productes (combo packs).
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_imp_protter', '6')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_imp_foam', '5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_imp', '3')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_suport', '3')",
     ]
 
     resultats = []
@@ -6992,6 +7005,10 @@ def init_db():
                          ('imp_lustre_cost_cm2','0.000703'),
                          ('imp_silk_cost_cm2','0.000756'),
                          ('imp_matte_cost_cm2','0.000447'),
+                         ('combo_desc_marc_imp_protter','6'),
+                         ('combo_desc_marc_imp_foam','5'),
+                         ('combo_desc_marc_imp','3'),
+                         ('combo_desc_marc_suport','3'),
                          # Trams àrea per al marge d'impressions (cm²)
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
@@ -7233,6 +7250,10 @@ def init_db():
                          ('imp_lustre_cost_cm2','0.000703'),
                          ('imp_silk_cost_cm2','0.000756'),
                          ('imp_matte_cost_cm2','0.000447'),
+                         ('combo_desc_marc_imp_protter','6'),
+                         ('combo_desc_marc_imp_foam','5'),
+                         ('combo_desc_marc_imp','3'),
+                         ('combo_desc_marc_suport','3'),
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),
