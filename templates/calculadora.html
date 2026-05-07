@@ -678,6 +678,18 @@ function canviarModeAdmin(mode){
   if(typeof calcular === 'function') calcular();
 }
 
+// Trams de marge per a marcs segons àrea (cm²). Default: tots iguals al marge_pro
+// → cap canvi de preu el dia 1.
+var MR_TRAMS = {{ mr_trams | tojson }};
+
+// Retorna el % de marge aplicable per a marcs segons l'àrea exterior del marc (cm²).
+function getMrTramPct(area_cm2){
+  var a = parseFloat(area_cm2) || 0;
+  if(a <= (MR_TRAMS.tram1_limit||2000)) return MR_TRAMS.tram1_pct;
+  if(a <= (MR_TRAMS.tram2_limit||6000)) return MR_TRAMS.tram2_pct;
+  return MR_TRAMS.tram3_pct;
+}
+
 function toggleMobileNav(btn){
   var nav = btn.closest('nav');
   if(nav) nav.classList.toggle('nav-open');
@@ -2082,7 +2094,11 @@ function calcular(){
   var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra;
 
   // PVP net (amb marge, sense IVA, sense descompte)
-  var pvpMarc = cMol*(1+marge/100);
+  // Marcs: marge per trams segons àrea exterior del marc (cm²).
+  // Resta de components (muntatge, vidre, etc.): marge_pro uniforme com sempre.
+  var areaMarc = (mW>0 && mH>0) ? (mW*mH) : 0;
+  var margeMarc = areaMarc>0 ? getMrTramPct(areaMarc) : marge;
+  var pvpMarc = cMol*(1+margeMarc/100);
   var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra)*(1+marge/100);
   // pvpImp: en vista taller (admin cost) usem PVD; en vista PVP usem el pvp del
   // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
@@ -3011,5 +3027,64 @@ recalcMides();
 </div>
 
 {% include '_feedback_widget.html' %}
+
+{% if not mr_trams_vist %}
+<!-- ── Modal benvinguda: marges per trams en marcs ──────────────────── -->
+<div id="mr-trams-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--paper,#fff);border-radius:18px;max-width:520px;width:100%;padding:1.6rem 1.7rem;box-shadow:0 16px 60px rgba(0,0,0,.25);font-family:var(--sans,'DM Sans',sans-serif)">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent,#a67843);margin-bottom:.5rem">🆕 Novetat</div>
+    <h2 style="margin:0 0 .8rem;font-family:var(--serif,'Cormorant Garamond',serif);font-size:24px;line-height:1.15">Marges per trams en marcs</h2>
+    <p style="margin:0 0 .9rem;color:var(--ink-muted,#5c564c);line-height:1.55;font-size:14px">
+      Ara pots configurar marges diferenciats segons la <strong>mida del marc</strong>, igual que ja fas amb les impressions.
+      Així pots ajustar els teus preus per evitar que en mides grans el preu final es dispari.
+    </p>
+    <ul style="margin:0 0 1rem;padding-left:1.2rem;color:var(--ink-muted,#5c564c);font-size:13.5px;line-height:1.7">
+      <li>✓ Els teus preus actuals <strong>no han canviat</strong>.</li>
+      <li>✓ Pots configurar els teus trams quan vulguis.</li>
+      <li>✓ Tens uns valors recomanats com a punt de partida (70/60/50%).</li>
+    </ul>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;margin-top:1.1rem">
+      <button onclick="mrTramsModalAccio('mes_tard')" style="padding:9px 16px;border:1px solid var(--border,#ddd);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;color:var(--muted,#6c675f)">Més tard</button>
+      <button onclick="mrTramsModalAccio('recomanats')" style="padding:9px 16px;border:1px solid var(--accent,#a67843);border-radius:8px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:var(--accent,#a67843)">Aplicar recomanats</button>
+      <button onclick="mrTramsModalAccio('configurar')" style="padding:9px 18px;border:none;border-radius:8px;background:var(--success,#1c6a4b);color:#fff;font-size:13px;font-weight:600;cursor:pointer">Configurar ara →</button>
+    </div>
+  </div>
+</div>
+<script>
+function mrTramsModalAccio(accio){
+  var modal = document.getElementById('mr-trams-modal');
+  function tancar(){ if(modal) modal.style.display = 'none'; }
+  if(accio === 'configurar'){
+    fetch('/api/marcs-trams/vist', {method:'POST'}).finally(function(){
+      window.location.href = '/ajustos#mr-trams-grid';
+    });
+    return;
+  }
+  if(accio === 'recomanats'){
+    if(!confirm('Vols aplicar 70 / 60 / 50% directament?')) return;
+    fetch('/api/marcs-trams', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({tram1_pct:70, tram2_pct:60, tram3_pct:50})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        // Actualitzar trams en memòria perquè el càlcul reflecteixi els nous valors
+        if(typeof MR_TRAMS !== 'undefined'){
+          MR_TRAMS.tram1_pct = 70; MR_TRAMS.tram2_pct = 60; MR_TRAMS.tram3_pct = 50;
+        }
+        if(typeof calcular === 'function') calcular();
+        tancar();
+      } else {
+        alert('Error: ' + (d.error || 'no s\'han pogut desar.'));
+      }
+    });
+    return;
+  }
+  // 'mes_tard': només marcar com a vist, sense canviar valors
+  fetch('/api/marcs-trams/vist', {method:'POST'}).finally(tancar);
+}
+</script>
+{% endif %}
+
 </body>
 </html>

@@ -182,6 +182,50 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Marges per a marcs (trams per àrea)</div>
+    <div class="card">
+      <div class="hint-box">Configura el percentatge que apliques sobre el preu del taller (PVD) segons la mida del marc. <strong>Si tots tres trams són iguals, el comportament és el mateix d'abans.</strong></div>
+      <div class="margins-grid" id="mr-trams-grid">
+        <div class="margin-row">
+          <div>
+            <label>T1 — Petit <span style="color:var(--hint);font-weight:400">(≤ <span id="mr-t1-lim">2000</span> cm²)</span></label>
+            <p>Format reduït (fins a ~30×60). Marge alt típic.</p>
+          </div>
+          <div class="f" style="margin-bottom:0">
+            <label for="mr-tram1-pct">Marge (%)</label>
+            <input type="number" id="mr-tram1-pct" min="0" max="500" step="0.1" value="60">
+          </div>
+        </div>
+        <div class="margin-row">
+          <div>
+            <label>T2 — Mitjà <span style="color:var(--hint);font-weight:400">(<span id="mr-t1-lim2">2000</span>–<span id="mr-t2-lim">6000</span> cm²)</span></label>
+            <p>Format estàndard (40×60 a 60×80). Marge mitjà.</p>
+          </div>
+          <div class="f" style="margin-bottom:0">
+            <label for="mr-tram2-pct">Marge (%)</label>
+            <input type="number" id="mr-tram2-pct" min="0" max="500" step="0.1" value="60">
+          </div>
+        </div>
+        <div class="margin-row">
+          <div>
+            <label>T3 — Gran <span style="color:var(--hint);font-weight:400">(&gt; <span id="mr-t2-lim2">6000</span> cm²)</span></label>
+            <p>Format gran (70×100 i superiors). Marge ajustat per ser competitiu.</p>
+          </div>
+          <div class="f" style="margin-bottom:0">
+            <label for="mr-tram3-pct">Marge (%)</label>
+            <input type="number" id="mr-tram3-pct" min="0" max="500" step="0.1" value="60">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem">
+        <button type="button" id="btn-mr-recomanats" onclick="aplicarMrTramsRecomanats()" style="padding:8px 14px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:13px;cursor:pointer;color:var(--muted)">Aplicar valors recomanats (70/60/50)</button>
+        <button type="button" id="btn-mr-desar" onclick="desarMrTrams(this)" class="btn-g" style="width:auto;padding:9px 18px;margin:0">Desar marges marcs</button>
+        <span id="mr-trams-status" style="font-size:12px;color:var(--hint);align-self:center"></span>
+      </div>
+    </div>
+  </div>
+
     <div class="section">
     <div class="section-title">Logotip del negoci (opcional)</div>
     <div class="card">
@@ -305,6 +349,64 @@ function pujarLogo(){
     .then(r=>r.json()).then(function(d){
       if(d.ok) showAlert('Logo desat correctament. Apareixerà als PDFs.','ok');
     });
+}
+
+// ── Marges per a marcs (trams per àrea) ──────────────────────────────────
+function carregarMrTrams(){
+  fetch('/api/marcs-trams').then(function(r){return r.json();}).then(function(d){
+    if(!d.ok) return;
+    document.getElementById('mr-tram1-pct').value = d.tram1_pct;
+    document.getElementById('mr-tram2-pct').value = d.tram2_pct;
+    document.getElementById('mr-tram3-pct').value = d.tram3_pct;
+    var l1 = d.tram1_limit, l2 = d.tram2_limit;
+    document.getElementById('mr-t1-lim').textContent = l1;
+    document.getElementById('mr-t1-lim2').textContent = l1;
+    document.getElementById('mr-t2-lim').textContent = l2;
+    document.getElementById('mr-t2-lim2').textContent = l2;
+  });
+}
+
+function aplicarMrTramsRecomanats(){
+  document.getElementById('mr-tram1-pct').value = 70;
+  document.getElementById('mr-tram2-pct').value = 60;
+  document.getElementById('mr-tram3-pct').value = 50;
+  var s = document.getElementById('mr-trams-status');
+  if(s) s.textContent = 'Valors aplicats. No oblidis desar.';
+}
+
+function desarMrTrams(btn){
+  var t1 = parseFloat(document.getElementById('mr-tram1-pct').value);
+  var t2 = parseFloat(document.getElementById('mr-tram2-pct').value);
+  var t3 = parseFloat(document.getElementById('mr-tram3-pct').value);
+  if([t1,t2,t3].some(function(v){ return isNaN(v) || v<0 || v>500; })){
+    showAlert('Els percentatges han d\'estar entre 0 i 500.','err');
+    return;
+  }
+  if(btn) btn.disabled = true;
+  fetch('/api/marcs-trams', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({tram1_pct:t1, tram2_pct:t2, tram3_pct:t3})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(btn) btn.disabled = false;
+    if(d.ok){
+      showAlert('Marges per a marcs desats correctament.','ok');
+      var s = document.getElementById('mr-trams-status');
+      if(s) s.textContent = '✓ Desat';
+    } else {
+      showAlert('Error: '+(d.error||'no s\'han pogut desar.'),'err');
+    }
+  }).catch(function(){
+    if(btn) btn.disabled = false;
+    showAlert('Error de connexió.','err');
+  });
+}
+
+// Inicialització
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', carregarMrTrams);
+} else {
+  carregarMrTrams();
 }
 </script>
 {% include '_private_whatsapp_widget.html' %}

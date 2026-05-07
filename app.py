@@ -2375,11 +2375,20 @@ def calculadora():
             return redirect(url_for('setup'))
     except:
         pass
-    user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist FROM usuaris WHERE id=?', [session['user_id']], one=True)
     brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
     marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
     marge_pro = _get_marge_value(user) if marge_pro_actiu else 0.0
     marge_imp_pro = _get_marge_impressio_value(user) if marge_pro_actiu else 0.0
+    # Trams de marge per a marcs (defaults segurs: si NULL → marge_pro)
+    fb = marge_pro if marge_pro_actiu else 0.0
+    mr_trams = {
+        'tram1_limit': int(_row_get(user, 'mr_tram1_limit') or MR_TRAM_LIMITS_DEFAULT['tram1_limit']),
+        'tram2_limit': int(_row_get(user, 'mr_tram2_limit') or MR_TRAM_LIMITS_DEFAULT['tram2_limit']),
+        'tram1_pct':   float(_row_get(user, 'mr_tram1_pct') if _row_get(user, 'mr_tram1_pct') is not None else fb) if marge_pro_actiu else 0.0,
+        'tram2_pct':   float(_row_get(user, 'mr_tram2_pct') if _row_get(user, 'mr_tram2_pct') is not None else fb) if marge_pro_actiu else 0.0,
+        'tram3_pct':   float(_row_get(user, 'mr_tram3_pct') if _row_get(user, 'mr_tram3_pct') is not None else fb) if marge_pro_actiu else 0.0,
+    }
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
@@ -2390,7 +2399,9 @@ def calculadora():
                            marge_pro_actiu=marge_pro_actiu,
                            marge_pro=marge_pro,
                            marge_impressio_pro=marge_imp_pro,
-                           is_admin=1 if session.get('is_admin') else 0)
+                           is_admin=1 if session.get('is_admin') else 0,
+                           mr_trams=mr_trams,
+                           mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)))
 
 @app.route('/api/lookup')
 @login_required
@@ -2891,6 +2902,59 @@ def api_empresa():
     execute("UPDATE config SET valor=? WHERE clau='empresa_adreca'", [adreca])
     execute("UPDATE config SET valor=? WHERE clau='empresa_tel'",    [tel])
     return jsonify({'ok': True})
+
+
+# ── Trams de marge per a marcs (config per usuari) ────────────────────────
+@app.route('/api/marcs-trams', methods=['GET'])
+@login_required
+def api_marcs_trams_get():
+    u = query('SELECT mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, marge_pro_pct, marge FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    if not u:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+    fb = float(_row_get(u, 'marge_pro_pct') or _row_get(u, 'marge') or 60)
+    return jsonify({
+        'ok': True,
+        'tram1_limit': int(_row_get(u, 'mr_tram1_limit') or MR_TRAM_LIMITS_DEFAULT['tram1_limit']),
+        'tram2_limit': int(_row_get(u, 'mr_tram2_limit') or MR_TRAM_LIMITS_DEFAULT['tram2_limit']),
+        'tram1_pct':   float(_row_get(u, 'mr_tram1_pct') if _row_get(u, 'mr_tram1_pct') is not None else fb),
+        'tram2_pct':   float(_row_get(u, 'mr_tram2_pct') if _row_get(u, 'mr_tram2_pct') is not None else fb),
+        'tram3_pct':   float(_row_get(u, 'mr_tram3_pct') if _row_get(u, 'mr_tram3_pct') is not None else fb),
+        'vist': bool(_row_get(u, 'mr_trams_vist', 0)),
+        'defaults_recomanats': MR_TRAM_DEFAULTS_RECOMANATS,
+    })
+
+
+@app.route('/api/marcs-trams', methods=['POST'])
+@login_required
+def api_marcs_trams_post():
+    d = request.get_json(silent=True) or {}
+    def _f(key, default=None):
+        try:
+            v = float(d.get(key)) if d.get(key) is not None else default
+        except (TypeError, ValueError):
+            return default
+        return v
+    t1 = _f('tram1_pct')
+    t2 = _f('tram2_pct')
+    t3 = _f('tram3_pct')
+    for v in (t1, t2, t3):
+        if v is None or v < 0 or v > 500:
+            return jsonify({'ok': False, 'error': 'invalid_pct'}), 400
+    # Llegir valors antics per audit log
+    old = query('SELECT mr_tram1_pct, mr_tram2_pct, mr_tram3_pct FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    execute('UPDATE usuaris SET mr_tram1_pct=?, mr_tram2_pct=?, mr_tram3_pct=?, mr_trams_vist=1 WHERE id=?',
+            [t1, t2, t3, session['user_id']])
+    print(f"[mr_trams] user_id={session['user_id']} {dict(old) if old else {}} → t1={t1} t2={t2} t3={t3}")
+    return jsonify({'ok': True, 'tram1_pct': t1, 'tram2_pct': t2, 'tram3_pct': t3})
+
+
+@app.route('/api/marcs-trams/vist', methods=['POST'])
+@login_required
+def api_marcs_trams_vist():
+    """Marca l'avís com a vist sense canviar valors (per al botó 'Més tard' del modal)."""
+    execute('UPDATE usuaris SET mr_trams_vist=1 WHERE id=?', [session['user_id']])
+    return jsonify({'ok': True})
+
 
 @app.route('/api/desar-marge', methods=['POST'])
 @login_required
@@ -3406,6 +3470,7 @@ def admin_run_migrations():
         ("_seed_intermol_moldures", lambda: _seed_intermol_moldures(db, use_pg=USE_PG)),
         ("_fix_ref2_errors",        lambda: _fix_ref2_errors(db, use_pg=USE_PG)),
         ("_run_v2_price_backfill",  lambda: _run_v2_price_backfill(db)),
+        ("_run_mr_trams_backfill",  lambda: _run_mr_trams_backfill(db)),
     ]:
         try:
             fn()
@@ -7660,6 +7725,13 @@ def init_db():
                 # --- v2 price model: user margin aliases ---
                 ('usuaris','marge_pro_pct','REAL DEFAULT 60'),
                 ('usuaris','marge_impressio_pro_pct','REAL DEFAULT 100'),
+                # Trams de marge per a marcs segons àrea (cm²)
+                ('usuaris','mr_tram1_limit','INTEGER DEFAULT 2000'),
+                ('usuaris','mr_tram2_limit','INTEGER DEFAULT 6000'),
+                ('usuaris','mr_tram1_pct','REAL'),
+                ('usuaris','mr_tram2_pct','REAL'),
+                ('usuaris','mr_tram3_pct','REAL'),
+                ('usuaris','mr_trams_vist','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -7925,6 +7997,13 @@ def init_db():
                 # --- v2 price model: user margin aliases ---
                 "ALTER TABLE usuaris ADD COLUMN marge_pro_pct REAL DEFAULT 60",
                 "ALTER TABLE usuaris ADD COLUMN marge_impressio_pro_pct REAL DEFAULT 100",
+                # Trams de marge per a marcs (segons àrea cm²)
+                "ALTER TABLE usuaris ADD COLUMN mr_tram1_limit INTEGER DEFAULT 2000",
+                "ALTER TABLE usuaris ADD COLUMN mr_tram2_limit INTEGER DEFAULT 6000",
+                "ALTER TABLE usuaris ADD COLUMN mr_tram1_pct REAL",
+                "ALTER TABLE usuaris ADD COLUMN mr_tram2_pct REAL",
+                "ALTER TABLE usuaris ADD COLUMN mr_tram3_pct REAL",
+                "ALTER TABLE usuaris ADD COLUMN mr_trams_vist INTEGER DEFAULT 0",
             ]:
                 try:
                     db.execute(sql)
@@ -8038,6 +8117,75 @@ def init_db():
             # Veure nota a la branca PG: tota operació pesada s'executa ara només
             # via /admin/run-migrations.
             db.commit()
+
+
+# ── Trams de marge per a marcs ───────────────────────────────────────────
+MR_TRAM_LIMITS_DEFAULT = {
+    'tram1_limit': 2000,   # ≤ 2.000 cm² (mides petites)
+    'tram2_limit': 6000,   # 2.000–6.000 cm² (mides mitjanes)
+}
+MR_TRAM_DEFAULTS_RECOMANATS = {
+    'tram1_pct': 70.0,
+    'tram2_pct': 60.0,
+    'tram3_pct': 50.0,
+}
+
+
+def get_mr_tram_pct(area_cm2, user):
+    """Retorna el percentatge del tram aplicable segons l'àrea del marc.
+    Compatible amb dict o sqlite Row. Si trams no configurats, fallback a marge_pro_pct."""
+    def _g(key, default=None):
+        try:
+            v = user[key] if user is not None else None
+        except (KeyError, IndexError, TypeError):
+            v = None
+        if v is None:
+            try:
+                v = user.get(key) if hasattr(user, 'get') else None
+            except Exception:
+                v = None
+        return v if v is not None else default
+
+    fallback = _g('marge_pro_pct') or _g('marge') or 60.0
+    t1_lim = _g('mr_tram1_limit', MR_TRAM_LIMITS_DEFAULT['tram1_limit'])
+    t2_lim = _g('mr_tram2_limit', MR_TRAM_LIMITS_DEFAULT['tram2_limit'])
+    t1_pct = _g('mr_tram1_pct', fallback)
+    t2_pct = _g('mr_tram2_pct', fallback)
+    t3_pct = _g('mr_tram3_pct', fallback)
+    try:
+        a = float(area_cm2 or 0)
+    except (TypeError, ValueError):
+        a = 0.0
+    if a <= float(t1_lim or 0):
+        return float(t1_pct if t1_pct is not None else fallback)
+    if a <= float(t2_lim or 0):
+        return float(t2_pct if t2_pct is not None else fallback)
+    return float(t3_pct if t3_pct is not None else fallback)
+
+
+def _run_mr_trams_backfill(db):
+    """Inicialitza els 3 trams de marcs amb el marge_pro_pct actual (= cap canvi de preu el dia 1).
+    Es marca com a done amb config['migration_mr_trams_done']=1. Idempotent."""
+    check = query("SELECT valor FROM config WHERE clau='migration_mr_trams_done'", one=True)
+    if check:
+        return
+    print("Running mr_trams backfill...")
+    # Per cada usuari, inicialitzar els tres trams al seu marge_pro_pct (o marge legacy o 60).
+    execute("""UPDATE usuaris SET
+        mr_tram1_pct = COALESCE(mr_tram1_pct, marge_pro_pct, marge, 60),
+        mr_tram2_pct = COALESCE(mr_tram2_pct, marge_pro_pct, marge, 60),
+        mr_tram3_pct = COALESCE(mr_tram3_pct, marge_pro_pct, marge, 60),
+        mr_tram1_limit = COALESCE(mr_tram1_limit, 2000),
+        mr_tram2_limit = COALESCE(mr_tram2_limit, 6000)
+        WHERE mr_tram1_pct IS NULL OR mr_tram2_pct IS NULL OR mr_tram3_pct IS NULL""")
+    if USE_PG:
+        execute("INSERT INTO config (clau, valor) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                ['migration_mr_trams_done', '1'])
+    else:
+        execute("INSERT OR IGNORE INTO config (clau, valor) VALUES (?, ?)",
+                ['migration_mr_trams_done', '1'])
+    db.commit()
+    print("mr_trams backfill complete.")
 
 
 def _run_v2_price_backfill(db):
