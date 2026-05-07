@@ -2382,12 +2382,15 @@ def calculadora():
     marge_imp_pro = _get_marge_impressio_value(user) if marge_pro_actiu else 0.0
     # Trams de marge per a marcs (defaults segurs: si NULL → marge_pro)
     fb = marge_pro if marge_pro_actiu else 0.0
+    # Marge actual del propi user per calcular recomanats personalitzats al modal
+    marge_actual_user = _row_get(user, 'marge_pro_pct') if _row_get(user, 'marge_pro_pct') is not None else _row_get(user, 'marge')
     mr_trams = {
         'tram1_limit': int(_row_get(user, 'mr_tram1_limit') or MR_TRAM_LIMITS_DEFAULT['tram1_limit']),
         'tram2_limit': int(_row_get(user, 'mr_tram2_limit') or MR_TRAM_LIMITS_DEFAULT['tram2_limit']),
         'tram1_pct':   float(_row_get(user, 'mr_tram1_pct') if _row_get(user, 'mr_tram1_pct') is not None else fb) if marge_pro_actiu else 0.0,
         'tram2_pct':   float(_row_get(user, 'mr_tram2_pct') if _row_get(user, 'mr_tram2_pct') is not None else fb) if marge_pro_actiu else 0.0,
         'tram3_pct':   float(_row_get(user, 'mr_tram3_pct') if _row_get(user, 'mr_tram3_pct') is not None else fb) if marge_pro_actiu else 0.0,
+        'defaults_recomanats': get_mr_recomendats(marge_actual_user),
     }
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
@@ -2911,7 +2914,8 @@ def api_marcs_trams_get():
     u = query('SELECT mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, marge_pro_pct, marge FROM usuaris WHERE id=?', [session['user_id']], one=True)
     if not u:
         return jsonify({'ok': False, 'error': 'user_not_found'}), 404
-    fb = float(_row_get(u, 'marge_pro_pct') or _row_get(u, 'marge') or 60)
+    marge_actual = _row_get(u, 'marge_pro_pct') if _row_get(u, 'marge_pro_pct') is not None else _row_get(u, 'marge')
+    fb = float(marge_actual or 60)
     return jsonify({
         'ok': True,
         'tram1_limit': int(_row_get(u, 'mr_tram1_limit') or MR_TRAM_LIMITS_DEFAULT['tram1_limit']),
@@ -2920,7 +2924,8 @@ def api_marcs_trams_get():
         'tram2_pct':   float(_row_get(u, 'mr_tram2_pct') if _row_get(u, 'mr_tram2_pct') is not None else fb),
         'tram3_pct':   float(_row_get(u, 'mr_tram3_pct') if _row_get(u, 'mr_tram3_pct') is not None else fb),
         'vist': bool(_row_get(u, 'mr_trams_vist', 0)),
-        'defaults_recomanats': MR_TRAM_DEFAULTS_RECOMANATS,
+        'marge_actual': float(marge_actual) if marge_actual is not None else None,
+        'defaults_recomanats': get_mr_recomendats(marge_actual),
     })
 
 
@@ -8125,10 +8130,31 @@ MR_TRAM_LIMITS_DEFAULT = {
     'tram2_limit': 6000,   # 2.000–6.000 cm² (mides mitjanes)
 }
 MR_TRAM_DEFAULTS_RECOMANATS = {
+    # Fallback absolut quan l'usuari no té marge propi configurat (=NULL o 0).
+    # Per a usuaris amb marge configurat, usar get_mr_recomendats(marge_actual).
     'tram1_pct': 70.0,
     'tram2_pct': 60.0,
     'tram3_pct': 50.0,
 }
+
+
+def get_mr_recomendats(marge_actual):
+    """Recomanats personalitzats per a un usuari segons el seu marge_pro_pct actual.
+    - T1: manté el marge actual (mides petites no canvien).
+    - T2: marge_actual × 0.80, mínim 30.
+    - T3: marge_actual × 0.65, mínim 20.
+    Fallback si NULL/0: defaults absoluts 70/60/50."""
+    try:
+        m = float(marge_actual or 0)
+    except (TypeError, ValueError):
+        m = 0
+    if m <= 0:
+        return {'t1': 70, 't2': 60, 't3': 50}
+    return {
+        't1': round(m),
+        't2': max(round(m * 0.80), 30),
+        't3': max(round(m * 0.65), 20),
+    }
 
 
 def get_mr_tram_pct(area_cm2, user):

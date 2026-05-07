@@ -3041,7 +3041,7 @@ recalcMides();
     <ul style="margin:0 0 1rem;padding-left:1.2rem;color:var(--ink-muted,#5c564c);font-size:13.5px;line-height:1.7">
       <li>✓ Els teus preus actuals <strong>no han canviat</strong>.</li>
       <li>✓ Pots configurar els teus trams quan vulguis.</li>
-      <li>✓ Tens uns valors recomanats com a punt de partida (70/60/50%).</li>
+      <li>✓ Tens uns valors recomanats com a punt de partida ({% if mr_trams.defaults_recomanats %}{{ mr_trams.defaults_recomanats.t1 }}/{{ mr_trams.defaults_recomanats.t2 }}/{{ mr_trams.defaults_recomanats.t3 }}{% else %}70/60/50{% endif %}%).</li>
     </ul>
     <div style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;margin-top:1.1rem">
       <button onclick="mrTramsModalAccio('mes_tard')" style="padding:9px 16px;border:1px solid var(--border,#ddd);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;color:var(--muted,#6c675f)">Més tard</button>
@@ -3061,16 +3061,22 @@ function mrTramsModalAccio(accio){
     return;
   }
   if(accio === 'recomanats'){
-    if(!confirm('Vols aplicar 70 / 60 / 50% directament?')) return;
+    var r = (typeof MR_TRAMS !== 'undefined' && MR_TRAMS.defaults_recomanats) ? MR_TRAMS.defaults_recomanats : {t1:70, t2:60, t3:50};
+    var msg = "Aplicarem aquesta configuració basada en el teu marge actual:\n\n" +
+              "  T1 (mides petites):  " + r.t1 + "%  (manté el teu marge actual)\n" +
+              "  T2 (mides mitjanes): " + r.t2 + "%\n" +
+              "  T3 (mides grans):    " + r.t3 + "%\n\n" +
+              "Vols continuar?";
+    if(!confirm(msg)) return;
     fetch('/api/marcs-trams', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({tram1_pct:70, tram2_pct:60, tram3_pct:50})
-    }).then(function(r){return r.json();}).then(function(d){
+      body: JSON.stringify({tram1_pct:r.t1, tram2_pct:r.t2, tram3_pct:r.t3})
+    }).then(function(resp){return resp.json();}).then(function(d){
       if(d.ok){
         // Actualitzar trams en memòria perquè el càlcul reflecteixi els nous valors
         if(typeof MR_TRAMS !== 'undefined'){
-          MR_TRAMS.tram1_pct = 70; MR_TRAMS.tram2_pct = 60; MR_TRAMS.tram3_pct = 50;
+          MR_TRAMS.tram1_pct = r.t1; MR_TRAMS.tram2_pct = r.t2; MR_TRAMS.tram3_pct = r.t3;
         }
         if(typeof calcular === 'function') calcular();
         tancar();
