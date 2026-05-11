@@ -1687,26 +1687,44 @@ def calcular_cost_vidre(amplada, alcada):
 
 
 def calcular_cost_doble_vidre(amplada, alcada):
-    """Doble vidre: dos vidres simples + muntatge.
-    1. Min-contain amb tolerància sobre DV-
-    2. Fórmula: (cost_vidre_simple × 2) + cost_muntatge"""
-    marge      = float(get_config_value('marge_admin_vidres_pct', '60'))
-    t_muntat   = float(get_config_value('vidre_dv_muntatge_min', '5'))
-    cost_hora  = float(get_config_value('cost_hora_taller', '25'))
-    tolerancia = float(get_config_value('vidre_tolerancia_cm', '2'))
+    """Doble vidre per FÓRMULA PURA (sense lookup de taula).
 
-    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='DV-', tolerancia=tolerancia)
-    if fila and _row_get(fila, 'preu_cost') is not None:
-        cost = float(fila['preu_cost'])
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+    El doble vidre és matemàticament determinista i no necessita taula:
+      cost_material  = àrea · cost_cm² · 2     (dues làmines)
+      MO_tall        = (t_base + t_lineal · perim_m) · cost_hora / 60
+                       (es talla un cop: dues làmines tallades alhora)
+      MO_muntatge_dv = vidre_dv_muntatge_eur   (alineació + sellat)
+      cost_total     = material + MO_tall + MO_muntatge
+      PVD            = cost_total · (1 + marge_admin/100)
 
-    # Fallback: 2 × vidre simple + muntatge
-    simple = calcular_cost_vidre(amplada, alcada)
-    mo_muntat = t_muntat * cost_hora / 60
-    cost = round(simple['cost'] * 2 + mo_muntat, 4)
-    pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'dv-{amplada}x{alcada}'}
+    Substitueix la lògica híbrida prèvia (taula + fallback fórmula) que
+    havia generat saltsd quan la taula DV-* tenia "forats" (cas 80×80
+    → DV-80X120 saltava a un preu inflat ~22%). Manté la coherència
+    amb el patró del vidre simple per fórmula.
+
+    L'estructura del dict retornat manté els camps que els consumidors
+    ja llegeixen ('cost', 'pvd', 'preu', 'origen', 'ref'); 'origen' és
+    sempre 'formula'."""
+    cost_cm2     = float(get_config_value('vidre_cost_cm2', '0.002880'))
+    t_base       = float(get_config_value('vidre_temps_base_min', '3'))
+    t_lineal     = float(get_config_value('vidre_temps_lineal_m', '0.5'))
+    cost_hora    = float(get_config_value('cost_hora_taller', '25'))
+    marge        = float(get_config_value('marge_admin_vidres_pct', '60'))
+    mo_muntatge  = float(get_config_value('vidre_dv_muntatge_eur', '1.30'))
+
+    area = float(amplada) * float(alcada)
+    perimetre_m = 2 * (amplada + alcada) / 100
+
+    cost_material = area * cost_cm2 * 2
+    mo_tall       = (t_base + t_lineal * perimetre_m) * cost_hora / 60
+    cost          = round(cost_material + mo_tall + mo_muntatge, 4)
+    pvd           = round(cost * (1 + marge / 100), 4)
+
+    return {
+        'cost': cost, 'pvd': pvd, 'preu': pvd,
+        'origen': 'formula',
+        'ref': f'dv-{amplada}x{alcada}',
+    }
 
 
 def calcular_cost_mirall(amplada, alcada):
@@ -3475,6 +3493,9 @@ def admin_run_migrations():
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_suport', '3')",
         # Mínim de subtotal PVP perquè s'apliqui el descompte combo (€).
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_minim_pvp', '80')",
+        # MO de muntatge del doble vidre en € (substitueix l'antic
+        # vidre_dv_muntatge_min, que queda inutilitzat).
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('vidre_dv_muntatge_eur', '1.30')",
     ]
 
     resultats = []
@@ -8032,6 +8053,7 @@ def init_db():
                          ('vidre_temps_base_min','3'),
                          ('vidre_temps_lineal_m','0.5'),
                          ('vidre_dv_muntatge_min','5'),
+                         ('vidre_dv_muntatge_eur','1.30'),
                          ('mirall_cost_cm2','0.003153'),
                          ('mirall_multiplo_dm2','6'),
                          ('vidre_tolerancia_cm','2'),
@@ -8299,6 +8321,7 @@ def init_db():
                          ('vidre_temps_base_min','3'),
                          ('vidre_temps_lineal_m','0.5'),
                          ('vidre_dv_muntatge_min','5'),
+                         ('vidre_dv_muntatge_eur','1.30'),
                          ('mirall_cost_cm2','0.003153'),
                          ('mirall_multiplo_dm2','6'),
                          ('vidre_tolerancia_cm','2'),
