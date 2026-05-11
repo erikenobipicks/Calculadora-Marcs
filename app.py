@@ -7882,6 +7882,11 @@ def api_closest():
     foto_w = float(request.args.get('foto_w', w))
     foto_h = float(request.args.get('foto_h', h))
     tipus_laminat = request.args.get('laminat', 'semibrillo')  # 'semibrillo' | 'mate'
+    # Paper d'impressió fotogràfica: 'lustre' (default) o 'baryta' (premium).
+    # Si el client envia un altre valor, ho ignorem i caem a 'lustre'.
+    paper = (request.args.get('paper') or 'lustre').strip().lower()
+    if paper not in ('lustre', 'silk', 'baryta'):
+        paper = 'lustre'
     if w <= 0 or h <= 0:
         return jsonify({})
 
@@ -7959,7 +7964,8 @@ def api_closest():
         'mirall':       _fn_result(calcular_cost_mirall(w, h)),
         'passpartu':    _fn_result(calcular_cost_passpartu(w, h, tipus='simple')),
         'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
-        'impressio':    _imp_closest(foto_w, foto_h),
+        'impressio':    _imp_closest(foto_w, foto_h, paper=paper),
+        'paper':        paper,
     }
 
     # Enriquir la impressió amb el marge de tram aplicat (PVD→PVP).
