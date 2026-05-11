@@ -2171,8 +2171,12 @@ function calcular(){
   // per simular el preu al client final. Usuaris no-admin mai toquen aquest factor.
   // NOTA: factorModeAdmin NO s'aplica a impressions — el seu pvp ja inclou el
   // marge per tram d'àrea (que per a admin ja és el preu al client final).
+  // NOTA 2: factorModeAdmin TAMPOC s'aplica a pvpMarc — margeMarc ja ve dels
+  // mr_trams (preu al client final). Aplicar-lo aquí donaria doble marge i
+  // l'admin veuria el marc ×1,60 més car que un distribuïdor amb la mateixa
+  // configuració de trams.
   var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
-  var pNet    = (pvpMarc+pvpExt)*qty*factorModeAdmin + pvpImp*qty;
+  var pNet    = pvpMarc*qty + pvpExt*qty*factorModeAdmin + pvpImp*qty;
 
   // Descompte combo (per combinació de productes). Detectem components
   // i apliquem el % corresponent ABANS del descompte manual del client.
