@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Clients externs</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:1120px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;margin-bottom:.25rem}
+.muted-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+.row-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1rem}
+.row-head h2{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;margin:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:#155c3a}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-sm{padding:6px 11px;font-size:12px}
+.btn-toggle{padding:6px 11px;font-size:12px;border:1px solid #E8B4B4;background:var(--red-l);color:var(--red);border-radius:8px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.btn-toggle.is-active{border-color:#B8DCC9;background:var(--green-l);color:var(--green)}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
+td{padding:11px 12px;border-bottom:1px solid #F3F1EB;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.empty{padding:2rem;text-align:center;color:var(--hint);font-size:13px}
+.mono{font-family:Consolas,monospace;font-size:12px}
+.alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.alert-err{background:var(--red-l);border:1px solid #F1B9B9;color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(28,27,24,.5);display:none;align-items:center;justify-content:center;z-index:200;padding:1rem}
+.modal-overlay.is-open{display:flex}
+.modal{background:#fff;border-radius:14px;max-width:520px;width:100%;padding:1.5rem;max-height:90vh;overflow:auto}
+.modal h3{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;margin-bottom:.5rem}
+.modal .muted{font-size:12px;color:var(--muted);margin-bottom:.85rem;line-height:1.5}
+.modal label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.modal input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;background:#fff}
+.modal input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.results-list{margin-top:.85rem;border:1px solid var(--border);border-radius:10px;max-height:260px;overflow:auto;background:#fcfbf8}
+.result-item{padding:.65rem .85rem;border-bottom:1px solid #F3F1EB;cursor:pointer;display:flex;justify-content:space-between;gap:.5rem;align-items:center}
+.result-item:hover{background:#F5F4F1}
+.result-item.selected{background:var(--green-l);color:var(--green)}
+.result-item.dup{opacity:.55;cursor:not-allowed}
+.result-item:last-child{border-bottom:none}
+.result-item .nif{font-family:Consolas,monospace;font-size:11px;color:var(--muted)}
+.modal-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem}
+.search-state{padding:1rem;text-align:center;color:var(--hint);font-size:12px}
+.fd-link{display:inline-block;margin-top:.55rem;font-size:12px;color:var(--green);text-decoration:none}
+.fd-link:hover{text-decoration:underline}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>
+function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }
+</script>
+
+<div class="container">
+  <div class="page-title">Clients externs</div>
+  <div class="muted-sub">Clients freqüents que NO són usuaris de la calculadora, però que apareixen sovint a albarans. Importa'ls de FacturaDirecta una vegada i el seu <code>fd_contact_id</code> queda cached — així t'estalvies la cerca a cada albarà.</div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <div class="section">
+    <div class="row-head">
+      <h2>{{ clients|length }} client{% if clients|length != 1 %}s{% endif %}</h2>
+      <button type="button" class="btn btn-primary" onclick="openImportModal()">+ Importar des de FacturaDirecta</button>
+    </div>
+
+    {% if clients %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Nom</th><th>NIF</th><th>FD ID</th><th>Estat</th><th>Creat</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for c in clients %}
+        <tr id="row-{{ c.id }}">
+          <td><strong>{{ c.nom }}</strong></td>
+          <td class="mono">{{ c.nif or '—' }}</td>
+          <td class="mono" style="color:var(--hint)">{{ c.fd_contact_id }}</td>
+          <td>
+            {% if c.actiu %}
+              <span style="background:var(--green-l);color:var(--green);font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700">Actiu</span>
+            {% else %}
+              <span style="background:var(--red-l);color:var(--red);font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700">Inactiu</span>
+            {% endif %}
+          </td>
+          <td class="mono" style="color:var(--muted);font-size:11px">{{ c.created_at or '—' }}</td>
+          <td style="text-align:right">
+            <button type="button" class="btn-toggle {% if c.actiu %}is-active{% endif %}"
+                    data-id="{{ c.id }}" onclick="toggleClient(this)">
+              {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Cap client extern importat encara. Clica "+ Importar des de FacturaDirecta" per començar.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="import-modal" onclick="if(event.target===this) closeImportModal()">
+  <div class="modal">
+    <h3>Importar contacte de FacturaDirecta</h3>
+    <div class="muted">Cerca un contacte ja existent a FacturaDirecta i importa'l com a client extern local. <strong>No es creen contactes</strong> nous a FD des d'aquí.</div>
+
+    <label for="fd-search">Cercar a FacturaDirecta</label>
+    <input type="text" id="fd-search" placeholder="Mínim 2 caràcters · nom o NIF" autocomplete="off" oninput="onSearchInput(event)">
+    <a href="https://app.facturadirecta.com/" target="_blank" rel="noopener" class="fd-link">Si el client no apareix, crea'l primer a FacturaDirecta →</a>
+
+    <div class="results-list" id="results-list" style="display:none">
+      <div class="search-state">Escriu per cercar…</div>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeImportModal()">Cancel·lar</button>
+      <button type="button" class="btn btn-primary" id="import-btn" disabled onclick="confirmImport()">Importar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var SEARCH_URL = '/admin/fd/contacts';
+var IMPORT_URL = '/admin/clients-externs/import-fd';
+var TOGGLE_URL_TPL = '/admin/clients-externs/{id}/toggle';
+var EXISTING_FD_IDS = [{% for c in clients %}'{{ c.fd_contact_id }}'{% if not loop.last %},{% endif %}{% endfor %}];
+var selected = null;
+var debounceTimer = null;
+
+function openImportModal(){
+  document.getElementById('import-modal').classList.add('is-open');
+  document.getElementById('fd-search').focus();
+}
+function closeImportModal(){
+  document.getElementById('import-modal').classList.remove('is-open');
+  document.getElementById('fd-search').value = '';
+  document.getElementById('results-list').style.display = 'none';
+  document.getElementById('import-btn').disabled = true;
+  selected = null;
+}
+
+function onSearchInput(ev){
+  var q = ev.target.value.trim();
+  clearTimeout(debounceTimer);
+  if(q.length < 2){
+    document.getElementById('results-list').style.display = 'none';
+    return;
+  }
+  debounceTimer = setTimeout(function(){ doSearch(q); }, 300);
+}
+
+function doSearch(q){
+  var list = document.getElementById('results-list');
+  list.style.display = 'block';
+  list.innerHTML = '<div class="search-state">Cercant…</div>';
+  fetch(SEARCH_URL + '?q=' + encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){
+        list.innerHTML = '<div class="search-state" style="color:var(--red)">Error: ' + (d.error || 'desconegut') + '</div>';
+        return;
+      }
+      if(!d.results || !d.results.length){
+        list.innerHTML = '<div class="search-state">Cap resultat per "' + q + '"</div>';
+        return;
+      }
+      list.innerHTML = '';
+      d.results.forEach(function(c){
+        var dup = EXISTING_FD_IDS.indexOf(c.fd_id) >= 0;
+        var item = document.createElement('div');
+        item.className = 'result-item' + (dup ? ' dup' : '');
+        item.dataset.fdId = c.fd_id;
+        item.dataset.nom = c.nom;
+        item.dataset.nif = c.nif || '';
+        item.innerHTML = '<div><strong>' + escapeHtml(c.nom) + '</strong>' +
+                          (dup ? ' <small style="color:var(--amber)">· ja importat</small>' : '') +
+                         '</div>' +
+                         '<div class="nif">' + escapeHtml(c.nif || '—') + '</div>';
+        if(!dup){
+          item.addEventListener('click', function(){ selectResult(item); });
+        }
+        list.appendChild(item);
+      });
+    })
+    .catch(function(e){
+      list.innerHTML = '<div class="search-state" style="color:var(--red)">Error de xarxa</div>';
+    });
+}
+
+function selectResult(item){
+  document.querySelectorAll('.result-item.selected').forEach(function(el){ el.classList.remove('selected'); });
+  item.classList.add('selected');
+  selected = {
+    fd_contact_id: item.dataset.fdId,
+    nom: item.dataset.nom,
+    nif: item.dataset.nif,
+  };
+  document.getElementById('import-btn').disabled = false;
+}
+
+function confirmImport(){
+  if(!selected) return;
+  var btn = document.getElementById('import-btn');
+  btn.disabled = true;
+  fetch(IMPORT_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(selected),
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){
+        alert('Error: ' + (d.error || 'desconegut'));
+        btn.disabled = false;
+        return;
+      }
+      window.location.reload();
+    })
+    .catch(function(){
+      alert('Error de xarxa');
+      btn.disabled = false;
+    });
+}
+
+function toggleClient(btn){
+  var id = btn.dataset.id;
+  btn.disabled = true;
+  fetch(TOGGLE_URL_TPL.replace('{id}', id), {method: 'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ alert('Error: ' + (d.error || 'desconegut')); btn.disabled = false; return; }
+      window.location.reload();
+    });
+}
+
+function escapeHtml(s){
+  return String(s || '').replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+</script>
+</body>
+</html>
