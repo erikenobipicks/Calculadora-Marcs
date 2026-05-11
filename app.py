@@ -2238,7 +2238,7 @@ def public_professional_summary():
             'SELECT id, nom, nom_empresa, profile_type, access_status, '
             'marge, marge_pro_pct, marge_impressio, marge_impressio_pro_pct, '
             'imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6, '
-            'margins_json FROM usuaris WHERE lower(username)=?',
+            'margins_json, baryta_actiu FROM usuaris WHERE lower(username)=?',
             [username],
             one=True,
         )
@@ -2319,6 +2319,8 @@ def public_professional_summary():
                 float(get_config_value('imp_tram5_marge_default', '50')),
                 float(get_config_value('imp_tram6_marge_default', '45')),
             ],
+            # Activacions per usuari (papers premium amb pricing per trams)
+            'baryta_actiu': bool(_row_get(user, 'baryta_actiu', 0)),
         })
     except Exception as exc:
         print(f'professional-summary error: {exc}')
@@ -2413,11 +2415,41 @@ def public_pricing():
             'tipus': tipus,
         })
 
+    # Papers premium amb pricing per trams (cost·multiplicador segons àrea).
+    # Exposem el cost_cm2 i els trams perquè la web pugui replicar el càlcul
+    # sense haver de fer una crida per cada mida sol·licitada.
+    papers_trams = {}
+    for paper_id in ('baryta',):
+        actiu = get_config_value(f'imp_{paper_id}_trams_actius', '0') == '1'
+        if not actiu:
+            continue
+        trams = []
+        for i in range(1, 7):
+            max_str = get_config_value(f'imp_{paper_id}_t{i}_max', None)
+            mult_str = get_config_value(f'imp_{paper_id}_t{i}_mult', None)
+            if mult_str is None:
+                continue
+            try:
+                mult = float(mult_str)
+            except (TypeError, ValueError):
+                continue
+            try:
+                max_area = float(max_str) if max_str not in (None, '') else None
+            except (TypeError, ValueError):
+                max_area = None
+            trams.append({'max_area': max_area, 'mult': mult})
+        try:
+            cost_cm2 = float(get_config_value(f'imp_{paper_id}_cost_cm2', '0'))
+        except (TypeError, ValueError):
+            cost_cm2 = 0.0
+        papers_trams[paper_id] = {'cost_cm2': cost_cm2, 'trams': trams}
+
     return jsonify({
         'ok': True,
         'impressio': impressio,
         'laminate_only': laminate_only,
         'encolat_pro': encolat_pro,
+        'papers_trams': papers_trams,
     })
 
 
@@ -3792,6 +3824,26 @@ def admin_run_migrations():
         # MO de muntatge del doble vidre en € (substitueix l'antic
         # vidre_dv_muntatge_min, que queda inutilitzat).
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('vidre_dv_muntatge_eur', '1.30')",
+        # ── Paper Hahnemühle Photo Rag Baryta ────────────────────────
+        # Sistema de marge per trams (en lloc de marge admin fix). El
+        # helper _imp_closest detecta el flag imp_{paper}_trams_actius i,
+        # si està a '1', salta la lògica de taula i aplica el múltiple
+        # del tram corresponent. Cost real del paper (HM8152) + tinta.
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_cost_cm2', '0.005351')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_trams_actius', '1')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t1_max', '300')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t1_mult', '9.5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t2_max', '900')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t2_mult', '6.5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t3_max', '2000')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t3_mult', '4.3')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t4_max', '4000')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t4_mult', '3.5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t5_max', '8000')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t5_mult', '3.2')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t6_mult', '3.1')",
+        # Flag per usuari: cada distribuïdor habilita el Baryta manualment.
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS baryta_actiu BOOLEAN DEFAULT FALSE",
     ]
 
     resultats = []
@@ -5415,7 +5467,8 @@ def admin_usuaris():
     usuaris = query("""
         SELECT id, username, nom, nom_empresa, profile_type, access_status,
                web_url, instagram, fiscal_id, notes_validacio, is_admin,
-               imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6
+               imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6,
+               baryta_actiu
         FROM usuaris ORDER BY nom
     """)
     # Defaults globals per als placeholders
@@ -5517,6 +5570,15 @@ def admin_usuari():
                    target_username=_row_get(target, 'username', '') if target else '',
                    details=' '.join(f"t{i+1}={v}" for i, v in enumerate(valors)))
         flash('Trams d\'impressió actualitzats.', 'ok')
+    elif action == 'baryta_toggle':
+        uid = request.form['uid']
+        target = query('SELECT username, baryta_actiu FROM usuaris WHERE id=?', [uid], one=True)
+        nou = 1 if request.form.get('baryta_actiu') in ('1', 'on', 'true') else 0
+        execute('UPDATE usuaris SET baryta_actiu=? WHERE id=?', [nou, uid])
+        _audit_log('user.baryta_toggle', target_user_id=int(uid) if str(uid).isdigit() else None,
+                   target_username=_row_get(target, 'username', '') if target else '',
+                   details=f"baryta_actiu={nou}")
+        flash(f"Paper Baryta {'activat' if nou else 'desactivat'}.", 'ok')
     return redirect(url_for('admin_usuaris'))
 
 
@@ -7709,6 +7771,42 @@ def _imp_closest(fw, fh, paper='lustre'):
     area_sol = max(1.0, float(fw) * float(fh))
     ratio_max = float(get_config_value('encolat_ratio_max', '1.40'))
 
+    # 0) Sistema de trams per paper (override del càlcul híbrid)
+    #    Si imp_{paper}_trams_actius == '1' s'aplica cost·multiplicador segons àrea.
+    if get_config_value(f'imp_{paper}_trams_actius', '0') == '1':
+        cost_cm2_t = float(get_config_value(f'imp_{paper}_cost_cm2',
+                                            get_config_value('imp_lustre_cost_cm2', '0.000703')))
+        cost_real_t = area_sol * cost_cm2_t
+        mult_aplicat = None
+        for i in range(1, 7):
+            max_str = get_config_value(f'imp_{paper}_t{i}_max', None)
+            mult_str = get_config_value(f'imp_{paper}_t{i}_mult', None)
+            if mult_str is None:
+                continue
+            try:
+                mult = float(mult_str)
+            except (TypeError, ValueError):
+                continue
+            if max_str is None or str(max_str).strip() == '':
+                mult_aplicat = mult
+                break
+            try:
+                max_area = float(max_str)
+            except (TypeError, ValueError):
+                continue
+            if area_sol <= max_area:
+                mult_aplicat = mult
+                break
+        if mult_aplicat is None:
+            mult_aplicat = float(get_config_value(f'imp_{paper}_t6_mult', '3.1'))
+        preu_tram = round(cost_real_t * mult_aplicat, 2)
+        return {
+            'ref': f'imp-{paper}-{int(fw)}x{int(fh)}',
+            'preu': preu_tram,
+            'origen': 'tram',
+            'area': round(area_sol, 2),
+        }
+
     # 1) Min-contain
     fila = _find_min_contain(rows, fw, fh)
 
@@ -8270,6 +8368,8 @@ def init_db():
                 ('usuaris','mr_tram2_pct','REAL'),
                 ('usuaris','mr_tram3_pct','REAL'),
                 ('usuaris','mr_trams_vist','INTEGER DEFAULT 0'),
+                # Paper Hahnemühle Photo Rag Baryta — activació per usuari
+                ('usuaris','baryta_actiu','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -8387,6 +8487,19 @@ def init_db():
                          ('imp_lustre_cost_cm2','0.000703'),
                          ('imp_silk_cost_cm2','0.000756'),
                          ('imp_matte_cost_cm2','0.000447'),
+                         ('imp_baryta_cost_cm2','0.005351'),
+                         ('imp_baryta_trams_actius','1'),
+                         ('imp_baryta_t1_max','300'),
+                         ('imp_baryta_t1_mult','9.5'),
+                         ('imp_baryta_t2_max','900'),
+                         ('imp_baryta_t2_mult','6.5'),
+                         ('imp_baryta_t3_max','2000'),
+                         ('imp_baryta_t3_mult','4.3'),
+                         ('imp_baryta_t4_max','4000'),
+                         ('imp_baryta_t4_mult','3.5'),
+                         ('imp_baryta_t5_max','8000'),
+                         ('imp_baryta_t5_mult','3.2'),
+                         ('imp_baryta_t6_mult','3.1'),
                          ('combo_desc_marc_imp_protter','6'),
                          ('combo_desc_marc_imp_foam','5'),
                          ('combo_desc_marc_imp','3'),
@@ -8555,6 +8668,8 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN mr_tram2_pct REAL",
                 "ALTER TABLE usuaris ADD COLUMN mr_tram3_pct REAL",
                 "ALTER TABLE usuaris ADD COLUMN mr_trams_vist INTEGER DEFAULT 0",
+                # Paper Hahnemühle Photo Rag Baryta — activació per usuari
+                "ALTER TABLE usuaris ADD COLUMN baryta_actiu INTEGER DEFAULT 0",
             ]:
                 try:
                     db.execute(sql)
@@ -8655,6 +8770,19 @@ def init_db():
                          ('imp_lustre_cost_cm2','0.000703'),
                          ('imp_silk_cost_cm2','0.000756'),
                          ('imp_matte_cost_cm2','0.000447'),
+                         ('imp_baryta_cost_cm2','0.005351'),
+                         ('imp_baryta_trams_actius','1'),
+                         ('imp_baryta_t1_max','300'),
+                         ('imp_baryta_t1_mult','9.5'),
+                         ('imp_baryta_t2_max','900'),
+                         ('imp_baryta_t2_mult','6.5'),
+                         ('imp_baryta_t3_max','2000'),
+                         ('imp_baryta_t3_mult','4.3'),
+                         ('imp_baryta_t4_max','4000'),
+                         ('imp_baryta_t4_mult','3.5'),
+                         ('imp_baryta_t5_max','8000'),
+                         ('imp_baryta_t5_mult','3.2'),
+                         ('imp_baryta_t6_mult','3.1'),
                          ('combo_desc_marc_imp_protter','6'),
                          ('combo_desc_marc_imp_foam','5'),
                          ('combo_desc_marc_imp','3'),

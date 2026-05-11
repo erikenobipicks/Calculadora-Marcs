@@ -138,7 +138,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
         <thead>
           <tr>
             <th>Compte</th><th>Perfil</th><th>Accés</th><th>Dades</th>
-            <th>Trams impressió</th><th>Contrasenya</th><th>Eliminar</th>
+            <th>Trams impressió</th><th>Baryta</th><th>Contrasenya</th><th>Eliminar</th>
           </tr>
         </thead>
         <tbody>
@@ -195,6 +195,17 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
                 {% endfor %}
               </div>
               <button type="submit" class="btn btn-primary btn-sm">Desar trams</button>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="/admin/usuari" style="display:flex;flex-direction:column;gap:.4rem;align-items:flex-start">
+              <input type="hidden" name="action" value="baryta_toggle">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--text);margin:0;cursor:pointer">
+                <input type="checkbox" name="baryta_actiu" value="1" style="width:auto;margin:0" {% if u.baryta_actiu %}checked{% endif %}>
+                <span>Photo Rag Baryta</span>
+              </label>
+              <button type="submit" class="btn btn-primary btn-sm">Desar</button>
             </form>
           </td>
           <td>
