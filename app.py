@@ -3037,6 +3037,12 @@ def guardar():
     cost_unitari = None
 
     # Common field values
+    # client_extern_id: opcional. Si arriba, normalitzem a int o None.
+    try:
+        client_extern_id = int(d.get('client_extern_id') or 0) or None
+    except (TypeError, ValueError):
+        client_extern_id = None
+
     vals_comuns = [
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
@@ -3052,6 +3058,7 @@ def guardar():
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''), d.get('opcio_nom','Opció A'), d.get('lang','ca'),
         cost_unitari, pvd_unitari, marge_pro_snap,
+        client_extern_id,
     ]
 
     if comanda_id:
@@ -3068,7 +3075,8 @@ def guardar():
                 marge=?, descompte=?, quantitat=?,
                 preu_net=?, preu_final=?, cost_produccio=?,
                 entrega=?, pendent=?, observacions=?, opcio_nom=?, lang=?,
-                cost_unitari=?, pvd_unitari=?, marge_pro_snap=?
+                cost_unitari=?, pvd_unitari=?, marge_pro_snap=?,
+                client_extern_id=?
                 WHERE id=? AND user_id=?''',
                 vals_comuns + [comanda_id, session['user_id']])
             return jsonify({'ok': True, 'id': existing['id'],
@@ -3087,11 +3095,11 @@ def guardar():
          marge, descompte, quantitat,
          preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang,
-         cost_unitari, pvd_unitari, marge_pro_snap)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+         cost_unitari, pvd_unitari, marge_pro_snap, client_extern_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
         [session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M')] +
         vals_comuns[:27] + [sessio_id] + [vals_comuns[27]] + [num_pressupost] + [vals_comuns[28]] +
-        vals_comuns[29:32]
+        vals_comuns[29:32] + [vals_comuns[32]]
     )
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
@@ -3432,6 +3440,22 @@ def admin_run_migrations():
             details TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
+        # Clients externs (no usuaris de la plataforma) per a albarans ràpids.
+        # fd_contact_id cached perquè saltem la cerca de FD a cada albarà.
+        """CREATE TABLE IF NOT EXISTS clients_externs (
+            id SERIAL PRIMARY KEY,
+            nom VARCHAR(255) NOT NULL,
+            nif VARCHAR(30),
+            fd_contact_id VARCHAR(100) NOT NULL UNIQUE,
+            actiu BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
+        # FK a comandes (nul·lable: les comandes existents queden a NULL).
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
         # Migració de l'antic límit del tram 4 (7500 cm² → 6000 cm²).
         # Només actua si el valor és exactament '7500' per no sobreescriure
         # personalitzacions explícites. Idempotent.
@@ -5671,6 +5695,146 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
         main['notes'] = notes
     return _fd_post('deliveryNotes', {'content': {'type': 'deliveryNote', 'main': main}})
 
+
+def _fd_extract_contacts_list(r):
+    """FD pot retornar la llista en diverses claus. Aquesta funció és
+    una variant de _fd_extract_contact_id però per a llistes."""
+    if not r:
+        return []
+    if isinstance(r, list):
+        return r
+    for key in ('items', 'contacts', 'data', 'content', 'results'):
+        v = r.get(key) if isinstance(r, dict) else None
+        if isinstance(v, list):
+            return v
+    return []
+
+
+# ── Clients externs (clients freqüents que no són usuaris de la calc) ─────
+@app.route('/admin/fd/contacts')
+@admin_required
+def admin_fd_contacts_search():
+    """Cerca contactes a FacturaDirecta per importar-los com a clients
+    externs locals. Mínim 2 caràcters per evitar carregar tota la llista."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify({'ok': True, 'results': []})
+    try:
+        r = _fd_get(f'contacts?search={urllib_quote(q)}')
+        if isinstance(r, dict) and '_error' in r:
+            return jsonify({'ok': False, 'error': f"FD {r.get('_error')}: {r.get('_msg','')}"}), 502
+        contacts = _fd_extract_contacts_list(r)
+        results = []
+        for c in contacts:
+            cid = _fd_extract_contact_id(c) or c.get('id') or c.get('uuid')
+            if not cid:
+                continue
+            main = (c.get('content') or {}).get('main') or {}
+            nom = c.get('name') or main.get('name') or ''
+            nif = c.get('fiscalId') or main.get('fiscalId') or ''
+            results.append({'fd_id': str(cid), 'nom': nom, 'nif': nif})
+        return jsonify({'ok': True, 'results': results})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/admin/clients-externs')
+@admin_required
+def admin_clients_externs():
+    """Llistat de clients externs."""
+    clients = query("""
+        SELECT id, nom, nif, fd_contact_id, actiu, created_at
+        FROM clients_externs
+        ORDER BY actiu DESC, nom
+    """) or []
+    return render_template('admin_clients_externs.html', clients=clients)
+
+
+@app.route('/admin/clients-externs/import-fd', methods=['POST'])
+@admin_required
+def admin_clients_externs_import_fd():
+    """Importa un contacte de FD com a client extern (només referència local)."""
+    payload = request.get_json(silent=True) or request.form
+    fd_id = (payload.get('fd_contact_id') or '').strip()
+    nom   = (payload.get('nom') or '').strip()
+    nif   = (payload.get('nif') or '').strip()
+
+    if not fd_id or not nom:
+        return jsonify({'ok': False, 'error': 'missing_data'}), 400
+
+    existing = query(
+        'SELECT id FROM clients_externs WHERE fd_contact_id = ?',
+        [fd_id], one=True,
+    )
+    if existing:
+        return jsonify({'ok': False, 'error': 'already_exists',
+                        'id': _row_get(existing, 'id')}), 409
+
+    new_id = execute(
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, actiu) "
+        "VALUES (?, ?, ?, ?)",
+        [nom, nif or None, fd_id, True],
+    )
+    print(f"[clients_externs] import: id={new_id} fd_id={fd_id} nom={nom}")
+    return jsonify({'ok': True, 'id': new_id})
+
+
+@app.route('/admin/clients-externs/<int:client_id>/toggle', methods=['POST'])
+@admin_required
+def admin_clients_externs_toggle(client_id):
+    """Toggle actiu/desactiu d'un client extern."""
+    row = query('SELECT actiu FROM clients_externs WHERE id=?', [client_id], one=True)
+    if not row:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    actual = bool(_row_get(row, 'actiu', True))
+    nou = not actual
+    execute('UPDATE clients_externs SET actiu=? WHERE id=?', [nou, client_id])
+    print(f"[clients_externs] toggle: id={client_id} actiu={nou}")
+    return jsonify({'ok': True, 'actiu': nou})
+
+
+@app.route('/api/clients-externs')
+@login_required
+def api_clients_externs():
+    """Llista de clients externs actius — alimenta el selector del pressupost."""
+    rows = query("""
+        SELECT id, nom, nif
+        FROM clients_externs
+        WHERE actiu = TRUE
+        ORDER BY nom
+    """) or []
+    return jsonify({
+        'ok': True,
+        'clients': [
+            {
+                'id': _row_get(r, 'id'),
+                'nom': _row_get(r, 'nom') or '',
+                'nif': _row_get(r, 'nif') or '',
+            }
+            for r in rows
+        ],
+    })
+
+
+def _resolve_client_extern_fd_id(client_extern_id):
+    """Si client_extern_id apunta a un client actiu amb fd_contact_id,
+    retorna (contact_id, nom). Si està desactivat o no existeix, retorna
+    (None, None) — el caller fa fallback al flux antic."""
+    if not client_extern_id:
+        return None, None
+    row = query(
+        'SELECT nom, nif, fd_contact_id, actiu FROM clients_externs WHERE id=?',
+        [client_extern_id], one=True,
+    )
+    if not row:
+        return None, None
+    if not _row_get(row, 'actiu', False):
+        print(f"[clients_externs] WARN: client_extern_id={client_extern_id} desactivat — fallback al flux antic")
+        return None, None
+    return _row_get(row, 'fd_contact_id') or None, _row_get(row, 'nom') or None
+
 @app.route('/api/crear-albara', methods=['POST'])
 @login_required
 def api_crear_albara():
@@ -5775,29 +5939,39 @@ def api_albara_de_comanda():
 
     c0 = comandes[0]
 
-    # The FD contact is the professional client (the user who owns the session)
-    # Use their nom_fiscal > nom_empresa > nom
-    nom_fiscal   = (_row_get(c0, 'nom_fiscal', '') or '').strip()
-    nom_empresa  = (_row_get(c0, 'nom_empresa', '') or '').strip()
-    usuari_nom   = (_row_get(c0, 'usuari_nom', '') or '').strip()
-    fiscal_id    = (_row_get(c0, 'fiscal_id', '') or '').strip()
-    empresa_tel  = (_row_get(c0, 'empresa_tel', '') or '').strip()
+    # ── Client extern (cached fd_contact_id) ───────────────────────────
+    # Si la comanda (qualsevol fila de la sessió) té client_extern_id,
+    # saltem la cerca/creació de FD i fem servir el contact_id cached.
+    client_extern_id = _row_get(c0, 'client_extern_id')
+    cached_fd_id, cached_nom = _resolve_client_extern_fd_id(client_extern_id)
+    contact_id = cached_fd_id
+    nom_fd = cached_nom or ''
+    is_client_extern = bool(contact_id)
 
-    nom_fd = nom_fiscal or nom_empresa or usuari_nom
-    if not nom_fd:
-        return jsonify({'ok': False, 'error': 'El client no té nom fiscal ni nom d\'empresa configurat.'}), 400
-
-    # Lookup by NIF only (exact), never by name
-    contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
-    if not contacte:
-        contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=empresa_tel or None)
-    if '_error' in (contacte or {}):
-        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
-
-    contact_id = _fd_extract_contact_id(contacte)
     if not contact_id:
-        print(f'FD contacte sense ID (api_albara_de_comanda): {json.dumps(contacte, ensure_ascii=False)}')
-        return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+        # Fallback al flux antic: contacte FD = professional propietari de la sessió.
+        nom_fiscal   = (_row_get(c0, 'nom_fiscal', '') or '').strip()
+        nom_empresa  = (_row_get(c0, 'nom_empresa', '') or '').strip()
+        usuari_nom   = (_row_get(c0, 'usuari_nom', '') or '').strip()
+        fiscal_id    = (_row_get(c0, 'fiscal_id', '') or '').strip()
+        empresa_tel  = (_row_get(c0, 'empresa_tel', '') or '').strip()
+
+        nom_fd = nom_fiscal or nom_empresa or usuari_nom
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'El client no té nom fiscal ni nom d\'empresa configurat.'}), 400
+
+        contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
+        if not contacte:
+            contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=empresa_tel or None)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            print(f'FD contacte sense ID (api_albara_de_comanda): {json.dumps(contacte, ensure_ascii=False)}')
+            return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+    else:
+        print(f"[albara_de_comanda] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
 
     # Build albaran lines — one per comanda row
     linies = []
@@ -5881,34 +6055,48 @@ def api_albara_individual():
     if not com:
         return jsonify({'ok': False, 'error': 'Comanda no trobada'}), 404
 
-    # Determine FD contact: if admin's own order, use client_nom; if professional's order, use nom_fiscal/nom_empresa
-    owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
-    if owner_is_admin:
-        # Admin's own order → the FD contact is the end client
-        nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
-        fiscal_id = ''
-        telefon   = (_row_get(com, 'client_tel', '') or '').strip()
+    # ── Client extern (cached fd_contact_id) ───────────────────────────
+    # Si la comanda té client_extern_id apuntant a un client actiu,
+    # saltem la cerca de FD i forcem mode_preu=cost (PVD) per disseny.
+    client_extern_id = _row_get(com, 'client_extern_id')
+    cached_fd_id, cached_nom = _resolve_client_extern_fd_id(client_extern_id)
+    is_client_extern = bool(cached_fd_id)
+    if is_client_extern:
+        contact_id = cached_fd_id
+        nom_fd = cached_nom or ''
+        # Per a client extern sempre fem PVD (preu taller), no PVP.
+        mode_preu = 'cost'
+        print(f"[albara_individual] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
+        owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
     else:
-        # Professional's order → the FD contact is the professional
-        nom_fiscal  = (_row_get(com, 'nom_fiscal', '') or '').strip()
-        nom_empresa = (_row_get(com, 'nom_empresa', '') or '').strip()
-        usuari_nom  = (_row_get(com, 'usuari_nom', '') or '').strip()
-        nom_fd      = nom_fiscal or nom_empresa or usuari_nom
-        fiscal_id   = (_row_get(com, 'fiscal_id', '') or '').strip()
-        telefon     = (_row_get(com, 'empresa_tel', '') or '').strip()
+        # Determine FD contact: if admin's own order, use client_nom; if professional's order, use nom_fiscal/nom_empresa
+        owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
+        if owner_is_admin:
+            # Admin's own order → the FD contact is the end client
+            nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
+            fiscal_id = ''
+            telefon   = (_row_get(com, 'client_tel', '') or '').strip()
+        else:
+            # Professional's order → the FD contact is the professional
+            nom_fiscal  = (_row_get(com, 'nom_fiscal', '') or '').strip()
+            nom_empresa = (_row_get(com, 'nom_empresa', '') or '').strip()
+            usuari_nom  = (_row_get(com, 'usuari_nom', '') or '').strip()
+            nom_fd      = nom_fiscal or nom_empresa or usuari_nom
+            fiscal_id   = (_row_get(com, 'fiscal_id', '') or '').strip()
+            telefon     = (_row_get(com, 'empresa_tel', '') or '').strip()
 
-    if not nom_fd:
-        return jsonify({'ok': False, 'error': 'Cal un nom de contacte per crear l\'albarà.'}), 400
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'Cal un nom de contacte per crear l\'albarà.'}), 400
 
-    contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
-    if not contacte:
-        contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=telefon or None)
-    if '_error' in (contacte or {}):
-        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+        contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
+        if not contacte:
+            contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=telefon or None)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    contact_id = _fd_extract_contact_id(contacte)
-    if not contact_id:
-        return jsonify({'ok': False, 'error': f'Contacte FD sense ID.'}), 500
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            return jsonify({'ok': False, 'error': f'Contacte FD sense ID.'}), 500
 
     # Build line item
     marc        = (_row_get(com, 'marc_principal', '') or '').strip()
@@ -7797,6 +7985,18 @@ def init_db():
                 )""")
             except Exception as e:
                 print("audit_log table skip:", e)
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS clients_externs (
+                    id SERIAL PRIMARY KEY,
+                    nom VARCHAR(255) NOT NULL,
+                    nif VARCHAR(30),
+                    fd_contact_id VARCHAR(100) NOT NULL UNIQUE,
+                    actiu BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )""")
+                ddl_cur.execute("ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER")
+            except Exception as e:
+                print("clients_externs table skip:", e)
             ddl_cur.close()
             ddl_conn.close()
             print("DDL done, checking admin...")
@@ -8058,6 +8258,20 @@ def init_db():
                 details TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS clients_externs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                nif TEXT,
+                fd_contact_id TEXT NOT NULL UNIQUE,
+                actiu INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )""")
+            # client_extern_id a comandes — un try/except per si la taula
+            # encara no té la columna (cas update progressiu).
+            try:
+                db.execute("ALTER TABLE comandes ADD COLUMN client_extern_id INTEGER")
+            except Exception:
+                pass
             db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_nom','Reus Revela')")

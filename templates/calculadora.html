@@ -303,6 +303,15 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       {% endif %}
       <div class="card client-card">
         <div class="card-t">Dades del client</div>
+        {% if session.is_admin %}
+        <div class="f" style="margin-bottom:.6rem">
+          <label>Client habitual (opcional)</label>
+          <select id="client_extern_id" onchange="onClientExternChange()" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:#fff">
+            <option value="">— Client nou (no habitual) —</option>
+          </select>
+          <div style="font-size:11px;color:var(--hint);margin-top:4px">Si selecciones un client habitual, l'albarà anirà a preu taller (PVD) i amb l'ID de FacturaDirecta ja cached. <a href="/admin/clients-externs" target="_blank" rel="noopener" style="color:var(--green)">Gestionar →</a></div>
+        </div>
+        {% endif %}
         <div class="client-grid">
           <div class="f client-name"><label>Nom del client</label><input type="text" id="client_nom"></div>
           <div class="f client-phone"><label>Telèfon</label><input type="text" id="client_tel"></div>
@@ -1265,6 +1274,41 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
   document.getElementById('marge_val').value = marge;
   calcular();
 });
+
+// Clients externs (només admin veurà el selector). Si el camp no existeix
+// al DOM (usuari no admin), aquest fetch no fa res visible. La idea: omplim
+// el dropdown amb la llista d'actius de la BD i, en seleccionar-ne un,
+// auto-omplim el camp Nom del client i el blokegem com a read-only.
+(function loadClientsExterns(){
+  var sel = document.getElementById('client_extern_id');
+  if(!sel) return;
+  fetch('/api/clients-externs').then(function(r){return r.json();}).then(function(d){
+    if(!d || !d.ok) return;
+    (d.clients||[]).forEach(function(c){
+      var opt = document.createElement('option');
+      opt.value = String(c.id);
+      opt.dataset.nom = c.nom || '';
+      opt.dataset.nif = c.nif || '';
+      opt.textContent = c.nom + (c.nif ? ' · ' + c.nif : '');
+      sel.appendChild(opt);
+    });
+  }).catch(function(){});
+})();
+
+function onClientExternChange(){
+  var sel = document.getElementById('client_extern_id');
+  var nomInp = document.getElementById('client_nom');
+  var telInp = document.getElementById('client_tel');
+  if(!sel || !nomInp) return;
+  var opt = sel.selectedOptions && sel.selectedOptions[0];
+  if(opt && opt.value){
+    nomInp.value = opt.dataset.nom || nomInp.value;
+    nomInp.readOnly = true;
+    if(telInp) telInp.readOnly = false;
+  } else {
+    nomInp.readOnly = false;
+  }
+}
 
 // Load moldura options once, then derive the filtered refs for both selectors
 fetch('/api/moldura-options').then(function(r){return r.json();}).then(function(items){
@@ -2234,6 +2278,7 @@ function guardar(){
     sessio_id:sessioId, opcio_nom:opcions[opcioActual].nom,
     client_nom:document.getElementById('client_nom').value,
     client_tel:document.getElementById('client_tel').value,
+    client_extern_id: (document.getElementById('client_extern_id')||{}).value || null,
     pre_marc:document.getElementById('pre_marc').value||'-',
     marc_principal:document.getElementById('marc_principal').value,
     tipus_peca:getPieceTypeValue(),
@@ -2598,6 +2643,7 @@ function capturaEstat(){
   return {
     client_nom:document.getElementById('client_nom').value,
     client_tel:document.getElementById('client_tel').value,
+    client_extern_id:(document.getElementById('client_extern_id')||{}).value || null,
     pre_marc:document.getElementById('pre_marc').value||'',
     marc_principal:document.getElementById('marc_principal').value||'',
     tipus_peca:getPieceTypeValue(),
