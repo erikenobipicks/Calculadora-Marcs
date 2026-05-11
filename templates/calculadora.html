@@ -570,6 +570,14 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <span class="opt-preu" id="preu-impressio">—</span>
             </div>
           </div>
+          <div id="impressio-paper-row" style="display:none;margin-top:.5rem;font-size:13px;color:var(--muted)">
+            <label style="margin-right:1rem;cursor:pointer">
+              <input type="radio" name="impressio-paper" value="lustre" checked onchange="onPaperChange()"> Lustre
+            </label>
+            <label style="cursor:pointer">
+              <input type="radio" name="impressio-paper" value="baryta" onchange="onPaperChange()"> Photo Rag Baryta
+            </label>
+          </div>
         </div>
 
         <!-- Refs seleccionades (per al càlcul) -->
@@ -1646,10 +1654,12 @@ function fetchClosest(){
     }
   }
   if(!fW) fW=w; if(!fH) fH=h;
-  var key = w+'x'+h+'_'+fW+'x'+fH;
+  var paperSel = document.querySelector('input[name="impressio-paper"]:checked');
+  var paper = paperSel ? paperSel.value : 'lustre';
+  var key = w+'x'+h+'_'+fW+'x'+fH+'_'+paper;
   if(key===_lastFetchKey){ calcular(); return; }
   _lastFetchKey=key;
-  fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH)
+  fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH+'&paper='+encodeURIComponent(paper))
     .then(function(r){return r.json();}).then(function(d){
       CLOSEST=d;
       // Reset selector de subtipus a SemiBrillo quan canvia la mida
@@ -2056,11 +2066,20 @@ showAlert(lm.print, 'err');
     return;
   }
   document.getElementById('opt-impressio').classList.toggle('selected', chk.checked);
+  var paperRow = document.getElementById('impressio-paper-row');
+  if(paperRow) paperRow.style.display = chk.checked ? 'block' : 'none';
   if(chk.checked && !CLOSEST.impressio){
     _lastFetchKey=''; fetchClosest();
   } else {
     updateImpressioPreu(); calcular();
   }
+}
+
+function onPaperChange(){
+  // Re-fetch perquè la tarifa del paper actual canvia (Baryta usa trams,
+  // Lustre la taula impressio + fórmula). Sense això el preu mostraria
+  // el del paper anterior.
+  _lastFetchKey=''; fetchClosest();
 }
 function onImpressioChange(){ toggleImpressio(); }
 
