@@ -1698,15 +1698,17 @@ function costImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
   return CLOSEST.impressio?CLOSEST.impressio.preu:(PREUS.impressio||0);
 }
-// PVP per unitat de la impressió segons el mode de visualització:
-//  - Admin en vista taller (cost): PVD sense marge (impressio.preu)
-//  - Vista PVP (client): impressio.pvp del servidor (ja inclou el marge per tram d'àrea)
-//  - Fallback per a calc antiga sense pvp: marge legacy aplicat sobre PVD
+// PVP per unitat de la impressió:
+//  - Si el backend ja retorna 'pvp' (preu amb marge per tram d'àrea aplicat),
+//    el fem servir tal qual — és el preu al client final per a tots els
+//    usuaris, admin inclòs.
+//  - Fallback per a calc antiga sense pvp: aplica el marge legacy sobre PVD.
+// Si l'usuari vol veure el cost de taller, ha de canviar a rmode='cost'
+// amb el botó "€" del resum (no depèn d'IS_ADMIN).
 function pvpImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
   var c = CLOSEST.impressio;
   if(!c) return PREUS.impressio || 0;
-  if(IS_ADMIN && adminModeExtra === 0) return c.preu || 0;
   if(c.pvp != null) return c.pvp;
   var m = (typeof marge_impressio !== 'undefined' && marge_impressio) ? marge_impressio : marge;
   return (c.preu || 0) * (1 + (m||0)/100);
@@ -2167,16 +2169,11 @@ function calcular(){
   // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
   // marge legacy ja no s'aplica aquí.
   var pvpImp  = pvpImpressio();
-  // Mode admin: si l'admin escull "client", aplica un +60% extra sobre el PVP
-  // per simular el preu al client final. Usuaris no-admin mai toquen aquest factor.
-  // NOTA: factorModeAdmin NO s'aplica a impressions — el seu pvp ja inclou el
-  // marge per tram d'àrea (que per a admin ja és el preu al client final).
-  // NOTA 2: factorModeAdmin TAMPOC s'aplica a pvpMarc — margeMarc ja ve dels
-  // mr_trams (preu al client final). Aplicar-lo aquí donaria doble marge i
-  // l'admin veuria el marc ×1,60 més car que un distribuïdor amb la mateixa
-  // configuració de trams.
-  var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
-  var pNet    = pvpMarc*qty + pvpExt*qty*factorModeAdmin + pvpImp*qty;
+  // Admin és un usuari més: aplica el mateix marge_pro / trams que un
+  // distribuïdor. Si vols veure el cost de taller, fes servir el botó "€"
+  // (rmode='cost'). El toggle "PVD/Client" del bloc d'admin queda en
+  // desús (es pot retirar més endavant).
+  var pNet    = pvpMarc*qty + pvpExt*qty + pvpImp*qty;
 
   // Descompte combo (per combinació de productes). Detectem components
   // i apliquem el % corresponent ABANS del descompte manual del client.
