@@ -2453,6 +2453,190 @@ def public_pricing():
     })
 
 
+def _pro_clients_lookup_user_id(username):
+    """Resol username (case-insensitive) → usuaris.id. Retorna None si no
+    existeix o si l'usuari està bloquejat."""
+    if not username:
+        return None
+    row = query(
+        'SELECT id, access_status FROM usuaris WHERE LOWER(username)=?',
+        [str(username).strip().lower()], one=True
+    )
+    if not row:
+        return None
+    status = _user_access_status(row) if row else ''
+    if status == 'blocked':
+        return None
+    return row['id']
+
+
+def _pro_clients_row_to_dict(row):
+    if not row:
+        return None
+    def _g(key, default=None):
+        try:
+            return row[key]
+        except (KeyError, IndexError, TypeError):
+            return default
+    return {
+        'id': _g('id'),
+        'name': _g('nom') or '',
+        'company': _g('empresa') or '',
+        'email': _g('email') or '',
+        'phone': _g('telefon') or '',
+        'city': _g('poblacio') or '',
+        'notes': _g('notes') or '',
+        'source': _g('source') or 'private_area',
+        'last_order_ref': _g('last_order_ref') or '',
+        'order_count': int(_g('order_count') or 0),
+        'updated_at': str(_g('updated_at') or ''),
+        'created_at': str(_g('created_at') or ''),
+    }
+
+
+@app.route('/api/public/pro-clients/save', methods=['POST'])
+def public_pro_clients_save():
+    """Crea o actualitza un client privat d'un distribuïdor (web → calc).
+
+    Auth: X-Bridge-Token.
+    Body JSON: { username, name, company, email, phone, city, notes,
+                 source, last_order_ref, client_id (opcional per update) }
+    Cal almenys un de {name, email, phone} no buit.
+    Retorna: { ok, client: {...} } o { ok: false, error: <code> }."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    user_id = _pro_clients_lookup_user_id(username)
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    if not (name or email or phone):
+        return jsonify({'ok': False, 'error': 'missing_identity'}), 400
+    if not name:
+        name = email or phone
+
+    company = (data.get('company') or '').strip()
+    city = (data.get('city') or '').strip()
+    notes = (data.get('notes') or '').strip()
+    source = (data.get('source') or 'private_area').strip() or 'private_area'
+    last_order_ref = (data.get('last_order_ref') or '').strip()
+    client_id = (data.get('client_id') or '').strip()
+
+    try:
+        if client_id and str(client_id).isdigit():
+            # Update si pertany a l'usuari (mai d'un altre distribuïdor)
+            existing = query(
+                'SELECT id FROM pro_clients WHERE id=? AND pro_user_id=?',
+                [int(client_id), user_id], one=True
+            )
+            if not existing:
+                return jsonify({'ok': False, 'error': 'client_not_found'}), 404
+            execute(
+                'UPDATE pro_clients SET nom=?, empresa=?, email=?, telefon=?, '
+                'poblacio=?, notes=?, source=?, last_order_ref=?, '
+                'updated_at=CURRENT_TIMESTAMP WHERE id=? AND pro_user_id=?',
+                [name, company, email, phone, city, notes, source, last_order_ref,
+                 int(client_id), user_id]
+            )
+            row = query('SELECT * FROM pro_clients WHERE id=?', [int(client_id)], one=True)
+        else:
+            # Dedup soft: si ja existeix un client del mateix usuari amb el
+            # mateix email (no buit), l'actualitzem en comptes de duplicar.
+            existing = None
+            if email:
+                existing = query(
+                    'SELECT id FROM pro_clients WHERE pro_user_id=? AND LOWER(email)=?',
+                    [user_id, email.lower()], one=True
+                )
+            if existing:
+                execute(
+                    'UPDATE pro_clients SET nom=?, empresa=?, email=?, telefon=?, '
+                    'poblacio=?, notes=?, source=?, last_order_ref=?, '
+                    'updated_at=CURRENT_TIMESTAMP WHERE id=? AND pro_user_id=?',
+                    [name, company, email, phone, city, notes, source, last_order_ref,
+                     existing['id'], user_id]
+                )
+                row = query('SELECT * FROM pro_clients WHERE id=?', [existing['id']], one=True)
+            else:
+                execute(
+                    'INSERT INTO pro_clients (pro_user_id, nom, empresa, email, telefon, '
+                    'poblacio, notes, source, last_order_ref) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [user_id, name, company, email, phone, city, notes, source, last_order_ref]
+                )
+                # Recuperem l'últim del mateix usuari (en PG fariem RETURNING,
+                # però mantenim portabilitat amb SQLite).
+                row = query(
+                    'SELECT * FROM pro_clients WHERE pro_user_id=? '
+                    'ORDER BY id DESC LIMIT 1', [user_id], one=True
+                )
+        return jsonify({'ok': True, 'client': _pro_clients_row_to_dict(row)})
+    except Exception as exc:
+        print(f'pro_clients_save error: {exc}')
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+
+@app.route('/api/public/pro-clients', methods=['GET'])
+def public_pro_clients_list():
+    """Llista els clients privats d'un distribuïdor (ordenats per
+    updated_at DESC). Auth: X-Bridge-Token. Query: ?username=&limit=."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    username = (request.args.get('username') or '').strip()
+    user_id = _pro_clients_lookup_user_id(username)
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    try:
+        limit = int(request.args.get('limit') or 50)
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+
+    rows = query(
+        'SELECT * FROM pro_clients WHERE pro_user_id=? '
+        'ORDER BY updated_at DESC, id DESC LIMIT ?',
+        [user_id, limit]
+    ) or []
+    return jsonify({
+        'ok': True,
+        'clients': [_pro_clients_row_to_dict(r) for r in rows],
+    })
+
+
+@app.route('/api/public/pro-clients/<int:client_id>', methods=['GET'])
+def public_pro_clients_get(client_id):
+    """Obté un client privat (només si pertany al distribuïdor).
+    Auth: X-Bridge-Token. Query: ?username=."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    username = (request.args.get('username') or '').strip()
+    user_id = _pro_clients_lookup_user_id(username)
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    row = query(
+        'SELECT * FROM pro_clients WHERE id=? AND pro_user_id=?',
+        [client_id, user_id], one=True
+    )
+    if not row:
+        return jsonify({'ok': False, 'error': 'client_not_found'}), 404
+    return jsonify({'ok': True, 'client': _pro_clients_row_to_dict(row)})
+
+
 @app.route('/api/public/compute', methods=['GET'])
 def public_compute():
     """Calcula un preu base (sense marge del client, sense IVA) per un producte concret.
@@ -3621,6 +3805,53 @@ def admin_ensure_clients_externs():
     return "<h2>clients_externs</h2><pre>" + "\n".join(resultats) + "</pre>"
 
 
+@app.route('/admin/ensure-pro-clients')
+@admin_required
+def admin_ensure_pro_clients():
+    """Emergència: només crea la taula pro_clients + índexs, sense passar
+    pel loop sencer de /admin/run-migrations. Pensat per al moment del
+    rollout de la unificació de clients web↔calc."""
+    resultats = []
+    db = get_db()
+    if USE_PG:
+        try:
+            execute("SET lock_timeout = '3000ms'")
+            db.commit()
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            resultats.append(f"SKIP lock_timeout: {str(e)[:120]}")
+    sentencies = [
+        """CREATE TABLE IF NOT EXISTS pro_clients (
+            id SERIAL PRIMARY KEY,
+            pro_user_id INTEGER NOT NULL,
+            nom VARCHAR(255) NOT NULL,
+            empresa VARCHAR(255),
+            email VARCHAR(255),
+            telefon VARCHAR(50),
+            poblacio VARCHAR(120),
+            notes TEXT,
+            source VARCHAR(50) DEFAULT 'private_area',
+            last_order_ref VARCHAR(120),
+            order_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user ON pro_clients(pro_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_email ON pro_clients(pro_user_id, email)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_updated ON pro_clients(pro_user_id, updated_at DESC)",
+    ]
+    for sql in sentencies:
+        try:
+            execute(sql)
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            resultats.append(f"SKIP: {str(e)[:120]}")
+    return "<h2>pro_clients</h2><pre>" + "\n".join(resultats) + "</pre>"
+
+
 @app.route('/admin/run-migrations')
 @admin_required
 def admin_run_migrations():
@@ -3737,6 +3968,28 @@ def admin_run_migrations():
         # FK a comandes (nul·lable: les comandes existents queden a NULL).
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
+        # Clients privats dels distribuïdors (els seus clients finals).
+        # Separats de clients_externs, que és la llista del laboratori per a
+        # albarans FD. Cada distribuïdor (pro_user_id) té els seus, no es
+        # comparteixen entre distribuïdors.
+        """CREATE TABLE IF NOT EXISTS pro_clients (
+            id SERIAL PRIMARY KEY,
+            pro_user_id INTEGER NOT NULL,
+            nom VARCHAR(255) NOT NULL,
+            empresa VARCHAR(255),
+            email VARCHAR(255),
+            telefon VARCHAR(50),
+            poblacio VARCHAR(120),
+            notes TEXT,
+            source VARCHAR(50) DEFAULT 'private_area',
+            last_order_ref VARCHAR(120),
+            order_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user ON pro_clients(pro_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_email ON pro_clients(pro_user_id, email)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_updated ON pro_clients(pro_user_id, updated_at DESC)",
     ]
     for sql in creates_primers:
         try:
