@@ -3546,6 +3546,49 @@ def cataleg():
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS)
 
+@app.route('/admin/ensure-clients-externs')
+@admin_required
+def admin_ensure_clients_externs():
+    """Emergència: només crea la taula clients_externs + índexs + FK a
+    comandes, sense passar pel loop sencer de /admin/run-migrations. Pensat
+    per quan run-migrations es queda penjat darrere d'ALTERs lentes i el
+    panell /admin/clients-externs torna 500."""
+    resultats = []
+    db = get_db()
+    if USE_PG:
+        try:
+            execute("SET lock_timeout = '3000ms'")
+            db.commit()
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            resultats.append(f"SKIP lock_timeout: {str(e)[:120]}")
+    sentencies = [
+        """CREATE TABLE IF NOT EXISTS clients_externs (
+            id SERIAL PRIMARY KEY,
+            nom VARCHAR(255) NOT NULL,
+            nif VARCHAR(30),
+            fd_contact_id VARCHAR(100) NOT NULL UNIQUE,
+            actiu BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
+    ]
+    for sql in sentencies:
+        try:
+            execute(sql)
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            resultats.append(f"SKIP: {str(e)[:120]}")
+    return "<h2>clients_externs</h2><pre>" + "\n".join(resultats) + "</pre>"
+
+
 @app.route('/admin/run-migrations')
 @admin_required
 def admin_run_migrations():
@@ -3577,6 +3620,22 @@ def admin_run_migrations():
     resultats = []
     db = get_db()
 
+    # PG: si una ALTER queda esperant un lock (autovacuum, transaccions
+    # llargues, etc.) cau ràpid (3s) en lloc de drenar el statement_timeout
+    # complet. Sense això, 3 ALTERs blocades poden esgotar el budget de
+    # gunicorn i deixar el loop a mig fer (i.e. amb taules noves sense crear).
+    if USE_PG:
+        try:
+            execute("SET lock_timeout = '3000ms'")
+            db.commit()
+            resultats.append("OK: lock_timeout=3s")
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP lock_timeout: {str(e)[:120]}")
+
     # 1) init_db() (CREATE TABLE + ALTER + seeds lleugers)
     try:
         init_db()
@@ -3588,56 +3647,13 @@ def admin_run_migrations():
             pass
         resultats.append(f"SKIP init_db(): {str(e)[:120]}")
 
-    alteracions = [
-        # Moldures
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS merma_pct DECIMAL(4,2) DEFAULT 10.00",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS minim_cm DECIMAL(6,1) DEFAULT 100.0",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS data_cost DATE",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS descatalogada BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_stock TEXT",
-        # Vidres
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS data_cost DATE",
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
-        # Encolat
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS data_cost DATE",
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
-        # Passpartout
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS data_cost DATE",
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS notes_cost TEXT",
-        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
-        # Comandes
-        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS cost_unitari DECIMAL(8,4)",
-        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS pvd_unitari DECIMAL(8,4)",
-        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_admin_snap DECIMAL(5,2)",
-        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_pro_snap DECIMAL(5,2)",
-        # Usuaris
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_pro_pct DECIMAL(5,2)",
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_impressio_pro_pct DECIMAL(5,2)",
-        # Trams de marge per impressions (PVD→PVP segons àrea de la foto)
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram1 REAL",
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram2 REAL",
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram3 REAL",
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram4 REAL",
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram5 REAL",
-        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram6 REAL",
-        # Historial de preus de cost — noms de columna alineats amb el codi
-        # existent (taula, preu_cost_antic, data, notes).
+    # Pas A: CREATE TABLE / CREATE INDEX primer. Aquestes operacions són
+    # ràpides (taules buides o ja existents amb IF NOT EXISTS) i no requereixen
+    # un ACCESS EXCLUSIVE lock sobre taules grans existents, per tant no es
+    # queden bloquejades. Les fem ABANS que les ALTERs perquè si una ALTER
+    # esgota el budget de gunicorn, almenys les taules noves ja existeixen.
+    creates_primers = [
+        # Historial de preus de cost
         """CREATE TABLE IF NOT EXISTS historial_preus_cost (
             id SERIAL PRIMARY KEY,
             taula VARCHAR(50) NOT NULL,
@@ -3689,6 +3705,71 @@ def admin_run_migrations():
         # FK a comandes (nul·lable: les comandes existents queden a NULL).
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
+    ]
+    for sql in creates_primers:
+        try:
+            execute(sql)
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP: {str(e)[:120]}")
+
+    alteracions = [
+        # Moldures
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS merma_pct DECIMAL(4,2) DEFAULT 10.00",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS minim_cm DECIMAL(6,1) DEFAULT 100.0",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS descatalogada BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_stock TEXT",
+        # Vidres
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
+        # Encolat
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE encolat_pro ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
+        # Passpartout
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS data_cost DATE",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS usuari_cost_id INTEGER",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS notes_cost TEXT",
+        "ALTER TABLE passpartout ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
+        # Comandes
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS cost_unitari DECIMAL(8,4)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS pvd_unitari DECIMAL(8,4)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_admin_snap DECIMAL(5,2)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_pro_snap DECIMAL(5,2)",
+        # Usuaris
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_pro_pct DECIMAL(5,2)",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_impressio_pro_pct DECIMAL(5,2)",
+        # Trams de marge per impressions (PVD→PVP segons àrea de la foto)
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram1 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram2 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram3 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram4 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram5 REAL",
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram6 REAL",
+        # NOTA: les CREATE TABLE / CREATE INDEX d'historial_preus_cost, lab_sends,
+        # audit_log, clients_externs i les seves dependències (comandes.client_extern_id)
+        # ara s'executen a `creates_primers` ABANS d'aquest bloc — així no es
+        # bloquegen mai darrere d'ALTERs lentes.
+
         # Migració de l'antic límit del tram 4 (7500 cm² → 6000 cm²).
         # Només actua si el valor és exactament '7500' per no sobreescriure
         # personalitzacions explícites. Idempotent.
