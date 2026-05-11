@@ -1919,6 +1919,8 @@ def public_professional_signup():
         web_url=web_url, instagram=instagram, fiscal_id=fiscal_id,
         subject=subject, message=message,
     )
+    # Email de confirmació al usuari (acusament de rebuda + què esperar)
+    _send_signup_received_email(name, email)
     return jsonify({'ok': True, 'action': 'created', 'status': 'pending'})
 
 
@@ -2004,6 +2006,119 @@ def _notify_signup_email(*, action, status, name, email, phone, business_name,
         # No bloquejar mai la resposta del signup: l'usuari s'ha desat,
         # només es perd la notificació puntual.
         print(f"[signup_notify] FAIL ({email}): {e}")
+
+
+def _send_user_email_html(to_addr, subject, html, log_tag='user_email'):
+    """Helper compartit per a emails al USUARI final. Reusa gmail_user/pass
+    de config (com a la resta del codebase). Try/except: mai bloqueja el
+    flux que el crida — el correu és informatiu."""
+    try:
+        cfg = {r['clau']: r['valor'] for r in (query('SELECT clau, valor FROM config') or [])}
+        gmail_user = (cfg.get('gmail_user') or '').strip()
+        gmail_pass = (cfg.get('gmail_pass') or '').strip()
+        if not gmail_user or not gmail_pass:
+            print(f"[{log_tag}] skip: gmail_user/pass no configurat (dest={to_addr})")
+            return False
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        m = MIMEMultipart('alternative')
+        m['Subject'] = subject
+        m['From'] = gmail_user
+        m['To'] = to_addr
+        m['Reply-To'] = gmail_user
+        m.attach(MIMEText(html, 'html'))
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            s.login(gmail_user, gmail_pass)
+            s.sendmail(gmail_user, [to_addr], m.as_string())
+        print(f"[{log_tag}] OK: enviat a {to_addr}")
+        return True
+    except Exception as e:
+        print(f"[{log_tag}] FAIL ({to_addr}): {e}")
+        return False
+
+
+def _send_signup_received_email(name, email):
+    """Email al usuari confirmant que hem rebut la sol·licitud d'alta.
+    Estableix expectatives perquè no es quedi 'penjat' esperant resposta."""
+    nom_visible = (name or '').strip() or 'professional'
+    html = f"""\
+<div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:18px">
+    Hem rebut la teva sol·licitud
+  </h2>
+  <p style="font-size:14px;line-height:1.6">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6">Gràcies per voler treballar amb <b>Reus Revela</b>. Hem rebut la teva sol·licitud d'alta professional i la revisarem en les <b>pròximes 24-48 hores hàbils</b>.</p>
+  <p style="font-size:14px;line-height:1.6">Quan el teu compte estigui actiu, t'enviarem un correu separat amb:</p>
+  <ul style="font-size:14px;line-height:1.7;padding-left:20px;margin:8px 0 18px">
+    <li>El teu usuari i contrasenya inicial</li>
+    <li>L'enllaç a la calculadora</li>
+    <li>El tutorial per començar a fer pressupostos</li>
+  </ul>
+  <p style="font-size:14px;line-height:1.6">Si tens cap pregunta urgent, pots respondre directament a aquest correu o escriure'ns a <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a>.</p>
+  <p style="font-size:14px;line-height:1.6;margin-top:24px">Una salutació,<br><b>Equip Reus Revela</b></p>
+  <p style="font-size:11px;color:#9E9B94;margin-top:24px;border-top:1px solid #E5E2DB;padding-top:12px">Aquest correu s'envia automàticament en rebre el formulari d'alta professional a reusrevela.cat.</p>
+</div>
+"""
+    return _send_user_email_html(
+        email,
+        'Hem rebut la teva sol·licitud — Reus Revela',
+        html,
+        log_tag='signup_received',
+    )
+
+
+def _send_user_activation_email(name, email, temp_password):
+    """Email al usuari quan l'admin l'activa: usuari + contrasenya inicial +
+    enllaços a la calc i al tutorial. Important: la contrasenya va en clar
+    (és l'única manera). El missatge demana que la canviï al primer login."""
+    nom_visible = (name or '').strip() or 'professional'
+    safe_pass = (temp_password or '').replace('<', '&lt;').replace('>', '&gt;')
+    html = f"""\
+<div style="font-family:sans-serif;max-width:580px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:18px">
+    Ja pots fer servir la calculadora
+  </h2>
+  <p style="font-size:14px;line-height:1.6">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6">El teu compte a <b>Reus Revela</b> ja està actiu. Aquestes són les teves dades d'accés:</p>
+
+  <table style="width:100%;border-collapse:collapse;background:#fcfbf8;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden;margin:14px 0">
+    <tr>
+      <td style="padding:11px 14px;border-bottom:1px solid #F3F1EB;width:130px;color:#6B6860;font-size:13px"><b>Usuari</b></td>
+      <td style="padding:11px 14px;border-bottom:1px solid #F3F1EB;font-family:Consolas,monospace;font-size:14px">{email}</td>
+    </tr>
+    <tr>
+      <td style="padding:11px 14px;color:#6B6860;font-size:13px"><b>Contrasenya inicial</b></td>
+      <td style="padding:11px 14px;font-family:Consolas,monospace;font-size:14px"><b>{safe_pass}</b></td>
+    </tr>
+  </table>
+
+  <p style="font-size:13px;color:#6B6860;line-height:1.5;background:#FDF3E8;border:1px solid #E8C89A;border-radius:8px;padding:11px 14px;margin:14px 0">
+    ⚠ Et recomanem canviar la contrasenya al primer accés. Pots fer-ho des de la secció <b>Ajustos</b> dins la calculadora.
+  </p>
+
+  <p style="font-size:14px;margin:22px 0 14px"><b>Enllaços útils:</b></p>
+  <p style="margin:8px 0">
+    <a href="https://calculadora.reusrevela.cat/calculadora" style="display:inline-block;background:#1A6B45;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;font-size:14px">Anar a la calculadora →</a>
+  </p>
+  <p style="margin:8px 0">
+    <a href="https://reusrevela.cat/tutorial" style="display:inline-block;background:transparent;color:#1A6B45;text-decoration:none;padding:10px 18px;border:1px solid #1A6B45;border-radius:8px;font-weight:600;font-size:14px">📘 Veure el tutorial</a>
+  </p>
+
+  <p style="font-size:14px;line-height:1.6;margin-top:24px">El tutorial t'explica com fer servir la calculadora, com gestionar pressupostos i què fer si tens problemes per entrar (per exemple, si has d'esborrar les cookies).</p>
+
+  <p style="font-size:14px;line-height:1.6">Si tens cap dubte o problema, respon a aquest correu o escriu-nos a <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a>.</p>
+
+  <p style="font-size:14px;line-height:1.6;margin-top:24px">Una salutació,<br><b>Equip Reus Revela</b></p>
+  <p style="font-size:11px;color:#9E9B94;margin-top:24px;border-top:1px solid #E5E2DB;padding-top:12px">Aquest correu s'envia automàticament en activar el teu compte professional.</p>
+</div>
+"""
+    return _send_user_email_html(
+        email,
+        'El teu compte ja està actiu — Reus Revela',
+        html,
+        log_tag='user_activation',
+    )
 
 
 @app.route('/api/public/bridge-login', methods=['POST'])
@@ -5264,9 +5379,29 @@ def admin_usuari():
         flash('Contrasenya actualitzada.', 'ok')
     elif action == 'actualitzar_estat':
         uid = request.form['uid']
-        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
+        # Llegim l'estat actual i les dades de l'usuari ABANS de l'UPDATE
+        # per detectar la transició a 'active' i poder enviar email amb la
+        # contrasenya regenerada al usuari.
+        target = query(
+            'SELECT username, nom, access_status FROM usuaris WHERE id=?',
+            [uid], one=True,
+        )
+        old_status = _user_access_status(target) if target else ''
+        new_status = request.form.get('access_status', 'active') or 'active'
+
+        # Si l'estat passa a 'active' venint de no-actiu, regenerem la
+        # contrasenya i la inclourem a l'email d'activació. Si ja era
+        # actiu, no toquem la contrasenya (poden estar editant altres
+        # camps del perfil).
+        notify_activation = (new_status == 'active' and old_status != 'active')
+        new_temp_password = None
+        if notify_activation:
+            new_temp_password = secrets.token_urlsafe(12)
+            execute('UPDATE usuaris SET password=? WHERE id=?',
+                    [hash_pw(new_temp_password), uid])
+
         execute('UPDATE usuaris SET access_status=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=? WHERE id=?',
-                [request.form.get('access_status', 'active'),
+                [new_status,
                  request.form.get('profile_type', 'professional'),
                  request.form.get('web_url', '').strip(),
                  request.form.get('instagram', '').strip(),
@@ -5275,8 +5410,16 @@ def admin_usuari():
                  uid])
         _audit_log('user.profile_update', target_user_id=int(uid) if str(uid).isdigit() else None,
                    target_username=_row_get(target, 'username', '') if target else '',
-                   details=f"status={request.form.get('access_status','active')} profile={request.form.get('profile_type','professional')}")
-        flash('Perfil professional actualitzat.', 'ok')
+                   details=f"status={new_status} profile={request.form.get('profile_type','professional')}"
+                           + (' [activation_email]' if notify_activation else ''))
+        if notify_activation:
+            user_email = (_row_get(target, 'username', '') or '').strip()
+            user_name  = (_row_get(target, 'nom', '') or '').strip()
+            if user_email:
+                _send_user_activation_email(user_name, user_email, new_temp_password)
+            flash(f"Perfil actualitzat. Compte activat i email d'accés enviat a {user_email}.", 'ok')
+        else:
+            flash('Perfil professional actualitzat.', 'ok')
     elif action == 'actualitzar_imp_trams':
         uid = request.form['uid']
         target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
