@@ -1896,6 +1896,14 @@ def public_professional_signup():
             'UPDATE usuaris SET nom=?, nom_empresa=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=?, access_status=? WHERE id=?',
             [name, business_name, profile_type, web_url, instagram, fiscal_id, notes, next_status, existing['id']]
         )
+        _notify_signup_email(
+            action='updated',
+            status=next_status,
+            name=name, email=email, phone=phone,
+            business_name=business_name, profile_type=profile_type,
+            web_url=web_url, instagram=instagram, fiscal_id=fiscal_id,
+            subject=subject, message=message,
+        )
         return jsonify({'ok': True, 'action': 'updated', 'status': next_status})
 
     temp_password = secrets.token_urlsafe(12)
@@ -1903,7 +1911,99 @@ def public_professional_signup():
         'INSERT INTO usuaris (username, password, nom, is_admin, nom_empresa, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
         [email, hash_pw(temp_password), name, 0, business_name, 'pending', profile_type, web_url, instagram, fiscal_id, notes]
     )
+    _notify_signup_email(
+        action='created',
+        status='pending',
+        name=name, email=email, phone=phone,
+        business_name=business_name, profile_type=profile_type,
+        web_url=web_url, instagram=instagram, fiscal_id=fiscal_id,
+        subject=subject, message=message,
+    )
     return jsonify({'ok': True, 'action': 'created', 'status': 'pending'})
+
+
+def _notify_signup_email(*, action, status, name, email, phone, business_name,
+                        profile_type, web_url, instagram, fiscal_id, subject, message):
+    """Envia un email al admin notificant una nova alta o actualització de
+    perfil pendent. Mai bloqueja: si Gmail no està configurat o la connexió
+    falla, fa print i continua (l'alta ja s'ha desat a la BD).
+
+    Destinatari: config['signup_notify_email'] o, per defecte,
+    config['gmail_user'] (compte que envia). Així reusrevela rep
+    l'avís al mateix correu que té configurat per a SMTP."""
+    try:
+        cfg = {r['clau']: r['valor'] for r in (query('SELECT clau, valor FROM config') or [])}
+        gmail_user = (cfg.get('gmail_user') or '').strip()
+        gmail_pass = (cfg.get('gmail_pass') or '').strip()
+        if not gmail_user or not gmail_pass:
+            print(f"[signup_notify] skip: gmail_user/pass no configurat — alta {email} desada sense email")
+            return
+        dest = (cfg.get('signup_notify_email') or gmail_user).strip()
+
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        action_label = 'Nova sol·licitud d\'alta' if action == 'created' else 'Actualització de perfil'
+        status_label = {
+            'pending': 'Pendent de validar',
+            'active':  'Actiu (ja autoritzat)',
+            'blocked': 'Bloquejat',
+        }.get(status, status)
+
+        rows_html = []
+        def _row(label, value):
+            return f'<tr><td style="padding:6px 10px;color:#6B6860;font-size:13px;border-bottom:1px solid #F3F1EB"><b>{label}</b></td><td style="padding:6px 10px;font-size:13px;border-bottom:1px solid #F3F1EB">{value or "—"}</td></tr>'
+        rows_html.append(_row('Nom', name))
+        rows_html.append(_row('Email', email))
+        rows_html.append(_row('Telèfon', phone))
+        rows_html.append(_row('Empresa / Botiga', business_name))
+        rows_html.append(_row('Tipus de perfil', profile_type))
+        rows_html.append(_row('Web', web_url))
+        rows_html.append(_row('Instagram', instagram))
+        rows_html.append(_row('CIF / NIF', fiscal_id))
+        rows_html.append(_row('Assumpte', subject))
+
+        msg_block = ''
+        if message:
+            safe_msg = (message or '').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+            msg_block = (
+                f'<p style="font-family:sans-serif;font-size:13px;margin-top:18px;color:#6B6860"><b>Missatge:</b></p>'
+                f'<p style="font-family:sans-serif;font-size:13px;line-height:1.5;background:#fcfbf8;border:1px solid #E5E2DB;border-radius:8px;padding:11px 14px;margin-top:6px">{safe_msg}</p>'
+            )
+
+        html = f"""\
+<div style="font-family:sans-serif;max-width:620px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:14px">
+    {action_label}
+  </h2>
+  <p style="font-size:14px;margin-bottom:14px"><b>Estat:</b>
+    <span style="background:#FDF3E8;color:#C8873A;padding:3px 9px;border-radius:999px;font-weight:700;font-size:12px">{status_label}</span>
+  </p>
+  <p style="font-size:14px;margin-bottom:6px">{datetime.now().strftime('%d/%m/%Y · %H:%M')}</p>
+  <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:14px;background:#fff;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden">
+    {''.join(rows_html)}
+  </table>
+  {msg_block}
+  <p style="margin-top:22px">
+    <a href="https://calculadora.reusrevela.cat/admin/usuaris" style="display:inline-block;background:#1A6B45;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:13px">Gestionar a /admin/usuaris →</a>
+  </p>
+  <p style="font-size:11px;color:#9E9B94;margin-top:24px">Aquest correu s'envia automàticament des de la calculadora quan algú envia el formulari d'alta professional a reusrevela.cat.</p>
+</div>
+"""
+        m = MIMEMultipart('alternative')
+        m['Subject'] = f"[Alta professional] {name or email} — {status_label}"
+        m['From'] = gmail_user
+        m['To'] = dest
+        m.attach(MIMEText(html, 'html'))
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            s.login(gmail_user, gmail_pass)
+            s.sendmail(gmail_user, [dest], m.as_string())
+        print(f"[signup_notify] OK: enviat a {dest} per a {email} (action={action})")
+    except Exception as e:
+        # No bloquejar mai la resposta del signup: l'usuari s'ha desat,
+        # només es perd la notificació puntual.
+        print(f"[signup_notify] FAIL ({email}): {e}")
 
 
 @app.route('/api/public/bridge-login', methods=['POST'])
