@@ -216,15 +216,24 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .sticky-bar-label{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600}
 .sticky-bar-total{font-family:'DM Serif Display',serif;font-size:21px;font-weight:400;line-height:1;letter-spacing:.2px}
 .sticky-bar-meta{font-size:11px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30ch}
-.sticky-bar-cta{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 16px;border:none;border-radius:999px;background:var(--green);color:#fff;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:filter .15s ease,opacity .15s ease}
+.sticky-bar-cta{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:8px 14px;border:none;border-radius:999px;background:var(--green);color:#fff;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:filter .15s ease,opacity .15s ease}
 .sticky-bar-cta:hover{filter:brightness(1.08)}
 .sticky-bar-cta:disabled,.sticky-bar-cta.is-disabled{opacity:.45;pointer-events:none;filter:grayscale(.4)}
+.sticky-bar-actions{display:inline-flex;align-items:center;gap:6px}
+.sb-secondary{background:#3a3935;color:#fff}
+.sb-secondary:hover{background:#4a4843}
+.sb-wa{background:#dcefe1;color:#0e5430;border:1px solid rgba(184,220,201,.65)}
+.sb-wa:hover{filter:brightness(.96)}
+.sticky-bar-cta svg{display:block;flex-shrink:0}
 body.has-sticky-bar{padding-bottom:78px}
 @media (max-width:640px){
   .sticky-bar{left:8px;right:8px;bottom:8px;transform:none;max-width:none;padding:7px 8px 7px 13px;gap:9px}
   .sticky-bar-total{font-size:18px}
   .sticky-bar-meta{font-size:10px;max-width:22ch}
   .sticky-bar-cta{min-height:36px;padding:7px 12px;font-size:12px}
+  .sticky-bar-actions{gap:4px}
+  .sb-secondary,.sb-wa{padding:8px 10px}
+  .sb-secondary .sb-label,.sb-wa .sb-label{display:none}
   body.has-sticky-bar{padding-bottom:66px}
 }
 </style>
@@ -697,7 +706,7 @@ body.has-sticky-bar{padding-bottom:78px}
           <summary>Més accions</summary>
           <div class="more-actions-menu" role="menu">
             <button type="button" class="more-action" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
-            <button type="button" class="more-action" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
+            <button type="button" class="more-action" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp Reus Revela</button>
             <button type="button" class="more-action" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
             <div class="more-action-sep" role="separator"></div>
             <button type="button" class="more-action" onclick="novaComanda()">Nou pressupost</button>
@@ -717,7 +726,21 @@ body.has-sticky-bar{padding-bottom:78px}
     <strong class="sticky-bar-total" id="sticky-bar-total">0,00 €</strong>
     <span class="sticky-bar-meta" id="sticky-bar-meta">Sense marc</span>
   </div>
-  <button type="button" class="sticky-bar-cta" id="sticky-bar-cta" onclick="guardar()">Desar opció</button>
+  <div class="sticky-bar-actions">
+    <button type="button" class="sticky-bar-cta" id="sticky-bar-cta" onclick="guardar()" title="Desar opció"><span class="sb-label">Desar</span></button>
+    <button type="button" class="sticky-bar-cta sb-secondary" id="sb-pdf" onclick="generarPDF()" disabled title="Generar PDF">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="sb-label">PDF</span>
+    </button>
+    <button type="button" class="sticky-bar-cta sb-wa" id="sb-wa-client" onclick="whatsappClient()" disabled title="WhatsApp al client">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <span class="sb-label">Client</span>
+    </button>
+    <button type="button" class="sticky-bar-cta sb-wa" id="sb-wa-rr" onclick="whatsappObjectiu()" disabled title="WhatsApp Reus Revela">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <span class="sb-label">Reus Revela</span>
+    </button>
+  </div>
 </div>
 
 <div class="zoom-panel" id="zoom-panel"></div>
@@ -3157,6 +3180,25 @@ recalcMides();
   document.addEventListener('click', function(e){
     if (details.open && !details.contains(e.target)) details.open = false;
   });
+})();
+
+// ── Sticky bar icon buttons: mirror disabled state of source buttons ─────
+(function(){
+  function mirror(srcId, dstId){
+    var src = document.getElementById(srcId);
+    var dst = document.getElementById(dstId);
+    if (!src || !dst) return;
+    function sync(){
+      var d = src.disabled || src.hasAttribute('disabled');
+      dst.disabled = d;
+      dst.classList.toggle('is-disabled', d);
+    }
+    new MutationObserver(sync).observe(src, {attributes:true, attributeFilter:['disabled']});
+    sync();
+  }
+  mirror('btn-pdf', 'sb-pdf');
+  mirror('btn-wa-client', 'sb-wa-client');
+  mirror('btn-wa-objectiu', 'sb-wa-rr');
 })();
 
 // ── Mini marc preview + foto-col-main visibility (mirall de #foto-box) ───
