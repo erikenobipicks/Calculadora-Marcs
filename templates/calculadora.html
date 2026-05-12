@@ -195,6 +195,22 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .modal h3{font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:.4rem;font-weight:400}
 .modal p{font-size:13px;color:var(--muted);margin-bottom:1.1rem;line-height:1.6}
 .steps-box{background:var(--amber-l);border-left:3px solid var(--amber);padding:9px 12px;border-radius:0 6px 6px 0;font-size:12px;color:var(--text);line-height:1.7;margin-bottom:1.1rem}
+.sticky-bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:240;display:inline-flex;align-items:center;gap:14px;padding:9px 10px 9px 16px;border-radius:999px;background:rgba(28,27,24,.96);color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.28);max-width:calc(100vw - 24px)}
+.sticky-bar-info{display:grid;gap:1px;line-height:1.15;min-width:0}
+.sticky-bar-label{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600}
+.sticky-bar-total{font-family:'DM Serif Display',serif;font-size:21px;font-weight:400;line-height:1;letter-spacing:.2px}
+.sticky-bar-meta{font-size:11px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30ch}
+.sticky-bar-cta{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 16px;border:none;border-radius:999px;background:var(--green);color:#fff;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:filter .15s ease,opacity .15s ease}
+.sticky-bar-cta:hover{filter:brightness(1.08)}
+.sticky-bar-cta:disabled,.sticky-bar-cta.is-disabled{opacity:.45;pointer-events:none;filter:grayscale(.4)}
+body.has-sticky-bar{padding-bottom:78px}
+@media (max-width:640px){
+  .sticky-bar{left:8px;right:8px;bottom:8px;transform:none;max-width:none;padding:7px 8px 7px 13px;gap:9px}
+  .sticky-bar-total{font-size:18px}
+  .sticky-bar-meta{font-size:10px;max-width:22ch}
+  .sticky-bar-cta{min-height:36px;padding:7px 12px;font-size:12px}
+  body.has-sticky-bar{padding-bottom:66px}
+}
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
 </head>
@@ -669,6 +685,15 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 </div>
 
 
+
+<div class="sticky-bar" id="sticky-bar" aria-live="polite">
+  <div class="sticky-bar-info">
+    <span class="sticky-bar-label" id="sticky-bar-label">Total amb IVA</span>
+    <strong class="sticky-bar-total" id="sticky-bar-total">0,00 €</strong>
+    <span class="sticky-bar-meta" id="sticky-bar-meta">Sense marc</span>
+  </div>
+  <button type="button" class="sticky-bar-cta" id="sticky-bar-cta" onclick="guardar()">Desar opció</button>
+</div>
 
 <div class="zoom-panel" id="zoom-panel"></div>
 <script>
@@ -3056,6 +3081,46 @@ placeReversPeuGroup();
 applyIncompatibilities();
 recalcMides();
 
+// ── Sticky bottom bar: mirror total + marc principal ─────────────────────
+(function(){
+  var bar = document.getElementById('sticky-bar');
+  if (!bar) return;
+  document.body.classList.add('has-sticky-bar');
+
+  var totalEl = document.getElementById('r-final');
+  var labelEl = document.getElementById('r-lbl-final');
+  var marcInput = document.getElementById('marc_principal');
+  var btnSave = document.querySelector('.actions .btn-g');
+
+  var barTotal = document.getElementById('sticky-bar-total');
+  var barLabel = document.getElementById('sticky-bar-label');
+  var barMeta = document.getElementById('sticky-bar-meta');
+  var barCta = document.getElementById('sticky-bar-cta');
+
+  function refreshBar(){
+    if (totalEl) barTotal.textContent = totalEl.textContent || '0,00 €';
+    if (labelEl) barLabel.textContent = labelEl.textContent || 'Total amb IVA';
+    var ref = (marcInput && marcInput.value || '').trim();
+    barMeta.textContent = ref ? 'Marc ' + ref : 'Sense marc seleccionat';
+    if (btnSave){
+      var disabled = btnSave.disabled || btnSave.hasAttribute('disabled');
+      barCta.disabled = disabled;
+      barCta.classList.toggle('is-disabled', disabled);
+    }
+  }
+
+  if (totalEl){
+    new MutationObserver(refreshBar).observe(totalEl, {childList:true, characterData:true, subtree:true});
+  }
+  if (labelEl){
+    new MutationObserver(refreshBar).observe(labelEl, {childList:true, characterData:true, subtree:true});
+  }
+  if (marcInput){
+    marcInput.addEventListener('input', refreshBar);
+    marcInput.addEventListener('change', refreshBar);
+  }
+  refreshBar();
+})();
 
 </script>
 {% include '_private_whatsapp_widget.html' %}
