@@ -482,17 +482,24 @@ body.has-sticky-bar{padding-bottom:78px}
         <div id="mida-total-simple" style="margin-top:.5rem;font-size:12px;color:var(--hint)"></div>
       </div>
 
-      <div class="card">
+      {% set manual_extras = (extras or []) | selectattr('actiu') | selectattr('mode', 'equalto', 'manual') | list %}
+      <div class="card" id="extras-card"{% if not manual_extras %} style="display:none"{% endif %}>
         <div class="card-t">Extres</div>
         <div class="extras-list">
-          <label class="extra-toggle">
-            <input type="checkbox" id="extra-desmuntar-marc" onchange="calcular()">
+          {% for ex in manual_extras %}
+          <label class="extra-toggle" data-extra-key="{{ ex.key }}"
+                 data-extra-piece-types="{{ ex.piece_types|join(',') }}">
+            <input type="checkbox" class="extra-toggle-input" data-extra-key="{{ ex.key }}" onchange="calcular()">
             <span class="extra-toggle-body">
-              <strong>Desmuntar i netejar un marc existent</strong>
-              <span class="extra-toggle-desc">Quan el client porta un marc i vols aprofitar el vidre (o canviar-lo).</span>
+              <strong>{{ ex.name }}</strong>
+              {% if ex.description %}<span class="extra-toggle-desc">{{ ex.description }}</span>{% endif %}
             </span>
-            <span class="extra-toggle-price">+10 € PVD</span>
+            <span class="extra-toggle-price"
+                  data-extra-key="{{ ex.key }}"
+                  data-extra-price-pvd="{{ '%.2f'|format(ex.price_pvd) }}"
+                  data-extra-margin="{{ ex.margin_pct if ex.margin_pct is not none else '' }}">+{{ '%.2f'|format(ex.price_pvd) }} €</span>
           </label>
+          {% endfor %}
         </div>
       </div>
     </div>
@@ -772,6 +779,7 @@ body.has-sticky-bar{padding-bottom:78px}
 var MARGE_PRO = {{ marge_pro | tojson }};
 var MARGE_IMPRESSIO_PRO = {{ marge_impressio_pro | tojson }};
 var IS_ADMIN = {{ is_admin | tojson }};
+var EXTRAS_DATA = {{ extras | tojson }};
 var adminModeExtra = 60.0;  // % extra aplicat al PVP final en mode client (default). Només admin.
 
 function toggleAdminMode(){
@@ -2033,7 +2041,7 @@ function applyIncompatibilities(){
     if(proteccio !== 'vidre' && proteccio !== 'doble_vidre'){
       forcedSelections.proteccio = 'doble_vidre';
     }
-    note = 'Per a samarreta tria doble vidre, o bé vidre amb passpartú. S\'aplica feina addicional de 20 € (PVD).';
+    note = 'Per a samarreta tria doble vidre, o bé vidre amb passpartú. S\'aplica un càrrec de feina addicional (configurable a /admin/extras).';
   }
 
   Object.keys(rules).forEach(function(k){
@@ -2238,6 +2246,97 @@ function onMarcInput(){
   }, 600);
 }
 
+// ── Save/restore d'estat dels extras manuals ─────────────────────────────
+function collectExtrasState(){
+  var state = {};
+  document.querySelectorAll('.extra-toggle-input').forEach(function(cb){
+    var k = cb.dataset.extraKey;
+    if (k) state[k] = !!cb.checked;
+  });
+  return state;
+}
+function restoreExtrasState(e){
+  var state = (e && e.extras_state) || {};
+  // Backwards compat: anteriorment es desava com a 'extra_desmuntar_marc:bool'.
+  if (e && Object.prototype.hasOwnProperty.call(e, 'extra_desmuntar_marc') &&
+      state.desmuntar_marc === undefined){
+    state.desmuntar_marc = !!e.extra_desmuntar_marc;
+  }
+  document.querySelectorAll('.extra-toggle-input').forEach(function(cb){
+    var k = cb.dataset.extraKey;
+    cb.checked = !!(k && state[k]);
+  });
+}
+
+// ── Extras (configurables des de /admin/extras) ──────────────────────────
+// Retorna l'aportació dels extras al cost i al PVP. La part `costGlobalMargin`
+// és el sumatori dels PVDs dels extras que han de fer servir el marge global
+// del pressupost (s'afegeixen abans del *(1+marge/100) a calcular()).
+// La part `pvpFixed` és la suma ja amb marge propi aplicat pels extras que
+// porten un marge específic — ja no s'ha de multiplicar pel marge global.
+function extraAppliesToPiece(ex, pieceType){
+  var pts = ex.piece_types || [];
+  if (ex.mode === 'auto'){
+    // Auto s'aplica només si el tipus de peça hi és (buit = mai s'aplica auto).
+    return pts.length > 0 && pts.indexOf(pieceType) !== -1;
+  }
+  // Manual: si hi ha llista de tipus de peça, l'extra només està disponible
+  // per a aquells; buit = disponible per a tots.
+  return pts.length === 0 || pts.indexOf(pieceType) !== -1;
+}
+
+function computeExtrasCosts(){
+  var pieceType = getPieceTypeValue();
+  var cost = 0, costGlobalMargin = 0, pvpFixed = 0;
+  (EXTRAS_DATA||[]).forEach(function(ex){
+    if (!ex || !ex.actiu) return;
+    if (!extraAppliesToPiece(ex, pieceType)) return;
+    var applies;
+    if (ex.mode === 'auto'){
+      applies = true;
+    } else {
+      var cb = document.querySelector('.extra-toggle-input[data-extra-key="' + ex.key + '"]');
+      applies = !!(cb && cb.checked);
+    }
+    if (!applies) return;
+    var price = Number(ex.price_pvd)||0;
+    cost += price;
+    if (ex.margin_pct === null || ex.margin_pct === undefined || ex.margin_pct === ''){
+      costGlobalMargin += price;
+    } else {
+      pvpFixed += price * (1 + Number(ex.margin_pct)/100);
+    }
+  });
+  return {cost: cost, costGlobalMargin: costGlobalMargin, pvpFixed: pvpFixed};
+}
+
+// Refresca les etiquetes de preu dels toggles manuals (canvia entre PVP i PVD
+// segons el mode actual rmode). També amaga les files manuals que no apliquen
+// al tipus de peça seleccionat.
+function updateExtrasLabels(){
+  var pieceType = getPieceTypeValue();
+  var anyVisible = false;
+  document.querySelectorAll('.extra-toggle[data-extra-key]').forEach(function(row){
+    var key = row.dataset.extraKey;
+    var ex = (EXTRAS_DATA||[]).find(function(e){return e && e.key===key;});
+    if (!ex){ row.style.display='none'; return; }
+    var fits = extraAppliesToPiece(ex, pieceType);
+    row.style.display = fits ? '' : 'none';
+    if (fits) anyVisible = true;
+    var priceEl = row.querySelector('.extra-toggle-price');
+    if (priceEl){
+      var pvd = Number(ex.price_pvd)||0;
+      var marginEx = (ex.margin_pct===null||ex.margin_pct===undefined||ex.margin_pct==='')
+        ? (typeof marge === 'number' ? marge : 60) : Number(ex.margin_pct);
+      var pvp = pvd * (1 + marginEx/100);
+      var fmt = function(v){ return (Math.round(v*100)/100).toFixed(2).replace('.', ',') + ' €'; };
+      priceEl.textContent = (rmode==='cost') ? ('+' + fmt(pvd) + ' PVD') : ('+' + fmt(pvp));
+    }
+  });
+  var card = document.getElementById('extras-card');
+  if (card) card.style.display = anyVisible ? '' : 'none';
+}
+
 // ── Càlcul ────────────────────────────────────────────────────────────────
 function calcular(){
   refreshDescatalogadaWarnings();
@@ -2263,11 +2362,11 @@ function calcular(){
     finestresExtra = nFin * 2.0;  // Fixed PVP price per extra window
   }
   var cImpressio = costImpressio();
-  // Càrrec fix de samarreta (feina addicional, PVD)
-  var cSamarreta = (getPieceTypeValue() === 'samarreta') ? 20 : 0;
-  // Extres opcionals (PVD, marcats al panel inferior dret)
-  var cDesmuntar = (document.getElementById('extra-desmuntar-marc')||{}).checked ? 10 : 0;
-  var cExtres = cSamarreta + cDesmuntar;
+  // Extres configurables des de /admin/extras (auto per tipus de peça i manual).
+  // Retorna {cost: PVD total, costGlobalMargin: part PVD que usa el marge global,
+  //          pvpFixed: part ja amb marge propi aplicat}.
+  var extrasCalc = computeExtrasCosts();
+  var cExtres = extrasCalc.cost;
 
   var cMol=0;
   if((PREUS.marc>0||GRUIX.marc>0)&&(mW>0||mH>0)){
@@ -2291,7 +2390,9 @@ function calcular(){
   var areaMarc = (mW>0 && mH>0) ? (mW*mH) : 0;
   var margeMarc = areaMarc>0 ? getMrTramPct(areaMarc) : marge;
   var pvpMarc = cMol*(1+margeMarc/100);
-  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra+cExtres)*(1+marge/100);
+  // Extras amb marge propi van per separat (pvpFixed ja inclou el seu marge);
+  // els que usen marge global s'inclouen al sumatori que multiplica per (1+marge/100).
+  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra+extrasCalc.costGlobalMargin)*(1+marge/100) + extrasCalc.pvpFixed;
   // pvpImp: en vista taller (admin cost) usem PVD; en vista PVP usem el pvp del
   // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
   // marge legacy ja no s'aplica aquí.
@@ -2374,6 +2475,7 @@ function calcular(){
   var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers+cExtres);
   var ecm=document.getElementById('ci-mol'); if(ecm) ecm.textContent=fmt(cMol);
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
+  updateExtrasLabels();
 
   window._c={
     preu_net:pNet,
@@ -2810,7 +2912,7 @@ function capturaEstat(){
     entrega:document.getElementById('entrega').value,
     observacions:document.getElementById('observacions').value,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
-    extra_desmuntar_marc:(document.getElementById('extra-desmuntar-marc')||{}).checked||false,
+    extras_state: collectExtrasState(),
     lang:_lang,
     _closest:JSON.parse(JSON.stringify(CLOSEST)),
     _preus:JSON.parse(JSON.stringify(PREUS)),
@@ -2847,8 +2949,7 @@ function restauraEstat(e){
   var impChecked = !!e.impressio;
   document.getElementById('chk-impressio').checked = impChecked;
   document.getElementById('opt-impressio').classList.toggle('selected', impChecked);
-  var desmChk = document.getElementById('extra-desmuntar-marc');
-  if(desmChk) desmChk.checked = !!e.extra_desmuntar_marc;
+  restoreExtrasState(e);
   if(e._closest) CLOSEST=e._closest;
   if(e._preus)   PREUS=e._preus;
   if(e._gruix)   GRUIX=e._gruix;
@@ -2986,8 +3087,7 @@ function netejar(){
   document.getElementById('opt-impressio').title='';
   document.getElementById('chk-revers-peu').checked=false;
   document.getElementById('chk-revers-peu').disabled=true;
-  var desmEl = document.getElementById('extra-desmuntar-marc');
-  if(desmEl) desmEl.checked=false;
+  document.querySelectorAll('.extra-toggle-input').forEach(function(cb){ cb.checked = false; });
   document.getElementById('opt-revers-peu').classList.remove('selected');
   document.getElementById('opt-revers-peu').classList.add('disabled');
   document.getElementById('preu-revers-peu').textContent='-';

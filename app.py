@@ -806,6 +806,88 @@ def get_config_value(clau, default=None):
     return r['valor'] if r else default
 
 
+# ── Extras (càrrecs configurables) ────────────────────────────────────────
+EXTRAS_DEFAULTS = [
+    {
+        "key": "samarreta_surcharge",
+        "name": "Càrrec samarreta",
+        "description": "Feina addicional per emmarcar samarreta.",
+        "price_pvd": 20.0,
+        "margin_pct": None,
+        "mode": "auto",
+        "piece_types": ["samarreta"],
+        "actiu": True,
+        "ordre": 1,
+    },
+    {
+        "key": "desmuntar_marc",
+        "name": "Desmuntar i netejar un marc existent",
+        "description": "Quan el client porta un marc i vols aprofitar el vidre (o canviar-lo).",
+        "price_pvd": 10.0,
+        "margin_pct": None,
+        "mode": "manual",
+        "piece_types": [],
+        "actiu": True,
+        "ordre": 2,
+    },
+]
+
+
+def _normalize_extra(e):
+    """Coerce types so the JS/template gets predictable values."""
+    pt = e.get('piece_types') or []
+    if isinstance(pt, str):
+        pt = [x.strip() for x in pt.split(',') if x.strip()]
+    mp = e.get('margin_pct')
+    try:
+        mp = float(mp) if mp not in (None, '', 'null') else None
+    except (TypeError, ValueError):
+        mp = None
+    try:
+        price = float(e.get('price_pvd') or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    try:
+        ordre = int(e.get('ordre') or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    mode = (e.get('mode') or 'manual').strip().lower()
+    if mode not in ('manual', 'auto'):
+        mode = 'manual'
+    return {
+        'key': (e.get('key') or '').strip(),
+        'name': (e.get('name') or '').strip(),
+        'description': (e.get('description') or '').strip(),
+        'price_pvd': price,
+        'margin_pct': mp,
+        'mode': mode,
+        'piece_types': pt,
+        'actiu': bool(e.get('actiu', True)),
+        'ordre': ordre,
+    }
+
+
+def get_extras_list():
+    """Return the list of configured extras, seeding defaults on first read."""
+    raw = get_config_value('extras_json')
+    if not raw:
+        save_extras_list(EXTRAS_DEFAULTS)
+        return [dict(e) for e in EXTRAS_DEFAULTS]
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return [dict(e) for e in EXTRAS_DEFAULTS]
+        return [_normalize_extra(e) for e in data]
+    except Exception:
+        return [dict(e) for e in EXTRAS_DEFAULTS]
+
+
+def save_extras_list(extras):
+    """Persist extras as JSON in the config table."""
+    payload = json.dumps([_normalize_extra(e) for e in extras], ensure_ascii=False)
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('extras_json', ?)", [payload])
+
+
 def calcular_pvd(preu_cost, categoria):
     """cost × (1 + marge_admin_pct/100). categoria: 'moldures'|'vidres'|'passpartu'|'encolat'"""
     if preu_cost is None:
@@ -2853,7 +2935,8 @@ def calculadora():
                            marge_impressio_pro=marge_imp_pro,
                            is_admin=1 if session.get('is_admin') else 0,
                            mr_trams=mr_trams,
-                           mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)))
+                           mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)),
+                           extras=get_extras_list())
 
 @app.route('/api/lookup')
 @login_required
@@ -6261,6 +6344,51 @@ def admin_config():
         config=config,
         admin_marges=ADMIN_MARGE_CATEGORIES,
     )
+
+
+@app.route('/admin/extras', methods=['GET', 'POST'])
+@admin_required
+def admin_extras():
+    if request.method == 'POST':
+        # Form sends N parallel arrays (one entry per extra row). We
+        # reconstruct the list zipping them together. The `delete` checkbox
+        # marks rows to drop; rows without a name are also dropped.
+        keys         = request.form.getlist('extra_key[]')
+        names        = request.form.getlist('extra_name[]')
+        descs        = request.form.getlist('extra_description[]')
+        prices       = request.form.getlist('extra_price_pvd[]')
+        margins      = request.form.getlist('extra_margin_pct[]')
+        modes        = request.form.getlist('extra_mode[]')
+        piece_types  = request.form.getlist('extra_piece_types[]')
+        actius       = request.form.getlist('extra_actiu[]')   # checkbox per row → indices of checked rows
+        deletes      = request.form.getlist('extra_delete[]')  # idem
+        actius_set   = set(actius)
+        deletes_set  = set(deletes)
+        updated = []
+        for i, name in enumerate(names):
+            idx = str(i)
+            if idx in deletes_set:
+                continue
+            name = (name or '').strip()
+            if not name:
+                continue
+            key = (keys[i] if i < len(keys) else '').strip() or 'extra_' + str(int(time.time())) + '_' + str(i)
+            updated.append({
+                'key': key,
+                'name': name,
+                'description': descs[i] if i < len(descs) else '',
+                'price_pvd': prices[i] if i < len(prices) else '0',
+                'margin_pct': margins[i] if i < len(margins) else '',
+                'mode': modes[i] if i < len(modes) else 'manual',
+                'piece_types': piece_types[i] if i < len(piece_types) else '',
+                'actiu': idx in actius_set,
+                'ordre': i + 1,
+            })
+        save_extras_list(updated)
+        flash('Extres desats.', 'ok')
+        return redirect(url_for('admin_extras'))
+
+    return render_template('admin_extras.html', extras=get_extras_list())
 
 # ── Factura Directa ───────────────────────────────────────────────────────
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
