@@ -92,6 +92,15 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .chip-r{background:var(--red-l);color:var(--red)}
 .desc{font-size:11px;color:var(--hint);margin-top:3px;font-style:italic}
 .piece-context-box{margin-top:.85rem;padding:.9rem 1rem;border:1px solid var(--border);border-radius:9px;background:#fcfbf8;display:grid;gap:.7rem}
+.extras-list{display:grid;gap:.5rem}
+.extra-toggle{display:flex;align-items:flex-start;gap:.75rem;padding:.75rem .9rem;border:1px solid var(--border);border-radius:9px;background:#fcfbf8;cursor:pointer;transition:background .15s,border-color .15s}
+.extra-toggle:hover{background:#f7f5ef;border-color:var(--border2)}
+.extra-toggle input{margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--green)}
+.extra-toggle-body{flex:1;display:grid;gap:2px;min-width:0}
+.extra-toggle-body strong{font-size:13px;font-weight:700;color:var(--text)}
+.extra-toggle-desc{font-size:12px;color:var(--muted);line-height:1.4}
+.extra-toggle-price{flex-shrink:0;font-size:11px;font-weight:800;color:var(--green);background:var(--green-l);padding:3px 8px;border-radius:999px;align-self:center;white-space:nowrap}
+.extra-toggle:has(input:checked){background:color-mix(in srgb, var(--green-l) 60%, white);border-color:color-mix(in srgb, var(--green) 30%, white)}
 .piece-context-note{font-size:12px;color:var(--muted);line-height:1.6;padding:.7rem .85rem;border-radius:8px;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 28%, white)}
 .foto-box{margin-top:.6rem;border:1px solid #e5dfd4;border-radius:8px;background:#fbfaf7;height:102px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in}
 .foto-box img{max-width:100%;max-height:100%;object-fit:contain}
@@ -471,6 +480,20 @@ body.has-sticky-bar{padding-bottom:78px}
           <div id="piece-context-note" class="piece-context-note" style="display:none"></div>
         </div>
         <div id="mida-total-simple" style="margin-top:.5rem;font-size:12px;color:var(--hint)"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-t">Extres</div>
+        <div class="extras-list">
+          <label class="extra-toggle">
+            <input type="checkbox" id="extra-desmuntar-marc" onchange="calcular()">
+            <span class="extra-toggle-body">
+              <strong>Desmuntar i netejar un marc existent</strong>
+              <span class="extra-toggle-desc">Quan el client porta un marc i vols aprofitar el vidre (o canviar-lo).</span>
+            </span>
+            <span class="extra-toggle-price">+10 € PVD</span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -2242,6 +2265,9 @@ function calcular(){
   var cImpressio = costImpressio();
   // Càrrec fix de samarreta (feina addicional, PVD)
   var cSamarreta = (getPieceTypeValue() === 'samarreta') ? 20 : 0;
+  // Extres opcionals (PVD, marcats al panel inferior dret)
+  var cDesmuntar = (document.getElementById('extra-desmuntar-marc')||{}).checked ? 10 : 0;
+  var cExtres = cSamarreta + cDesmuntar;
 
   var cMol=0;
   if((PREUS.marc>0||GRUIX.marc>0)&&(mW>0||mH>0)){
@@ -2257,7 +2283,7 @@ function calcular(){
       cMol += longFinalPre * ((PREUS.pre||0)/100);
     }
   }
-  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra+cSamarreta;
+  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra+cExtres;
 
   // PVP net (amb marge, sense IVA, sense descompte)
   // Marcs: marge per trams segons àrea exterior del marc (cm²).
@@ -2265,7 +2291,7 @@ function calcular(){
   var areaMarc = (mW>0 && mH>0) ? (mW*mH) : 0;
   var margeMarc = areaMarc>0 ? getMrTramPct(areaMarc) : marge;
   var pvpMarc = cMol*(1+margeMarc/100);
-  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra+cSamarreta)*(1+marge/100);
+  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra+cExtres)*(1+marge/100);
   // pvpImp: en vista taller (admin cost) usem PVD; en vista PVP usem el pvp del
   // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
   // marge legacy ja no s'aplica aquí.
@@ -2345,7 +2371,7 @@ function calcular(){
   }
   document.getElementById('r-lbl-final').textContent=isCost?'Cost total (amb IVA)':(desc>0?'Total amb IVA (desc. inclòs)':'Total amb IVA 21%');
   // Cost detail (only update if elements exist)
-  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers+cSamarreta);
+  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers+cExtres);
   var ecm=document.getElementById('ci-mol'); if(ecm) ecm.textContent=fmt(cMol);
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
 
@@ -2784,6 +2810,7 @@ function capturaEstat(){
     entrega:document.getElementById('entrega').value,
     observacions:document.getElementById('observacions').value,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
+    extra_desmuntar_marc:(document.getElementById('extra-desmuntar-marc')||{}).checked||false,
     lang:_lang,
     _closest:JSON.parse(JSON.stringify(CLOSEST)),
     _preus:JSON.parse(JSON.stringify(PREUS)),
@@ -2820,6 +2847,8 @@ function restauraEstat(e){
   var impChecked = !!e.impressio;
   document.getElementById('chk-impressio').checked = impChecked;
   document.getElementById('opt-impressio').classList.toggle('selected', impChecked);
+  var desmChk = document.getElementById('extra-desmuntar-marc');
+  if(desmChk) desmChk.checked = !!e.extra_desmuntar_marc;
   if(e._closest) CLOSEST=e._closest;
   if(e._preus)   PREUS=e._preus;
   if(e._gruix)   GRUIX=e._gruix;
@@ -2957,6 +2986,8 @@ function netejar(){
   document.getElementById('opt-impressio').title='';
   document.getElementById('chk-revers-peu').checked=false;
   document.getElementById('chk-revers-peu').disabled=true;
+  var desmEl = document.getElementById('extra-desmuntar-marc');
+  if(desmEl) desmEl.checked=false;
   document.getElementById('opt-revers-peu').classList.remove('selected');
   document.getElementById('opt-revers-peu').classList.add('disabled');
   document.getElementById('preu-revers-peu').textContent='-';
