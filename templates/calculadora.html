@@ -173,10 +173,22 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .btn-o{background:transparent;border:1px solid #D4D0C8;color:var(--muted)}.btn-o:hover{background:var(--bg)}
 .btn-wa,.btn-wa2{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}
 .btn-wa:hover,.btn-wa2:hover{background:#ddeee5}
-.actions .btn-a,.actions .btn-o{grid-column:1 / -1}
+.actions .btn-a,.actions .btn-o,.actions .more-actions{grid-column:1 / -1}
 .btn:only-child{grid-column:1 / -1}
 @media(max-width:640px){.actions{grid-template-columns:1fr}}
 .btn:disabled{opacity:.35;cursor:not-allowed}
+.more-actions{position:relative}
+.more-actions>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 14px;border:1px solid #D4D0C8;border-radius:8px;background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;transition:background .15s}
+.more-actions>summary::-webkit-details-marker{display:none}
+.more-actions>summary::marker{content:""}
+.more-actions>summary::after{content:"▾";font-size:11px;opacity:.7;transition:transform .15s}
+.more-actions[open]>summary{background:var(--bg)}
+.more-actions[open]>summary::after{transform:rotate(180deg)}
+.more-actions-menu{position:absolute;right:0;bottom:calc(100% + 6px);z-index:220;display:grid;gap:2px;min-width:240px;padding:6px;border:1px solid var(--border);border-radius:10px;background:#fff;box-shadow:0 18px 40px rgba(0,0,0,.14)}
+.more-action{display:flex;align-items:center;width:100%;padding:9px 12px;border:none;background:transparent;border-radius:6px;font:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer;transition:background .12s}
+.more-action:hover:not(:disabled){background:var(--green-l)}
+.more-action:disabled{opacity:.4;cursor:not-allowed}
+.more-action-sep{height:1px;background:var(--border);margin:4px 0}
 
 /* ALERT */
 .alert{border-radius:7px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:1.25rem;display:none}
@@ -672,12 +684,18 @@ body.has-sticky-bar{padding-bottom:78px}
 
       <div class="actions">
         <button class="btn btn-g" onclick="guardar()">Desar opció</button>
-        <button class="btn btn-g" id="btn-desar-totes" onclick="guardarTotes()" style="display:none" title="Desa totes les opcions en un sol clic">Desar totes</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
-        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
-        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
-        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
-        <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
+        <button class="btn btn-g" id="btn-desar-totes" onclick="guardarTotes()" style="display:none" title="Desa totes les opcions en un sol clic">Desar totes</button>
+        <details class="more-actions" id="more-actions">
+          <summary>Més accions</summary>
+          <div class="more-actions-menu" role="menu">
+            <button type="button" class="more-action" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
+            <button type="button" class="more-action" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
+            <button type="button" class="more-action" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
+            <div class="more-action-sep" role="separator"></div>
+            <button type="button" class="more-action" onclick="novaComanda()">Nou pressupost</button>
+          </div>
+        </details>
       </div>
       </div>
     </div>
@@ -3120,6 +3138,18 @@ recalcMides();
     marcInput.addEventListener('change', refreshBar);
   }
   refreshBar();
+})();
+
+// ── Més accions: close on item click or outside click ────────────────────
+(function(){
+  var details = document.getElementById('more-actions');
+  if (!details) return;
+  details.querySelectorAll('.more-action').forEach(function(btn){
+    btn.addEventListener('click', function(){ details.open = false; });
+  });
+  document.addEventListener('click', function(e){
+    if (details.open && !details.contains(e.target)) details.open = false;
+  });
 })();
 
 </script>
