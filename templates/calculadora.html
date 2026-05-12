@@ -446,6 +446,7 @@ body.has-sticky-bar{padding-bottom:78px}
             <option value="pintura_amb_bastidor">Pintura amb bastidor</option>
             <option value="puzzle">Puzzle</option>
             <option value="punt_de_creu">Punt de creu</option>
+            <option value="samarreta">Samarreta</option>
           </select>
         </div>
         <div class="f2">
@@ -1993,6 +1994,25 @@ function applyIncompatibilities(){
     note = 'El punt de creu requereix encolat i vidre. No admet laminat, Protter, ProEco, doble vidre ni impressió fotogràfica.';
   }
 
+  if(pieceType === 'samarreta'){
+    // Només es permeten 2 combos: doble vidre, o vidre + passpartú.
+    rules.encolat = true;
+    rules.protter = true;
+    rules.laminat = true;
+    rules.proeco = true;
+    rules['muntatge-cap'] = false;
+    rules.mirall = true;
+    rules['conservar-vidre'] = true;
+    rules['proteccio-cap'] = true;
+    rules.doble_pas = true;
+    rules['interior-cap'] = false;
+    forcedSelections.muntatge = '';
+    if(proteccio !== 'vidre' && proteccio !== 'doble_vidre'){
+      forcedSelections.proteccio = 'doble_vidre';
+    }
+    note = 'Per a samarreta tria doble vidre, o bé vidre amb passpartú. S\'aplica feina addicional de 20 € (PVD).';
+  }
+
   Object.keys(rules).forEach(function(k){
     var el=document.getElementById('opt-'+k); if(!el) return;
     el.classList.toggle('disabled',rules[k]);
@@ -2046,6 +2066,12 @@ function applyIncompatibilities(){
     if(!pSel||!pSel.value||pSel.value===''||pSel.value==='mirall'||pSel.value==='conservar'){
       setGroupValue('proteccio','vidre');
     }
+  }
+
+  // Samarreta: si l'usuari tria 'vidre' sense passpartú, forcem 'passpartú'
+  // (no es permet samarreta amb marc + 1 vidre sol).
+  if(pieceType === 'samarreta' && proteccio === 'vidre' && interior !== 'passpartu'){
+    setGroupValue('interior','passpartu');
   }
 
   document.getElementById('bloc-passpartu').style.display=hasPasspartu?'block':'none';
@@ -2214,6 +2240,8 @@ function calcular(){
     finestresExtra = nFin * 2.0;  // Fixed PVP price per extra window
   }
   var cImpressio = costImpressio();
+  // Càrrec fix de samarreta (feina addicional, PVD)
+  var cSamarreta = (getPieceTypeValue() === 'samarreta') ? 20 : 0;
 
   var cMol=0;
   if((PREUS.marc>0||GRUIX.marc>0)&&(mW>0||mH>0)){
@@ -2229,7 +2257,7 @@ function calcular(){
       cMol += longFinalPre * ((PREUS.pre||0)/100);
     }
   }
-  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra;
+  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra+cSamarreta;
 
   // PVP net (amb marge, sense IVA, sense descompte)
   // Marcs: marge per trams segons àrea exterior del marc (cm²).
@@ -2237,7 +2265,7 @@ function calcular(){
   var areaMarc = (mW>0 && mH>0) ? (mW*mH) : 0;
   var margeMarc = areaMarc>0 ? getMrTramPct(areaMarc) : marge;
   var pvpMarc = cMol*(1+margeMarc/100);
-  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra)*(1+marge/100);
+  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra+cSamarreta)*(1+marge/100);
   // pvpImp: en vista taller (admin cost) usem PVD; en vista PVP usem el pvp del
   // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
   // marge legacy ja no s'aplica aquí.
@@ -2317,7 +2345,7 @@ function calcular(){
   }
   document.getElementById('r-lbl-final').textContent=isCost?'Cost total (amb IVA)':(desc>0?'Total amb IVA (desc. inclòs)':'Total amb IVA 21%');
   // Cost detail (only update if elements exist)
-  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers);
+  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers+cSamarreta);
   var ecm=document.getElementById('ci-mol'); if(ecm) ecm.textContent=fmt(cMol);
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
 
