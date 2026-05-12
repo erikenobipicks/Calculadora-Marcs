@@ -416,7 +416,7 @@ body.has-sticky-bar{padding-bottom:78px}
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Premarc</div>
             <div class="foto-box js-moldura-zoom" id="foto-box-pre"><div class="no-foto">—</div></div>
           </div>
-          <div>
+          <div id="foto-col-main" style="display:none">
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Marc principal</div>
             <div class="foto-box js-moldura-zoom" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure'n la imatge</div></div>
           </div>
@@ -3159,20 +3159,25 @@ recalcMides();
   });
 })();
 
-// ── Mini marc preview a la capçalera del Resum (mirall de #foto-box) ─────
+// ── Mini marc preview + foto-col-main visibility (mirall de #foto-box) ───
 (function(){
   var src = document.getElementById('foto-box');
   var dst = document.getElementById('res-mini-marc');
-  if (!src || !dst) return;
+  var col = document.getElementById('foto-col-main');
+  if (!src) return;
   function sync(){
     var img = src.querySelector('img');
-    if (img && img.src){
-      dst.innerHTML = '<img src="'+img.src+'" alt="">';
-      dst.classList.remove('is-empty');
-    } else {
-      dst.innerHTML = '';
-      dst.classList.add('is-empty');
+    var hasImg = !!(img && img.src);
+    if (dst){
+      if (hasImg){
+        dst.innerHTML = '<img src="'+img.src+'" alt="">';
+        dst.classList.remove('is-empty');
+      } else {
+        dst.innerHTML = '';
+        dst.classList.add('is-empty');
+      }
     }
+    if (col) col.style.display = hasImg ? '' : 'none';
   }
   new MutationObserver(sync).observe(src, {childList:true, subtree:true, attributes:true, attributeFilter:['src']});
   sync();
