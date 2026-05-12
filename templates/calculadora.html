@@ -482,26 +482,6 @@ body.has-sticky-bar{padding-bottom:78px}
         <div id="mida-total-simple" style="margin-top:.5rem;font-size:12px;color:var(--hint)"></div>
       </div>
 
-      {% set manual_extras = (extras or []) | selectattr('actiu') | selectattr('mode', 'equalto', 'manual') | list %}
-      <div class="card" id="extras-card"{% if not manual_extras %} style="display:none"{% endif %}>
-        <div class="card-t">Extres</div>
-        <div class="extras-list">
-          {% for ex in manual_extras %}
-          <label class="extra-toggle" data-extra-key="{{ ex.key }}"
-                 data-extra-piece-types="{{ ex.piece_types|join(',') }}">
-            <input type="checkbox" class="extra-toggle-input" data-extra-key="{{ ex.key }}" onchange="calcular()">
-            <span class="extra-toggle-body">
-              <strong>{{ ex.name }}</strong>
-              {% if ex.description %}<span class="extra-toggle-desc">{{ ex.description }}</span>{% endif %}
-            </span>
-            <span class="extra-toggle-price"
-                  data-extra-key="{{ ex.key }}"
-                  data-extra-price-pvd="{{ '%.2f'|format(ex.price_pvd) }}"
-                  data-extra-margin="{{ ex.margin_pct if ex.margin_pct is not none else '' }}">+{{ '%.2f'|format(ex.price_pvd) }} €</span>
-          </label>
-          {% endfor %}
-        </div>
-      </div>
     </div>
 
     <!-- COL DRETA -->
@@ -669,6 +649,27 @@ body.has-sticky-bar{padding-bottom:78px}
         <input type="hidden" id="ref-proteccio" value="">
         <input type="hidden" id="ref-interior" value="">
         <input type="hidden" id="ref-impressio-val" value="">
+      </div>
+
+      {% set manual_extras = (extras or []) | selectattr('actiu') | selectattr('mode', 'equalto', 'manual') | list %}
+      <div class="card" id="extras-card"{% if not manual_extras %} style="display:none"{% endif %}>
+        <div class="card-t">Extres</div>
+        <div class="extras-list">
+          {% for ex in manual_extras %}
+          <label class="extra-toggle" data-extra-key="{{ ex.key }}"
+                 data-extra-piece-types="{{ ex.piece_types|join(',') }}">
+            <input type="checkbox" class="extra-toggle-input" data-extra-key="{{ ex.key }}" onchange="calcular()">
+            <span class="extra-toggle-body">
+              <strong>{{ ex.name }}</strong>
+              {% if ex.description %}<span class="extra-toggle-desc">{{ ex.description }}</span>{% endif %}
+            </span>
+            <span class="extra-toggle-price"
+                  data-extra-key="{{ ex.key }}"
+                  data-extra-price-pvd="{{ '%.2f'|format(ex.price_pvd) }}"
+                  data-extra-margin="{{ ex.margin_pct if ex.margin_pct is not none else '' }}">+{{ '%.2f'|format(ex.price_pvd) }} €</span>
+          </label>
+          {% endfor %}
+        </div>
       </div>
 
       <div class="summary-sidebar">
