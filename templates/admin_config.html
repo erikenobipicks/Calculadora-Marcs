@@ -124,7 +124,30 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 
     <div class="section">
       <div class="section-title">
-        Gmail SMTP (per emails automàtics)
+        Resend (API HTTPS — recomanat)
+        {% if config.get('resend_api_key') %}
+        <span style="background:var(--green-l);color:var(--green);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;letter-spacing:.3px;border:1px solid #B8DCC9">✓ CONFIGURAT</span>
+        {% else %}
+        <span style="background:#FAEAEA;color:#B84040;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;letter-spacing:.3px;border:1px solid #E8B4B4">✗ NO CONFIGURAT</span>
+        {% endif %}
+      </div>
+      <p class="muted" style="margin-bottom:1rem">
+        Proveïdor d'emails via API HTTPS (no SMTP). Funciona amb hosts que bloquegen els ports SMTP (Railway, Render, Fly.io, etc.).
+        Crear compte a <a href="https://resend.com" target="_blank" rel="noopener" style="color:var(--green)">resend.com</a> (gratis fins 3000 mails/mes) i generar una API key. Si configures Resend, l'app la fa servir <strong>en lloc</strong> de Gmail SMTP.
+      </p>
+
+      <label>API Key</label>
+      <p class="hint">Comença per <code>re_</code>. La trobes a <a href="https://resend.com/api-keys" target="_blank" rel="noopener" style="color:var(--green)">resend.com/api-keys</a>. {% if config.get('resend_api_key') %}<strong>Deixa-la buida per mantenir l'actual.</strong>{% endif %}</p>
+      <input type="password" name="resend_api_key" value="" placeholder="{% if config.get('resend_api_key') %}··· (ja configurada — deixa buit per no canviar){% else %}re_xxxxxxxxxxxxxxxxxxxx{% endif %}" autocomplete="new-password">
+
+      <label>Adreça remitent (from)</label>
+      <p class="hint">Per provar pots usar <code>onboarding@resend.dev</code> (default si deixes buit). Per producció, verifica el teu domini a Resend i posa una adreça pròpia (ex. <code>noreply@reusrevela.cat</code>).</p>
+      <input type="text" name="resend_from" value="{{ config.get('resend_from', '') }}" placeholder="onboarding@resend.dev" autocomplete="off">
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        Gmail SMTP (alternativa — pot estar bloquejat al host)
         {% if config.get('gmail_user') and config.get('gmail_pass') %}
         <span style="background:var(--green-l);color:var(--green);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;letter-spacing:.3px;border:1px solid #B8DCC9">✓ CONFIGURAT</span>
         {% else %}
