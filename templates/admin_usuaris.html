@@ -215,6 +215,12 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
               <input type="password" name="password" placeholder="Nova contrasenya" style="margin:0;padding:4px 8px;font-size:12px;width:140px">
               <button type="submit" class="btn btn-primary btn-sm">OK</button>
             </form>
+            <form method="post" action="/admin/usuari" style="margin-top:.4rem"
+                  onsubmit="return confirm('Enviar mail de benvinguda a {{ u.username }}?\n\nEs generarà una contrasenya NOVA i el mail anirà amb les instruccions bàsiques de la calculadora.');">
+              <input type="hidden" name="action" value="send_welcome">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <button type="submit" class="btn btn-sm" style="font-size:11px;padding:3px 9px;background:#fff;border:1px solid #1A6B45;color:#1A6B45">✉ Welcome</button>
+            </form>
           </td>
           <td>
             {% if u.username != 'admin' %}

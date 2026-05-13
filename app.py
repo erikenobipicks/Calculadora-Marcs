@@ -2090,6 +2090,73 @@ def _notify_signup_email(*, action, status, name, email, phone, business_name,
         print(f"[signup_notify] FAIL ({email}): {e}")
 
 
+def _generate_temp_password(length=12):
+    """Genera una contrasenya aleatòria llegible (sense 0/O, 1/l/I).
+    Es fa servir per a l'email de benvinguda; l'usuari pot canviar-la
+    immediatament des de /ajustos."""
+    import secrets, string
+    alphabet = ''.join(c for c in (string.ascii_letters + string.digits) if c not in '0Ol1I')
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _send_welcome_email(username, password, nom):
+    """Envia un mail al professional amb les seves dades d'alta i un mini
+    tutorial de com fer servir la calculadora. Retorna True si s'envia OK."""
+    nom_visible = (nom or '').strip() or 'professional'
+    base_url = 'https://calculadora.reusrevela.cat'
+    html = f"""\
+<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1C1B18;padding:24px;background:#FBFAF7">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:10px;margin:0 0 18px">
+    Benvinguda a la calculadora
+  </h2>
+  <p style="font-size:14px;line-height:1.6;margin:0 0 14px">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6;margin:0 0 16px">
+    T'han donat d'alta a la <strong>calculadora de marcs i impressions de Reus Revela</strong>.
+    Aquí tens les teves dades d'accés:
+  </p>
+
+  <table style="width:100%;max-width:480px;margin:0 0 18px;background:#F5F3EC;border-radius:10px;border-collapse:collapse">
+    <tr><td style="padding:10px 14px;color:#6B6860;font-size:13px;width:120px">URL</td>
+        <td style="padding:10px 14px;font-family:Consolas,monospace;font-size:13px"><a href="{base_url}" style="color:#1A6B45;text-decoration:none">{base_url}</a></td></tr>
+    <tr><td style="padding:10px 14px;color:#6B6860;font-size:13px">Usuari</td>
+        <td style="padding:10px 14px;font-family:Consolas,monospace;font-size:14px"><strong>{username}</strong></td></tr>
+    <tr><td style="padding:10px 14px;color:#6B6860;font-size:13px">Contrasenya</td>
+        <td style="padding:10px 14px;font-family:Consolas,monospace;font-size:14px"><strong>{password}</strong></td></tr>
+  </table>
+
+  <p style="font-size:12px;color:#6B6860;margin:0 0 22px">
+    Quan entris per primer cop pots canviar la contrasenya des de <strong>/ajustos</strong>.
+  </p>
+
+  <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Com funciona la calculadora (resum ràpid)</h3>
+  <ol style="line-height:1.7;font-size:14px;padding-left:20px;margin:0 0 18px">
+    <li>Introdueix les <strong>mides de la peça</strong> i el <strong>tipus</strong> (fotografia, samarreta, puzzle…).</li>
+    <li>Tria <strong>materials</strong>: motllura, vidre o passpartú, muntatge.</li>
+    <li>El <strong>preu es calcula automàticament</strong> i veus el resum a la dreta.</li>
+    <li>Pots <strong>desar múltiples opcions</strong> (A, B, C…) per al mateix client.</li>
+    <li>Quan tinguis la versió final, genera <strong>PDF</strong>, envia per <strong>WhatsApp</strong> al client o passa la comanda al <strong>taller</strong>.</li>
+  </ol>
+
+  <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Consells útils</h3>
+  <ul style="line-height:1.7;font-size:14px;padding-left:20px;margin:0 0 18px">
+    <li><strong>Botó € (capçal del Resum)</strong> — canvia entre preu de cost (taller) i PVP final.</li>
+    <li>Caixa <strong>"Extres"</strong> — afegir feines com desmuntar marcs antics o emmarcar samarretes.</li>
+    <li><strong>"Més accions"</strong> — generar PDF, enviar per WhatsApp i comanda al taller.</li>
+    <li>Al teu <strong>/ajustos</strong> pots configurar el teu <strong>marge comercial</strong> i les preferències de marca.</li>
+  </ul>
+
+  <p style="margin:24px 0 6px;font-size:13px;color:#6B6860">
+    Qualsevol dubte: <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a> · 977 316 111
+  </p>
+  <p style="margin:18px 0 0;font-size:13px;color:#1C1B18">
+    Salutacions,<br><strong>Equip Reus Revela</strong>
+  </p>
+</div>
+"""
+    subject = 'Benvinguda · Calculadora de marcs i impressions'
+    return _send_user_email_html(username, subject, html, log_tag='welcome_email')
+
+
 def _send_user_email_html(to_addr, subject, html, log_tag='user_email'):
     """Helper compartit per a emails al USUARI final. Reusa gmail_user/pass
     de config (com a la resta del codebase). Try/except: mai bloqueja el
@@ -5847,6 +5914,30 @@ def admin_usuari():
         _audit_log('user.password_change', target_user_id=int(uid) if str(uid).isdigit() else None,
                    target_username=_row_get(target, 'username', '') if target else '')
         flash('Contrasenya actualitzada.', 'ok')
+    elif action == 'send_welcome':
+        # Genera una contrasenya nova, la desa hashed i envia un mail al
+        # professional amb les dades d'accés + mini tutorial de la calculadora.
+        uid = request.form['uid']
+        target = query('SELECT username, nom FROM usuaris WHERE id=?', [uid], one=True)
+        if not target:
+            flash('Usuari no trobat.', 'error')
+        else:
+            username = _row_get(target, 'username', '') or ''
+            nom = _row_get(target, 'nom', '') or ''
+            if '@' not in username:
+                flash(f"L'usuari «{nom or username}» no té un email vàlid com a username. Edita'l abans d'enviar la benvinguda.", 'error')
+            else:
+                new_pw = _generate_temp_password(12)
+                execute('UPDATE usuaris SET password=? WHERE id=?', [hash_pw(new_pw), uid])
+                sent = _send_welcome_email(username, new_pw, nom)
+                _audit_log('user.welcome_email_sent',
+                           target_user_id=int(uid) if str(uid).isdigit() else None,
+                           target_username=username,
+                           details=f"sent={'yes' if sent else 'no'}")
+                if sent:
+                    flash(f"Mail de benvinguda enviat a {username} amb contrasenya nova.", 'ok')
+                else:
+                    flash(f"S'ha generat una contrasenya nova per a {username} però NO s'ha pogut enviar el mail. Revisa la config Gmail a /admin/config.", 'error')
     elif action == 'actualitzar_estat':
         uid = request.form['uid']
         # Llegim l'estat actual i les dades de l'usuari ABANS de l'UPDATE
