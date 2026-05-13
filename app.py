@@ -2090,7 +2090,7 @@ def _notify_signup_email(*, action, status, name, email, phone, business_name,
         m['From'] = gmail_user
         m['To'] = dest
         m.attach(MIMEText(html, 'html'))
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
             s.login(gmail_user, gmail_pass)
             s.sendmail(gmail_user, [dest], m.as_string())
         print(f"[signup_notify] OK: enviat a {dest} per a {email} (action={action})")
@@ -2194,7 +2194,7 @@ def _send_user_email_html(to_addr, subject, html, log_tag='user_email'):
         m['To'] = to_addr
         m['Reply-To'] = gmail_user
         m.attach(MIMEText(html, 'html'))
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
             s.login(gmail_user, gmail_pass)
             s.sendmail(gmail_user, [to_addr], m.as_string())
         print(f"[{log_tag}] OK: enviat a {to_addr}")
@@ -3880,7 +3880,7 @@ def admin_lab_send(cid):
             encoders.encode_base64(part)
             part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
             msg.attach(part)
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
                 s.login(gmail_user, gmail_pass)
                 s.sendmail(gmail_user, [dest], msg.as_string())
         except Exception as e:
@@ -8779,7 +8779,7 @@ def enviar_email():
         msg['From'] = gmail_user
         msg['To'] = dest
         msg.attach(MIMEText(html, 'html'))
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
             s.login(gmail_user, gmail_pass)
             s.sendmail(gmail_user, dest, msg.as_string())
         return jsonify({'ok': True})
