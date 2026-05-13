@@ -274,6 +274,21 @@ body.has-sticky-bar{padding-bottom:78px}
     <a href="/logout">Sortir</a>
   </div>
 </nav>
+
+{% if user_has_email is defined and not user_has_email %}
+<div id="email-prompt-banner" style="background:#FFF8EC;border-bottom:1px solid #F5DFA0;color:#7A5C00;padding:10px 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-size:13px">
+  <span>
+    ✉ Encara no tens un <strong>email de contacte</strong> configurat.
+    L'usem per a suport i comunicacions importants —
+    <a href="/ajustos" style="color:#7A5C00;text-decoration:underline;font-weight:600">configura'l a Ajustos</a>.
+  </span>
+  <button type="button" onclick="document.getElementById('email-prompt-banner').remove()"
+          style="background:transparent;border:1px solid #E0CC9E;color:#7A5C00;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600">
+    Ocultar
+  </button>
+</div>
+{% endif %}
+
 {% if session.is_admin %}
 <style>
 .nav-pendents{position:relative}
