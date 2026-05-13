@@ -2144,6 +2144,11 @@ def _send_via_resend(to_addr, subject, html, log_tag='resend_email'):
             headers={
                 'Authorization': 'Bearer ' + api_key,
                 'Content-Type': 'application/json',
+                # Cloudflare (que protegeix l'API de Resend) bloqueja el User-Agent
+                # per defecte de Python (`Python-urllib/...`) amb error 1010. Posem
+                # un UA descriptiu perquè la petició es vegi com a client legítim.
+                'User-Agent': 'Calculadora-Marcs/1.0 (+https://calculadora.reusrevela.cat)',
+                'Accept': 'application/json',
             },
             method='POST',
         )
