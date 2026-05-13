@@ -3588,6 +3588,7 @@ def desar_marge():
     fi = d.get('fiscal_id', '')
     ea = d.get('empresa_adreca', '')
     et = d.get('empresa_tel', '')
+    em = (d.get('email', '') or '').strip()
     brand_color = _normalize_hex_color(d.get('brand_color', DEFAULT_BRAND_COLOR))
     brand_color_secondary = _normalize_hex_color(
         d.get('brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
@@ -3603,7 +3604,7 @@ def desar_marge():
         print_margin=mi,
     )
     execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, nom_fiscal=?, fiscal_id=?, empresa_adreca=?, empresa_tel=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, nom_fiscal=?, fiscal_id=?, empresa_adreca=?, empresa_tel=?, email=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
         [
             margins['frames'],
             margins['prints'],
@@ -3612,6 +3613,7 @@ def desar_marge():
             fi,
             ea,
             et,
+            em,
             json.dumps(margins, ensure_ascii=True),
             brand_color,
             brand_color_secondary,
@@ -7944,7 +7946,7 @@ def crear_pdf(c):
 @login_required
 def ajustos():
     u = query(
-        'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+        'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, email, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
         [session['user_id']],
         one=True,
     )
@@ -7981,6 +7983,7 @@ def ajustos():
         nom_emp = cfg.get('empresa_nom', '')
     user_adreca  = _row_get(u, 'empresa_adreca', '') or ''
     user_tel     = _row_get(u, 'empresa_tel', '') or ''
+    user_email   = _row_get(u, 'email', '') or ''
     nom_fiscal   = _row_get(u, 'nom_fiscal', '') or ''
     fiscal_id    = _row_get(u, 'fiscal_id', '') or ''
 
@@ -8023,6 +8026,7 @@ def ajustos():
                            brand_color_menu=brand_color_menu,
                            empresa_adreca=user_adreca if user_adreca else cfg.get('empresa_adreca',''),
                            empresa_tel=user_tel if user_tel else cfg.get('empresa_tel',''),
+                           user_email=user_email,
                            imp_trams=imp_trams)
 
 
