@@ -2090,6 +2090,13 @@ def _notify_signup_email(*, action, status, name, email, phone, business_name,
         print(f"[signup_notify] FAIL ({email}): {e}")
 
 
+def _gmail_is_configured():
+    """Retorna True si gmail_user i gmail_pass són presents a config."""
+    gu = (get_config_value('gmail_user', '') or '').strip()
+    gp = (get_config_value('gmail_pass', '') or '').strip()
+    return bool(gu) and bool(gp)
+
+
 def _generate_temp_password(length=12):
     """Genera una contrasenya aleatòria llegible (sense 0/O, 1/l/I).
     Es fa servir per a l'email de benvinguda; l'usuari pot canviar-la
@@ -5917,6 +5924,8 @@ def admin_usuari():
     elif action == 'send_welcome':
         # Genera una contrasenya nova, la desa hashed i envia un mail al
         # professional amb les dades d'accés + mini tutorial de la calculadora.
+        # IMPORTANT: si Gmail no està configurat, NO toquem la contrasenya
+        # (per no deixar l'usuari sense accés sense rebre el mail).
         uid = request.form['uid']
         target = query('SELECT username, nom FROM usuaris WHERE id=?', [uid], one=True)
         if not target:
@@ -5926,18 +5935,25 @@ def admin_usuari():
             nom = _row_get(target, 'nom', '') or ''
             if '@' not in username:
                 flash(f"L'usuari «{nom or username}» no té un email vàlid com a username. Edita'l abans d'enviar la benvinguda.", 'error')
+            elif not _gmail_is_configured():
+                flash("Gmail no està configurat (falta gmail_user o gmail_pass). Configura-ho a /admin/config abans de fer servir 'Welcome'. La contrasenya NO s'ha tocat.", 'error')
             else:
                 new_pw = _generate_temp_password(12)
-                execute('UPDATE usuaris SET password=? WHERE id=?', [hash_pw(new_pw), uid])
                 sent = _send_welcome_email(username, new_pw, nom)
-                _audit_log('user.welcome_email_sent',
-                           target_user_id=int(uid) if str(uid).isdigit() else None,
-                           target_username=username,
-                           details=f"sent={'yes' if sent else 'no'}")
                 if sent:
+                    # Només rotem la contrasenya quan el mail ha sortit OK.
+                    execute('UPDATE usuaris SET password=? WHERE id=?', [hash_pw(new_pw), uid])
+                    _audit_log('user.welcome_email_sent',
+                               target_user_id=int(uid) if str(uid).isdigit() else None,
+                               target_username=username,
+                               details='sent=yes')
                     flash(f"Mail de benvinguda enviat a {username} amb contrasenya nova.", 'ok')
                 else:
-                    flash(f"S'ha generat una contrasenya nova per a {username} però NO s'ha pogut enviar el mail. Revisa la config Gmail a /admin/config.", 'error')
+                    _audit_log('user.welcome_email_sent',
+                               target_user_id=int(uid) if str(uid).isdigit() else None,
+                               target_username=username,
+                               details='sent=no (gmail send failed, password kept)')
+                    flash(f"No s'ha pogut enviar el mail a {username}. La contrasenya antiga es conserva. Comprova els logs i la config Gmail.", 'error')
     elif action == 'actualitzar_estat':
         uid = request.form['uid']
         # Llegim l'estat actual i les dades de l'usuari ABANS de l'UPDATE
