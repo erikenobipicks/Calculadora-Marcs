@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
+import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime, timedelta
@@ -579,6 +579,16 @@ def execute(sql, args=()):
             sql2 = sql2.rstrip().rstrip(';')
             if is_ignore:
                 sql2 += ' ON CONFLICT DO NOTHING'
+            elif is_replace:
+                # SQLite "INSERT OR REPLACE" → Postgres UPSERT. Assumim que la
+                # primera columna del llistat és la PK (cas de config.clau, etc.).
+                m = re.search(r'INSERT\s+INTO\s+\w+\s*\(([^)]+)\)\s*VALUES', sql2, re.IGNORECASE)
+                if m:
+                    cols = [c.strip().strip('"').strip("'") for c in m.group(1).split(',')]
+                    if len(cols) >= 2:
+                        pk = cols[0]
+                        update_set = ', '.join('{c} = EXCLUDED.{c}'.format(c=c) for c in cols[1:])
+                        sql2 += ' ON CONFLICT (' + pk + ') DO UPDATE SET ' + update_set
             # Only add RETURNING id for tables that actually have a SERIAL id
             # column. Tables with TEXT primary key (referencia) — moldures,
             # vidres, passpartout, encolat_pro, impressio — would fail on
@@ -6434,9 +6444,9 @@ def admin_config():
             gu = request.form.get('gmail_user','').strip()
             gp = request.form.get('gmail_pass','').strip().replace(' ','')
             if gu:
-                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_user", ?)', [gu])
+                execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_user', ?)", [gu])
             if gp:
-                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
+                execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_pass', ?)", [gp])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)
