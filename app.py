@@ -2116,7 +2116,7 @@ def _generate_temp_password(length=12):
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-def _send_welcome_email(username, password, nom):
+def _send_welcome_email(username, password, nom, to_addr=None):
     """Envia un mail al professional amb les seves dades d'alta i un mini
     tutorial de com fer servir la calculadora. Retorna True si s'envia OK."""
     nom_visible = (nom or '').strip() or 'professional'
@@ -2171,7 +2171,7 @@ def _send_welcome_email(username, password, nom):
 </div>
 """
     subject = 'Benvinguda · Calculadora de marcs i impressions'
-    return _send_user_email_html(username, subject, html, log_tag='welcome_email')
+    return _send_user_email_html(to_addr or username, subject, html, log_tag='welcome_email')
 
 
 def _send_user_email_html(to_addr, subject, html, log_tag='user_email'):
@@ -4264,6 +4264,9 @@ def admin_run_migrations():
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t6_mult', '3.1')",
         # Flag per usuari: cada distribuïdor habilita el Baryta manualment.
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS baryta_actiu BOOLEAN DEFAULT FALSE",
+        # Email de contacte (separat de username, que pot ser un alies o email
+        # de login). El welcome email s'envia aquí si està informat.
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''",
     ]
 
     resultats = []
@@ -5888,7 +5891,7 @@ def admin_usuaris():
         SELECT id, username, nom, nom_empresa, profile_type, access_status,
                web_url, instagram, fiscal_id, notes_validacio, is_admin,
                imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6,
-               baryta_actiu
+               baryta_actiu, email
         FROM usuaris ORDER BY nom
     """)
     # Defaults globals per als placeholders
@@ -5904,17 +5907,34 @@ def admin_usuaris():
 def admin_usuari():
     action = request.form.get('action')
     if action == 'crear':
-        execute('INSERT INTO usuaris (username, password, nom, is_admin, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                [request.form['username'], hash_pw(request.form['password']),
-                 request.form['nom'], int(request.form.get('is_admin', 0)),
-                 request.form.get('access_status', 'active'),
-                 request.form.get('profile_type', 'professional'),
-                 request.form.get('web_url', '').strip(),
-                 request.form.get('instagram', '').strip(),
-                 request.form.get('fiscal_id', '').strip(),
-                 request.form.get('notes_validacio', '').strip()])
-        _audit_log('user.create', target_username=request.form.get('username', ''),
-                   details=f"nom={request.form.get('nom','')} is_admin={request.form.get('is_admin','0')}")
+        username = (request.form.get('username') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        # Pre-check de duplicat per donar missatge net (en comptes d'esperar al
+        # UniqueViolation de Postgres / IntegrityError de SQLite).
+        if username and query('SELECT 1 FROM usuaris WHERE LOWER(username)=LOWER(?)', [username], one=True):
+            flash(f"Ja existeix un usuari amb username '{username}'. Tria'n un altre o edita l'existent.", 'error')
+            return redirect(url_for('admin_usuaris'))
+        try:
+            execute('INSERT INTO usuaris (username, password, nom, is_admin, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio, email) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                    [username, hash_pw(request.form['password']),
+                     request.form['nom'], int(request.form.get('is_admin', 0)),
+                     request.form.get('access_status', 'active'),
+                     request.form.get('profile_type', 'professional'),
+                     request.form.get('web_url', '').strip(),
+                     request.form.get('instagram', '').strip(),
+                     request.form.get('fiscal_id', '').strip(),
+                     request.form.get('notes_validacio', '').strip(),
+                     email])
+        except Exception as e:
+            # Race condition o constraint inesperat — convertim en flash net.
+            msg = str(e).lower()
+            if 'unique' in msg or 'duplicate' in msg:
+                flash(f"Ja existeix un usuari amb username '{username}'.", 'error')
+            else:
+                flash(f"No s'ha pogut crear l'usuari: {e}", 'error')
+            return redirect(url_for('admin_usuaris'))
+        _audit_log('user.create', target_username=username,
+                   details=f"nom={request.form.get('nom','')} is_admin={request.form.get('is_admin','0')} email={email}")
         flash(f"Usuari '{request.form['nom']}' creat.", 'ok')
     elif action == 'eliminar':
         uid = request.form['uid']
@@ -5937,19 +5957,23 @@ def admin_usuari():
         # IMPORTANT: si Gmail no està configurat, NO toquem la contrasenya
         # (per no deixar l'usuari sense accés sense rebre el mail).
         uid = request.form['uid']
-        target = query('SELECT username, nom FROM usuaris WHERE id=?', [uid], one=True)
+        target = query('SELECT username, nom, email FROM usuaris WHERE id=?', [uid], one=True)
         if not target:
             flash('Usuari no trobat.', 'error')
         else:
             username = _row_get(target, 'username', '') or ''
             nom = _row_get(target, 'nom', '') or ''
-            if '@' not in username:
-                flash(f"L'usuari «{nom or username}» no té un email vàlid com a username. Edita'l abans d'enviar la benvinguda.", 'error')
+            stored_email = (_row_get(target, 'email', '') or '').strip()
+            # Destinatari: el camp email té prioritat; si no, fem servir username
+            # (assumim que és un email vàlid, com a fallback per a usuaris antics).
+            to_addr = stored_email if '@' in stored_email else username
+            if '@' not in to_addr:
+                flash(f"L'usuari «{nom or username}» no té cap email vàlid (ni al camp email ni al username). Edita'l abans d'enviar la benvinguda.", 'error')
             elif not _gmail_is_configured():
                 flash("Gmail no està configurat (falta gmail_user o gmail_pass). Configura-ho a /admin/config abans de fer servir 'Welcome'. La contrasenya NO s'ha tocat.", 'error')
             else:
                 new_pw = _generate_temp_password(12)
-                sent = _send_welcome_email(username, new_pw, nom)
+                sent = _send_welcome_email(username, new_pw, nom, to_addr=to_addr)
                 if sent:
                     # Només rotem la contrasenya quan el mail ha sortit OK.
                     execute('UPDATE usuaris SET password=? WHERE id=?', [hash_pw(new_pw), uid])
@@ -8755,7 +8779,8 @@ def init_db():
                     web_url TEXT DEFAULT '',
                     instagram TEXT DEFAULT '',
                     fiscal_id TEXT DEFAULT '',
-                    notes_validacio TEXT DEFAULT ''
+                    notes_validacio TEXT DEFAULT '',
+                    email TEXT DEFAULT ''
                 )""",
                 """CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL)""",
@@ -9057,7 +9082,8 @@ def init_db():
                     web_url TEXT DEFAULT '',
                     instagram TEXT DEFAULT '',
                     fiscal_id TEXT DEFAULT '',
-                    notes_validacio TEXT DEFAULT ''
+                    notes_validacio TEXT DEFAULT '',
+                    email TEXT DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL

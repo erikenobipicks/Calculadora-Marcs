@@ -98,7 +98,8 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <input type="hidden" name="action" value="crear">
       <div class="form-grid">
         <div><label>Nom complet</label><input type="text" name="nom" placeholder="Anna García" required></div>
-        <div><label>Nom d'usuari</label><input type="text" name="username" placeholder="anna" required></div>
+        <div><label>Nom d'usuari (login)</label><input type="text" name="username" placeholder="anna" required></div>
+        <div><label>Email <span style="color:var(--hint);font-size:11px">(per al welcome i suport)</span></label><input type="email" name="email" placeholder="anna@exemple.com"></div>
         <div><label>Contrasenya</label><input type="password" name="password" required></div>
         <div><label>Rol</label>
           <select name="is_admin">
@@ -148,6 +149,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           <td>
             <div><strong>{{ u.nom }}</strong></div>
             <div class="mono">{{ u.username }}</div>
+            {% if u.email %}<div class="mono" style="font-size:11px;color:var(--hint)">{{ u.email }}</div>{% endif %}
             <div style="margin-top:4px">{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</div>
           </td>
           <td>
