@@ -110,6 +110,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .zoom-panel::before{content:'Zoom';position:absolute;left:10px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(28,27,24,.78);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 .nota{font-size:11px;color:var(--muted);background:var(--amber-l);border-left:3px solid var(--amber);padding:7px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.6}
 #bloc-passpartu{animation:fadeIn .2s ease}
+#bloc-passpartu[data-mode="doble-vidre"] .pp-color-section,
+#bloc-passpartu[data-mode="doble-vidre"] .pp-finestres-section{display:none}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
 /* GRUPS DE MATERIALS */
@@ -590,8 +592,9 @@ body.has-sticky-bar{padding-bottom:78px}
               <span class="opt-text">Cap</span>
             </label>
           </div>
-          <!-- Bloc passpartú: apareix quan es selecciona passpartú -->
+          <!-- Bloc passpartú/doble vidre: apareix quan es selecciona passpartú O doble vidre -->
           <div id="bloc-passpartu" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
+            <div class="pp-color-section">
             <div class="f2" style="margin-bottom:.5rem;align-items:center">
               <div class="f">
                 <label>Color / referència</label>
@@ -604,16 +607,18 @@ body.has-sticky-bar{padding-bottom:78px}
                 <span id="passpartu-foto-empty" style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:8px;background:#F5F4F1;color:#9E9B94;font-size:11px;border:1px dashed var(--border)">sense foto</span>
               </div>
             </div>
+            </div>
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
-                <label>Marge passpartú (cm per banda)</label>
-                <input type="number" id="cm-passpartu" value="4" min="0" step="0.5" oninput="recalcMides()">
+                <label id="cm-passpartu-label">Marge per banda (cm)</label>
+                <input type="number" id="cm-passpartu" value="5" min="0" step="0.5" oninput="onCmPasspartuInput()">
               </div>
               <div class="f">
                 <label>Mida total del marc</label>
                 <input type="text" id="mida-total" readonly style="font-weight:600;color:var(--green)">
               </div>
             </div>
+            <div class="pp-finestres-section">
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
                 <label>Finestres extra <span style="font-size:11px;color:var(--hint)">(+2,00€/finestra)</span></label>
@@ -622,6 +627,7 @@ body.has-sticky-bar{padding-bottom:78px}
               <div class="f" style="display:flex;align-items:flex-end">
                 <span style="font-size:12px;color:var(--muted);padding-bottom:10px">Per defecte: 1 finestra inclosa</span>
               </div>
+            </div>
             </div>
             <div class="nota" style="margin-top:0">Marc i vidre es calculen amb la mida gran (peça + passpartú). La impressió usa la mida original de la peça.</div>
           </div>
@@ -1736,18 +1742,30 @@ function lookupRef(t,ref){
     });
 }
 
+// L'usuari ha tocat manualment cm-passpartu? Si no, el default s'auto-ajusta
+// (5 cm per passpartú, 4 cm per doble vidre) quan canvia la selecció.
+var _cmPasspartuTouched = false;
+function onCmPasspartuInput(){
+  _cmPasspartuTouched = true;
+  recalcMides();
+}
+
 // ── Fetch closest ─────────────────────────────────────────────────────────
 function recalcMides(){
   var w = parseFloat(document.getElementById('amplada').value)||0;
   var h = parseFloat(document.getElementById('alcada').value)||0;
   var interior = document.querySelector('input[name="interior"]:checked');
-  var hasP = interior && (interior.value==='passpartu'||interior.value==='doble_pas');
-  var cms = hasP ? (parseFloat(document.getElementById('cm-passpartu').value)||0) : 0;
+  var proteccio = document.querySelector('input[name="proteccio"]:checked');
+  var hasPass = !!(interior && (interior.value==='passpartu'||interior.value==='doble_pas'));
+  var hasDV   = !!(proteccio && proteccio.value==='doble_vidre');
+  // Doble vidre també afegeix marge per banda (com el passpartú).
+  var hasExtra = hasPass || hasDV;
+  var cms = hasExtra ? (parseFloat(document.getElementById('cm-passpartu').value)||0) : 0;
   var mW = w>0 ? w+cms*2 : 0;
   var mH = h>0 ? h+cms*2 : 0;
   document.getElementById('marc-w').value=mW;
   document.getElementById('marc-h').value=mH;
-  if(hasP&&cms>0){
+  if(hasExtra&&cms>0){
     document.getElementById('mida-total').value=mW+' x '+mH+' cm';
     document.getElementById('mida-total-simple').textContent='Mida marc: '+mW+'x'+mH+' cm (peça '+w+'x'+h+')';
   } else {
@@ -2119,9 +2137,34 @@ function applyIncompatibilities(){
   // (no es permet samarreta amb marc + 1 vidre sol).
   if(pieceType === 'samarreta' && proteccio === 'vidre' && interior !== 'passpartu'){
     setGroupValue('interior','passpartu');
+    // Re-llegim la selecció: el setGroupValue acaba de canviar l'interior i el
+    // bloc-passpartu ha d'aparèixer a la mateixa execució (sense esperar
+    // un segon esdeveniment).
+    interior = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+    hasPasspartu = interior==='passpartu'||interior==='doble_pas';
   }
 
-  document.getElementById('bloc-passpartu').style.display=hasPasspartu?'block':'none';
+  // Mostrem el bloc d'extra margin si hi ha passpartú O doble vidre. Els
+  // selectors de color/foto i finestres queden amagats automàticament en mode
+  // doble vidre via CSS (data-mode="doble-vidre").
+  var hasDV = proteccio === 'doble_vidre';
+  var bloc = document.getElementById('bloc-passpartu');
+  if(hasPasspartu){
+    bloc.style.display = 'block';
+    bloc.dataset.mode = 'passpartu';
+    // Default suggerit per passpartú: 5 cm. Només sobreescrivim si l'usuari
+    // no ha tocat el valor manualment.
+    if(!_cmPasspartuTouched) document.getElementById('cm-passpartu').value = '5';
+    document.getElementById('cm-passpartu-label').textContent = 'Marge passpartú (cm per banda)';
+  } else if(hasDV){
+    bloc.style.display = 'block';
+    bloc.dataset.mode = 'doble-vidre';
+    if(!_cmPasspartuTouched) document.getElementById('cm-passpartu').value = '4';
+    document.getElementById('cm-passpartu-label').textContent = 'Marge doble vidre (cm per banda)';
+  } else {
+    bloc.style.display = 'none';
+    delete bloc.dataset.mode;
+  }
   document.getElementById('vidre-obligatori').style.display=hasPasspartu?'inline':'none';
   setPieceContextNote(note);
 }
@@ -2164,7 +2207,9 @@ function onGrupChange(grup){
   }
 
   applyIncompatibilities();
-  if(grup==='interior') recalcMides();
+  // El cm-passpartu pot afectar les mides del marc tant per passpartú com per
+  // doble vidre — recalculem sempre que es toca un d'aquests dos grups.
+  if(grup==='interior' || grup==='proteccio') recalcMides();
   enforceMaterialLimits(true);
   updateGrupPreu(grup,val);
   calcular();
@@ -2950,7 +2995,9 @@ function restauraEstat(e){
   document.getElementById('puzzle-support').value=e.puzzle_support||e.tipus_peca_detall||'sense_base';
   document.getElementById('amplada').value=(e.amplada !== undefined && e.amplada !== null && e.amplada !== 0) ? e.amplada : '';
   document.getElementById('alcada').value=(e.alcada !== undefined && e.alcada !== null && e.alcada !== 0) ? e.alcada : '';
-  document.getElementById('cm-passpartu').value=e.cm_passpartu||4;
+  document.getElementById('cm-passpartu').value=e.cm_passpartu||5;
+  // L'usuari ja l'havia desat → considerem-lo "tocat" perquè no s'auto-ajusti.
+  _cmPasspartuTouched = true;
   document.getElementById('descompte').value=e.descompte||0;
   document.getElementById('quantitat').value=e.quantitat||1;
   document.getElementById('entrega').value=e.entrega||0;
@@ -3133,6 +3180,8 @@ function novaComanda(){
   document.getElementById('btn-pdf').disabled=true;
   document.getElementById('btn-wa-client').disabled=true;
   document.getElementById('btn-wa-objectiu').disabled=true;
+  // Reset: el cm-passpartu torna a auto-ajustar el default al següent canvi.
+  _cmPasspartuTouched = false;
   netejar(); renderTabs();
 }
 
