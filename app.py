@@ -5889,13 +5889,29 @@ def admin_usuaris():
     professional i NO arriben a la UI d'admin. Cada pro els gestiona des de
     /ajustos. Els trams d'impressió (imp_tram1..6) sí es mostren aquí per a
     onboarding/suport però queden traçats al audit log si l'admin els toca."""
-    usuaris = query("""
+    # Si la columna 'email' encara no s'ha migrat (cal visitar
+    # /admin/run-migrations després del deploy), provem un ALTER idempotent
+    # i tornem a llegir. Així evitem el 500 i recuperem la pàgina sol.
+    base_sql = """
         SELECT id, username, nom, nom_empresa, profile_type, access_status,
                web_url, instagram, fiscal_id, notes_validacio, is_admin,
                imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6,
                baryta_actiu, email
         FROM usuaris ORDER BY nom
-    """)
+    """
+    try:
+        usuaris = query(base_sql)
+    except Exception as e:
+        if 'email' in str(e).lower() and ('does not exist' in str(e).lower() or 'no such column' in str(e).lower()):
+            try:
+                execute("ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+                usuaris = query(base_sql)
+                flash("S'ha afegit la columna 'email' automàticament. Si veus altres problemes, executa /admin/run-migrations.", 'ok')
+            except Exception as e2:
+                flash(f"Cal aplicar migracions: visita /admin/run-migrations. Detall: {e2}", 'error')
+                usuaris = query(base_sql.replace(", email", ""))
+        else:
+            raise
     # Defaults globals per als placeholders
     imp_defaults = {
         f'tram{i}': float(get_config_value(f'imp_tram{i}_marge_default', '0'))
@@ -7945,11 +7961,26 @@ def crear_pdf(c):
 @app.route('/ajustos')
 @login_required
 def ajustos():
-    u = query(
-        'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, email, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
-        [session['user_id']],
-        one=True,
-    )
+    # Si 'email' encara no s'ha migrat, aplica-ho de forma idempotent i reintenta.
+    try:
+        u = query(
+            'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, email, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+            [session['user_id']],
+            one=True,
+        )
+    except Exception as e:
+        if 'email' in str(e).lower() and ('does not exist' in str(e).lower() or 'no such column' in str(e).lower()):
+            try:
+                execute("ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+            except Exception:
+                pass
+            u = query(
+                'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, email, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+                [session['user_id']],
+                one=True,
+            )
+        else:
+            raise
     marge_actual = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     if float(marge_actual).is_integer():
