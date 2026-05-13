@@ -2186,12 +2186,12 @@ def _send_welcome_email(username, password, nom, to_addr=None):
     html = f"""\
 <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1C1B18;padding:24px;background:#FBFAF7">
   <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:10px;margin:0 0 18px">
-    Benvinguda a la calculadora
+    Et donem la benvinguda
   </h2>
   <p style="font-size:14px;line-height:1.6;margin:0 0 14px">Hola {nom_visible},</p>
   <p style="font-size:14px;line-height:1.6;margin:0 0 16px">
-    T'han donat d'alta a la <strong>calculadora de marcs i impressions de Reus Revela</strong>.
-    Aquí tens les teves dades d'accés:
+    Ja tens el teu compte a la <strong>calculadora de marcs i impressions de Reus Revela</strong>.
+    Aquestes són les teves dades d'accés:
   </p>
 
   <table style="width:100%;max-width:480px;margin:0 0 18px;background:#F5F3EC;border-radius:10px;border-collapse:collapse">
@@ -2204,35 +2204,42 @@ def _send_welcome_email(username, password, nom, to_addr=None):
   </table>
 
   <p style="font-size:12px;color:#6B6860;margin:0 0 22px">
-    Quan entris per primer cop pots canviar la contrasenya des de <strong>/ajustos</strong>.
+    Recomanem que canviïs la contrasenya quan entris per primer cop. Ho pots fer des de <strong>/ajustos</strong>.
   </p>
 
-  <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Com funciona la calculadora (resum ràpid)</h3>
+  <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Com funciona la calculadora (en cinc passos)</h3>
   <ol style="line-height:1.7;font-size:14px;padding-left:20px;margin:0 0 18px">
     <li>Introdueix les <strong>mides de la peça</strong> i el <strong>tipus</strong> (fotografia, samarreta, puzzle…).</li>
-    <li>Tria <strong>materials</strong>: motllura, vidre o passpartú, muntatge.</li>
+    <li>Tria els <strong>materials</strong>: motllura, vidre o passpartú i muntatge.</li>
     <li>El <strong>preu es calcula automàticament</strong> i veus el resum a la dreta.</li>
-    <li>Pots <strong>desar múltiples opcions</strong> (A, B, C…) per al mateix client.</li>
-    <li>Quan tinguis la versió final, genera <strong>PDF</strong>, envia per <strong>WhatsApp</strong> al client o passa la comanda al <strong>taller</strong>.</li>
+    <li>Pots <strong>desar diverses opcions</strong> (A, B, C…) per al mateix client.</li>
+    <li>Quan tinguis la versió final, genera el <strong>PDF</strong>, envia per <strong>WhatsApp</strong> al client o passa la comanda al <strong>taller</strong>.</li>
   </ol>
 
   <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Consells útils</h3>
   <ul style="line-height:1.7;font-size:14px;padding-left:20px;margin:0 0 18px">
-    <li><strong>Botó € (capçal del Resum)</strong> — canvia entre preu de cost (taller) i PVP final.</li>
-    <li>Caixa <strong>"Extres"</strong> — afegir feines com desmuntar marcs antics o emmarcar samarretes.</li>
+    <li><strong>Botó € (capçalera del Resum)</strong> — alterna entre preu de cost (taller) i PVP final.</li>
+    <li>Caixa <strong>"Extres"</strong> — afegir feines puntuals com desmuntar un marc antic o emmarcar una samarreta.</li>
     <li><strong>"Més accions"</strong> — generar PDF, enviar per WhatsApp i comanda al taller.</li>
-    <li>Al teu <strong>/ajustos</strong> pots configurar el teu <strong>marge comercial</strong> i les preferències de marca.</li>
+    <li>A <strong>/ajustos</strong> pots configurar el teu <strong>marge comercial</strong>, les <strong>dades de l'empresa</strong> i les preferències de marca.</li>
   </ul>
 
   <p style="margin:24px 0 6px;font-size:13px;color:#6B6860">
-    Qualsevol dubte: <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a> · 977 316 111
+    Si tens qualsevol dubte, escriu-nos a <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a> o truca al 977 316 111.
   </p>
   <p style="margin:18px 0 0;font-size:13px;color:#1C1B18">
-    Salutacions,<br><strong>Equip Reus Revela</strong>
+    Una salutació cordial,<br><strong>Equip Reus Revela</strong>
+  </p>
+
+  <hr style="border:none;border-top:1px solid #E5E2DB;margin:26px 0 14px">
+  <p style="font-size:11px;color:#9E9B94;line-height:1.6;margin:0">
+    Aquest és un correu automàtic. <strong>No responguis a aquesta adreça</strong>;
+    les respostes no es llegeixen. Si has rebut aquest missatge per error, esborra'l
+    i, si vols, fes-nos-ho saber a <a href="mailto:reusrevela@gmail.com" style="color:#9E9B94">reusrevela@gmail.com</a>.
   </p>
 </div>
 """
-    subject = 'Benvinguda · Calculadora de marcs i impressions'
+    subject = 'Et donem la benvinguda · Calculadora Reus Revela'
     return _send_user_email_html(to_addr or username, subject, html, log_tag='welcome_email')
 
 
@@ -3055,7 +3062,23 @@ def calculadora():
             return redirect(url_for('setup'))
     except:
         pass
-    user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    try:
+        user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    except Exception as e:
+        # Si la columna 'email' encara no s'ha migrat, ho intentem aplicar i reintenta;
+        # en cas extrem fem fallback sense email perquè la calculadora no caigui.
+        if 'email' in str(e).lower() and ('does not exist' in str(e).lower() or 'no such column' in str(e).lower()):
+            try:
+                execute("ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+            except Exception:
+                pass
+            try:
+                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email FROM usuaris WHERE id=?', [session['user_id']], one=True)
+            except Exception:
+                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        else:
+            raise
+    user_has_email = bool((_row_get(user, 'email', '') or '').strip())
     brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
     marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
     marge_pro = _get_marge_value(user) if marge_pro_actiu else 0.0
@@ -3085,7 +3108,8 @@ def calculadora():
                            is_admin=1 if session.get('is_admin') else 0,
                            mr_trams=mr_trams,
                            mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)),
-                           extras=get_extras_list())
+                           extras=get_extras_list(),
+                           user_has_email=user_has_email)
 
 @app.route('/api/lookup')
 @login_required
