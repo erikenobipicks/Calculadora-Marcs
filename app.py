@@ -6482,13 +6482,15 @@ def admin_config():
                     "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
                     [clau, str(val).strip()],
                 )
-        if request.form.get('save_gmail'):
-            gu = request.form.get('gmail_user','').strip()
-            gp = request.form.get('gmail_pass','').strip().replace(' ','')
-            if gu:
-                execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_user', ?)", [gu])
-            if gp:
-                execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_pass', ?)", [gp])
+        # Gmail SMTP: desem si l'admin omple els camps. El password és type=password
+        # i mai s'echo-eja al GET, així que enviar-lo buit (cas normal) NO esborra
+        # el valor anterior — només es desa quan el camp porta contingut.
+        gu = (request.form.get('gmail_user') or '').strip()
+        gp = (request.form.get('gmail_pass') or '').strip().replace(' ', '')
+        if gu:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_user', ?)", [gu])
+        if gp:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_pass', ?)", [gp])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)

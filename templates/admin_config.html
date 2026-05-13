@@ -123,25 +123,26 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     </div>
 
     <div class="section">
-      <div class="section-title">Gmail SMTP (per emails automàtics)</div>
+      <div class="section-title">
+        Gmail SMTP (per emails automàtics)
+        {% if config.get('gmail_user') and config.get('gmail_pass') %}
+        <span style="background:var(--green-l);color:var(--green);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;letter-spacing:.3px;border:1px solid #B8DCC9">✓ CONFIGURAT</span>
+        {% else %}
+        <span style="background:#FAEAEA;color:#B84040;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;letter-spacing:.3px;border:1px solid #E8B4B4">✗ NO CONFIGURAT</span>
+        {% endif %}
+      </div>
       <p class="muted" style="margin-bottom:1rem">
         Compte Gmail que l'app utilitza per enviar correus (welcome, notificacions, laboratori, etc.).
         <strong>Important</strong>: cal una <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color:var(--green)">App Password</a> de Google (no funciona la contrasenya normal). Requereix tenir activada la Verificació en 2 passos al compte Google.
       </p>
 
-      <label>Email Gmail (gmail_user)</label>
+      <label>Email Gmail</label>
       <p class="hint">Compte des d'on s'envien els correus. Ex.: <code>reusrevela@gmail.com</code></p>
       <input type="email" name="gmail_user" value="{{ config.get('gmail_user', '') }}" placeholder="reusrevela@gmail.com" autocomplete="off">
 
-      <label>App Password (gmail_pass)</label>
-      <p class="hint">16 caràcters que dóna Google a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color:var(--green)">myaccount.google.com/apppasswords</a>. Els espais els eliminem automàticament. <strong>Deixa'l buit per no canviar-lo.</strong></p>
-      <input type="password" name="gmail_pass" value="" placeholder="{% if config.get('gmail_pass') %}··· (ja configurat){% else %}abcd efgh ijkl mnop{% endif %}" autocomplete="new-password">
-
-      <div class="check-row" style="margin-top:.4rem">
-        <input type="checkbox" name="save_gmail" value="1" id="save_gmail">
-        <label for="save_gmail" style="margin:0;font-weight:600;color:var(--text)">Desar canvis de Gmail</label>
-      </div>
-      <p class="hint" style="margin-top:.5rem">Marca aquesta casella abans de "Desar configuració" si vols actualitzar els camps de Gmail. Així evitem sobreescriure'ls quan només toques altres seccions.</p>
+      <label>App Password</label>
+      <p class="hint">16 caràcters que dóna Google a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color:var(--green)">myaccount.google.com/apppasswords</a>. Els espais els eliminem automàticament. {% if config.get('gmail_pass') %}<strong>Deixa'l buit per mantenir el valor actual.</strong>{% endif %}</p>
+      <input type="password" name="gmail_pass" value="" placeholder="{% if config.get('gmail_pass') %}··· (ja configurat — deixa buit per no canviar){% else %}abcd efgh ijkl mnop{% endif %}" autocomplete="new-password">
     </div>
 
     <div class="section">
