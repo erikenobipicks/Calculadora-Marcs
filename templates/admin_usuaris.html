@@ -149,7 +149,12 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           <td>
             <div><strong>{{ u.nom }}</strong></div>
             <div class="mono">{{ u.username }}</div>
-            {% if u.email %}<div class="mono" style="font-size:11px;color:var(--hint)">{{ u.email }}</div>{% endif %}
+            <form method="post" action="/admin/usuari" class="mini-form" style="margin-top:4px">
+              <input type="hidden" name="action" value="actualitzar_email">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <input type="email" name="email" value="{{ u.email or '' }}" placeholder="email@exemple.com" style="margin:0;padding:3px 7px;font-size:11px;width:170px">
+              <button type="submit" class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px">OK</button>
+            </form>
             <div style="margin-top:4px">{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</div>
           </td>
           <td>
