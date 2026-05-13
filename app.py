@@ -2107,6 +2107,63 @@ def _gmail_is_configured():
     return bool(gu) and bool(gp)
 
 
+def _resend_is_configured():
+    """Retorna True si resend_api_key és present a config."""
+    return bool((get_config_value('resend_api_key', '') or '').strip())
+
+
+def _email_is_configured():
+    """Retorna True si almenys un proveïdor d'email està configurat."""
+    return _resend_is_configured() or _gmail_is_configured()
+
+
+def _send_via_resend(to_addr, subject, html, log_tag='resend_email'):
+    """Envia un mail via API HTTPS de Resend. Retorna True si OK.
+    Resend funciona via HTTPS (no SMTP), per tant és compatible amb hosts
+    que bloquegen el port 465/587 (Railway, Render, etc.)."""
+    try:
+        api_key = (get_config_value('resend_api_key', '') or '').strip()
+        if not api_key:
+            print(f"[{log_tag}] skip: resend_api_key no configurat")
+            return False
+        from_addr = (get_config_value('resend_from', '') or '').strip()
+        if not from_addr:
+            # Fallback: l'adreça d'onboarding de Resend (sense verificació de
+            # domini). Bona per provar; per producció cal configurar un from
+            # propi i verificar el domini al panell de Resend.
+            from_addr = 'onboarding@resend.dev'
+        payload = json.dumps({
+            'from': from_addr,
+            'to': [to_addr],
+            'subject': subject,
+            'html': html,
+        }).encode('utf-8')
+        req = urllib_request.Request(
+            'https://api.resend.com/emails',
+            data=payload,
+            headers={
+                'Authorization': 'Bearer ' + api_key,
+                'Content-Type': 'application/json',
+            },
+            method='POST',
+        )
+        with urllib_request.urlopen(req, timeout=10) as resp:
+            data = resp.read().decode('utf-8', errors='replace')
+        print(f"[{log_tag}] OK: enviat a {to_addr} via Resend (resp={data[:140]})")
+        return True
+    except urllib_error.HTTPError as e:
+        body = ''
+        try:
+            body = e.read().decode('utf-8', errors='replace')[:240]
+        except Exception:
+            pass
+        print(f"[{log_tag}] FAIL HTTP {e.code} ({to_addr}): {body}")
+        return False
+    except Exception as e:
+        print(f"[{log_tag}] FAIL ({to_addr}): {e}")
+        return False
+
+
 def _generate_temp_password(length=12):
     """Genera una contrasenya aleatòria llegible (sense 0/O, 1/l/I).
     Es fa servir per a l'email de benvinguda; l'usuari pot canviar-la
@@ -2175,15 +2232,18 @@ def _send_welcome_email(username, password, nom, to_addr=None):
 
 
 def _send_user_email_html(to_addr, subject, html, log_tag='user_email'):
-    """Helper compartit per a emails al USUARI final. Reusa gmail_user/pass
-    de config (com a la resta del codebase). Try/except: mai bloqueja el
-    flux que el crida — el correu és informatiu."""
+    """Helper compartit per a emails al USUARI final. Tria proveïdor segons
+    config: si resend_api_key està posat, fa servir l'API HTTPS de Resend
+    (compatible amb hosts que bloquegen SMTP); si no, fallback a Gmail
+    SMTP. Try/except: mai bloqueja el flux que el crida."""
+    if _resend_is_configured():
+        return _send_via_resend(to_addr, subject, html, log_tag=log_tag)
     try:
         cfg = {r['clau']: r['valor'] for r in (query('SELECT clau, valor FROM config') or [])}
         gmail_user = (cfg.get('gmail_user') or '').strip()
         gmail_pass = (cfg.get('gmail_pass') or '').strip()
         if not gmail_user or not gmail_pass:
-            print(f"[{log_tag}] skip: gmail_user/pass no configurat (dest={to_addr})")
+            print(f"[{log_tag}] skip: cap proveïdor configurat (dest={to_addr})")
             return False
         import smtplib
         from email.mime.multipart import MIMEMultipart
@@ -5987,8 +6047,8 @@ def admin_usuari():
             to_addr = stored_email if '@' in stored_email else username
             if '@' not in to_addr:
                 flash(f"L'usuari «{nom or username}» no té cap email vàlid (ni al camp email ni al username). Edita'l abans d'enviar la benvinguda.", 'error')
-            elif not _gmail_is_configured():
-                flash("Gmail no està configurat (falta gmail_user o gmail_pass). Configura-ho a /admin/config abans de fer servir 'Welcome'. La contrasenya NO s'ha tocat.", 'error')
+            elif not _email_is_configured():
+                flash("Cap proveïdor d'email està configurat. Posa el resend_api_key (recomanat) o gmail_user/gmail_pass a /admin/config abans de fer servir 'Welcome'. La contrasenya NO s'ha tocat.", 'error')
             else:
                 new_pw = _generate_temp_password(12)
                 sent = _send_welcome_email(username, new_pw, nom, to_addr=to_addr)
@@ -6491,6 +6551,14 @@ def admin_config():
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_user', ?)", [gu])
         if gp:
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_pass', ?)", [gp])
+        # Resend (HTTPS API). El from es desa sempre que estigui informat;
+        # l'api_key només si l'admin n'ha posat un de nou (mateix patró que Gmail).
+        rk = (request.form.get('resend_api_key') or '').strip()
+        rf = (request.form.get('resend_from') or '').strip()
+        if rk:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_api_key', ?)", [rk])
+        if rf:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_from', ?)", [rf])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)
