@@ -6029,6 +6029,24 @@ def admin_usuari():
         _audit_log('user.password_change', target_user_id=int(uid) if str(uid).isdigit() else None,
                    target_username=_row_get(target, 'username', '') if target else '')
         flash('Contrasenya actualitzada.', 'ok')
+    elif action == 'actualitzar_email':
+        uid = request.form['uid']
+        nou_email = (request.form.get('email') or '').strip()
+        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
+        if not target:
+            flash('Usuari no trobat.', 'error')
+        elif nou_email and '@' not in nou_email:
+            flash(f"L'adreça «{nou_email}» no sembla un email vàlid.", 'error')
+        else:
+            execute('UPDATE usuaris SET email=? WHERE id=?', [nou_email, uid])
+            _audit_log('user.email_change',
+                       target_user_id=int(uid) if str(uid).isdigit() else None,
+                       target_username=_row_get(target, 'username', '') if target else '',
+                       details=f"new_email={nou_email or '(buit)'}")
+            if nou_email:
+                flash(f"Email actualitzat a «{nou_email}».", 'ok')
+            else:
+                flash("Email esborrat (el Welcome farà fallback al username si és vàlid).", 'ok')
     elif action == 'send_welcome':
         # Genera una contrasenya nova, la desa hashed i envia un mail al
         # professional amb les dades d'accés + mini tutorial de la calculadora.
