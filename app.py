@@ -1291,12 +1291,6 @@ def calcular_precio_passpartu(ew, eh):
     return round(max(coste_base * mult, _MIN_PRICE), 2)
 
 
-def _closest_passpartu_taula(amplada, alcada, prefix='1PAS'):
-    """Min-contain lookup on the passpartout table. Returns row dict or None."""
-    rows = [dict(r) for r in query('SELECT * FROM passpartout')]
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
-
-
 def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', tolerancia=2.0):
     """Min-contain amb tolerància sobre la taula passpartout. Filtra per
     prefix de referència (1PAS, DOBPAS…). Considera ambdues orientacions
@@ -1321,8 +1315,8 @@ def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', toleranc
 
 
 def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
-    """Calcula cost i PVD del passpartú: primer busca a taula, si no, fórmula.
-    Retorna dict {'cost', 'pvd', 'origen': 'taula'|'formula'}."""
+    """Lògica híbrida: agafa min(taula amb tolerància, fórmula) per evitar
+    que la taula penalitzi mides petites no estocades amb la ref següent."""
     cost_hora    = float(get_config_value('cost_hora_taller', '25'))
     temps_simple = float(get_config_value('passpartu_temps_simple', '9'))
     temps_doble  = float(get_config_value('passpartu_temps_doble', '16'))
@@ -1330,28 +1324,35 @@ def calcular_cost_passpartu(amplada, alcada, tipus='simple', finestres_extra=0):
     cost_cm2     = float(get_config_value('passpartu_cost_cm2', '0.000620'))
     minim_mat    = float(get_config_value('passpartu_minim_material', '0.50'))
     marge_pas    = float(get_config_value('marge_admin_passpartu_pct', '60'))
-
     tolerancia   = float(get_config_value('passpartu_tolerancia_cm', '2'))
 
-    # 1. Min-contain amb tolerància sobre taula (mides estàndard)
-    prefix = '1PAS' if tipus == 'simple' else 'DOBPAS'
-    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix=prefix, tolerancia=tolerancia)
-    if fila:
-        pc = _row_get(fila, 'preu_cost')
-        if pc is not None:
-            cost = float(pc) + finestres_extra * (temps_extra * cost_hora / 60)
-            pvd = round(cost * (1 + marge_pas / 100), 4)
-            return {'cost': round(cost, 4), 'pvd': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+    cost_extra = finestres_extra * (temps_extra * cost_hora / 60)
 
-    # 2. Fallback fórmula per a mides fora de taula
     area = amplada * alcada
     cost_mat = max(area * cost_cm2, minim_mat)
     minuts = temps_doble if tipus == 'doble' else temps_simple
     cost_mo = minuts * cost_hora / 60
-    cost_extra = finestres_extra * (temps_extra * cost_hora / 60)
-    cost = round(cost_mat + cost_mo + cost_extra, 4)
+    cost_formula = cost_mat + cost_mo + cost_extra
+
+    prefix = '1PAS' if tipus == 'simple' else 'DOBPAS'
+    fila = _closest_passpartu_taula_tolerancia(amplada, alcada, prefix=prefix, tolerancia=tolerancia)
+    cost_taula = None
+    if fila:
+        pc = _row_get(fila, 'preu_cost')
+        if pc is not None:
+            cost_taula = float(pc) + cost_extra
+
+    if cost_taula is not None and cost_taula <= cost_formula:
+        cost = round(cost_taula, 4)
+        origen = 'taula'
+        ref = fila['referencia']
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'pas-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge_pas / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'origen': 'formula', 'ref': f'pas-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'origen': origen, 'ref': ref}
 
 
 def _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var_cm2):
@@ -1362,13 +1363,6 @@ def _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var_cm2):
     temps = temps_base + (area * temps_var_cm2)
     mo = temps * cost_hora / 60
     return round(mat + mo, 4)
-
-
-def _closest_encolat_taula(amplada, alcada, prefix):
-    """Min-contain on encolat_pro filtered by prefix (ENC or PRO).
-    Returns cheapest row whose dimensions physically cover (amplada, alcada)."""
-    rows = [dict(r) for r in query('SELECT * FROM encolat_pro')]
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
 def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
@@ -1394,32 +1388,32 @@ def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
 
 
 def calcular_cost_foam(amplada, alcada):
-    """Encolat en foam adhesiu (ProEco és àlies del mateix producte).
-    1. Min-contain amb tolerància sobre encolat_pro (refs ENC%)
-    2. Fórmula fallback per mides fora de taula"""
+    """Foam adhesiu amb lògica híbrida: min(taula amb tolerància, fórmula)."""
     marge      = float(get_config_value('marge_admin_encolat_pct', '60'))
     tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
-
-    fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='ENC', tolerancia=tolerancia)
-    if fila and _row_get(fila, 'preu_cost') is not None:
-        cost = float(fila['preu_cost'])
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
-
-    # Fallback fórmula
     cost_cm2   = float(get_config_value('foam_cost_cm2', '0.001143'))
     temps_base = float(get_config_value('foam_temps_base_min', '9'))
     temps_var  = float(get_config_value('foam_temps_var_cm2', '0.0015'))
-    cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+
+    cost_formula = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+
+    fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='ENC', tolerancia=tolerancia)
+    if fila and _row_get(fila, 'preu_cost') is not None and float(fila['preu_cost']) <= cost_formula:
+        cost = round(float(fila['preu_cost']), 4)
+        origen = 'taula'
+        ref = fila['referencia']
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'foam-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'foam-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': origen, 'ref': ref}
 
 
 def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
-    """Laminat Protter. tipus: 'semibrillo' | 'mate'
-    1. Min-contain sobre encolat_pro (refs PRO%) — usa preu_cost com a base semibrillo
-       i aplica diferencial per mate
-    2. Fórmula fallback per mides fora de taula"""
+    """Laminat Protter amb lògica híbrida: min(taula amb tolerància,
+    fórmula). tipus: 'semibrillo' | 'mate' (diferencial sobre semibrillo)."""
     marge = float(get_config_value('marge_admin_encolat_pct', '60'))
     cost_cm2_semi = float(get_config_value('laminat_semibrillo_cost_cm2', '0.000504'))
     cost_cm2_mate = float(get_config_value('laminat_mate_cost_cm2', '0.000685'))
@@ -1428,22 +1422,29 @@ def calcular_cost_laminat(amplada, alcada, tipus='semibrillo'):
     cost_cm2 = cost_cm2_mate if tipus == 'mate' else cost_cm2_semi
     tolerancia = float(get_config_value('encolat_tolerancia_cm', '2'))
 
+    cost_formula = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+
+    cost_taula = None
     fila = _closest_encolat_taula_tolerancia(amplada, alcada, prefix='PRO', tolerancia=tolerancia)
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost_base = float(fila['preu_cost'])
         if tipus == 'mate':
-            area = amplada * alcada
-            extra_mat = area * (cost_cm2_mate - cost_cm2_semi)
-            cost = round(cost_base + extra_mat, 4)
+            extra_mat = (amplada * alcada) * (cost_cm2_mate - cost_cm2_semi)
+            cost_taula = cost_base + extra_mat
         else:
-            cost = cost_base
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'taula', 'ref': fila['referencia']}
+            cost_taula = cost_base
 
-    # Fallback fórmula
-    cost = _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var)
+    if cost_taula is not None and cost_taula <= cost_formula:
+        cost = round(cost_taula, 4)
+        origen = 'taula'
+        ref = fila['referencia']
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'laminat-{tipus}-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': 'formula', 'ref': f'laminat-{tipus}-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus, 'origen': origen, 'ref': ref}
 
 
 def calcular_cost_protter(amplada, alcada, tipus='semibrillo'):
@@ -1457,17 +1458,6 @@ def calcular_cost_protter(amplada, alcada, tipus='semibrillo'):
     pvd = round(cost * (1 + marge / 100), 4)
     return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'tipus': tipus,
             'origen': 'composicio', 'ref': f'protter-{tipus}-{amplada}x{alcada}'}
-
-
-def _closest_vidre_taula(amplada, alcada, prefix=''):
-    """Min-contain sobre taula vidres filtrat per prefix.
-    prefix: ''=vidre simple (exclou DV-/MIR-), 'DV-'=doble vidre, 'MIR-'=mirall."""
-    rows = [dict(r) for r in query('SELECT * FROM vidres')]
-    if prefix == '':
-        # Exclou DV- i MIR-
-        rows = [r for r in rows if not (r['referencia'].upper().startswith('DV-') or r['referencia'].upper().startswith('MIR-'))]
-        return _find_closest(rows, amplada, alcada)
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
 def _closest_vidre_taula_tolerancia(amplada, alcada, prefix='', tolerancia=2.0):
@@ -1545,26 +1535,29 @@ def calcular_cost_vidre(amplada, alcada):
 
 
 def calcular_cost_doble_vidre(amplada, alcada):
-    """Doble vidre: dos vidres simples + muntatge.
-    1. Min-contain amb tolerància sobre DV-
-    2. Fórmula: (cost_vidre_simple × 2) + cost_muntatge"""
+    """Doble vidre amb lògica híbrida: min(taula amb tolerància,
+    2 × vidre simple + muntatge)."""
     marge      = float(get_config_value('marge_admin_vidres_pct', '60'))
     t_muntat   = float(get_config_value('vidre_dv_muntatge_min', '5'))
     cost_hora  = float(get_config_value('cost_hora_taller', '25'))
     tolerancia = float(get_config_value('vidre_tolerancia_cm', '2'))
 
-    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='DV-', tolerancia=tolerancia)
-    if fila and _row_get(fila, 'preu_cost') is not None:
-        cost = float(fila['preu_cost'])
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
-
-    # Fallback: 2 × vidre simple + muntatge
     simple = calcular_cost_vidre(amplada, alcada)
     mo_muntat = t_muntat * cost_hora / 60
-    cost = round(simple['cost'] * 2 + mo_muntat, 4)
+    cost_formula = simple['cost'] * 2 + mo_muntat
+
+    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='DV-', tolerancia=tolerancia)
+    if fila and _row_get(fila, 'preu_cost') is not None and float(fila['preu_cost']) <= cost_formula:
+        cost = round(float(fila['preu_cost']), 4)
+        origen = 'taula'
+        ref = fila['referencia']
+    else:
+        cost = round(cost_formula, 4)
+        origen = 'formula'
+        ref = f'dv-{amplada}x{alcada}'
+
     pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'dv-{amplada}x{alcada}'}
+    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': origen, 'ref': ref}
 
 
 def calcular_cost_mirall(amplada, alcada):
@@ -1574,9 +1567,10 @@ def calcular_cost_mirall(amplada, alcada):
 
     1. Fórmula real sobre cost de factura (primer)
     2. Min-contain sobre taula MIR- com a fallback si la fórmula no aplica."""
-    marge     = float(get_config_value('marge_admin_vidres_pct', '60'))
-    cost_cm2  = float(get_config_value('mirall_cost_cm2', '0.003153'))
-    multiplo  = float(get_config_value('mirall_multiplo_dm2', '6'))
+    marge      = float(get_config_value('marge_admin_vidres_pct', '60'))
+    cost_cm2   = float(get_config_value('mirall_cost_cm2', '0.003153'))
+    multiplo   = float(get_config_value('mirall_multiplo_dm2', '6'))
+    tolerancia = float(get_config_value('vidre_tolerancia_cm', '2'))
 
     if amplada > 0 and alcada > 0 and cost_cm2 > 0 and multiplo > 0:
         # Àrea facturada (arrodonida al múltiple de dm² superior)
@@ -1595,8 +1589,8 @@ def calcular_cost_mirall(amplada, alcada):
             'ref': f'mir-{amplada}x{alcada}',
         }
 
-    # Fallback: min-contain sobre taula MIR-
-    fila = _closest_vidre_taula(amplada, alcada, prefix='MIR-')
+    # Fallback: min-contain amb tolerància sobre taula MIR-
+    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='MIR-', tolerancia=tolerancia)
     if fila and _row_get(fila, 'preu_cost') is not None:
         cost = float(fila['preu_cost'])
         pvd = round(cost * (1 + marge / 100), 4)
