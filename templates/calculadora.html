@@ -122,14 +122,21 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .opt-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;user-select:none;min-height:44px}
 .opt-btn:hover{border-color:var(--green);background:var(--green-l)}
 .opt-btn input{display:none}
-.opt-btn.selected{background:var(--green-l);border-color:var(--green);color:var(--green)}
+/* Indicador circular sempre present (no shift en seleccionar). Buit a sense
+   selecció, ple a seleccionat — així el contrast és inequívoc fins i tot a
+   pantalles de gamma baixa on la diferència de fons és subtil. */
+.opt-btn::before{content:'';width:9px;height:9px;border-radius:50%;border:1.5px solid var(--border2);background:#fff;flex-shrink:0;transition:all .15s}
+.opt-btn.opt-none::before{display:none}
+.opt-btn.selected{background:#D4E9DD;border-color:var(--green);color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
+.opt-btn.selected::before{background:var(--green);border-color:var(--green);box-shadow:0 0 0 2px rgba(26,107,69,.18)}
+.opt-btn.selected .opt-text{font-weight:700}
 .opt-btn.opt-none{border-style:dashed}
-.opt-btn.opt-none.selected{background:var(--bg);border-color:var(--border2);color:var(--muted)}
+.opt-btn.opt-none.selected{background:var(--bg);border-color:var(--border2);color:var(--muted);box-shadow:none}
 .opt-btn.opt-conservar{border-color:#B8DCC9;color:var(--green)}
-.opt-btn.opt-conservar.selected{background:var(--green-l);border-color:var(--green)}
+.opt-btn.opt-conservar.selected{background:#D4E9DD;border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
 .opt-text{font-size:12px;font-weight:600}
 .opt-preu{font-size:10px;font-weight:700;color:var(--green);background:var(--green-l);padding:2px 6px;border-radius:999px;margin-left:2px;white-space:nowrap}
-.opt-btn.selected .opt-preu{background:rgba(26,107,69,.15)}
+.opt-btn.selected .opt-preu{background:rgba(26,107,69,.2);color:#0F4A30}
 .opt-btn.disabled{opacity:.35;pointer-events:none}
 .opt-btn.locked{cursor:not-allowed;pointer-events:none}
 .opt-btn.locked .opt-text{opacity:.82}
@@ -412,15 +419,34 @@ body.has-sticky-bar{padding-bottom:78px}
           <div class="desc" id="moldura-filter-meta" style="margin-top:0">Mostrant totes les motllures disponibles.</div>
           <button type="button" class="btn btn-o" style="padding:7px 12px;font-size:12px" onclick="resetMolduraFilters()">Netejar filtres</button>
         </div>
+        <!-- Marc principal: SEMPRE primer i destacat. El premarc opcional va a sota. -->
+        <div class="f" style="padding:.6rem .85rem;background:var(--green-l);border:1px solid color-mix(in srgb,var(--green) 25%,white);border-radius:9px;margin-bottom:.6rem">
+          <label style="font-size:14px;font-weight:800;color:var(--text);letter-spacing:.1px;display:flex;align-items:center;gap:6px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:11px;font-weight:800">1</span>
+            Marc principal
+            <span style="font-size:11px;font-weight:400;color:var(--muted)">— el marc exterior, sempre obligatori</span>
+          </label>
+          <div class="ss" id="ss-marc">
+            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off"
+                   oninput="onMarcInput();filterSS('marc')" onfocus="openSS('marc')" onblur="closeSS('marc')">
+            <div class="ss-list" id="list-marc"></div>
+          </div>
+          <div class="chip-row" id="chips-marc"></div>
+          <div class="desc" id="desc-marc"></div>
+          <div id="aviso-descatalogada-marc" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
+            ⚠ Motllura amb stock limitat — no es reposarà
+          </div>
+        </div>
+        <!-- Premarc: opcional, va A DINS del marc principal. Sempre per sota. -->
         <div class="f" style="margin-bottom:.5rem">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
             <input type="checkbox" id="chk-premarc" onchange="togglePremarc()" style="width:15px;height:15px;cursor:pointer">
-            <span style="font-size:12px;font-weight:600;color:var(--muted)">Afegir premarc <span style="font-weight:400">(segon marc interior, poc habitual)</span></span>
+            <span style="font-size:12px;font-weight:600;color:var(--muted)">2. Afegir premarc <span style="font-weight:400">(segon marc interior opcional, poc habitual)</span></span>
           </label>
         </div>
         <div id="bloc-premarc" style="display:none;margin-bottom:.85rem;padding:.85rem;background:var(--amber-l);border:1px solid color-mix(in srgb,var(--amber) 30%,white);border-radius:9px">
           <div class="f" style="margin-bottom:0">
-            <label>Referència del premarc</label>
+            <label>Referència del premarc <span style="font-size:11px;font-weight:400;color:var(--muted)">(secundari)</span></label>
             <div class="ss" id="ss-pre">
               <input type="text" id="pre_marc" placeholder="Escriu per cercar..." autocomplete="off"
                      onfocus="openSS('pre')" oninput="filterSS('pre')" onblur="closeSS('pre')">
@@ -431,19 +457,6 @@ body.has-sticky-bar{padding-bottom:78px}
             <div id="aviso-descatalogada-pre" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
               ⚠ Motllura amb stock limitat — no es reposarà
             </div>
-          </div>
-        </div>
-        <div class="f">
-          <label style="font-weight:700;color:var(--text)">Marc principal <span style="font-size:11px;font-weight:400;color:var(--hint)">(marc exterior/principal)</span></label>
-          <div class="ss" id="ss-marc">
-            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off"
-                   oninput="onMarcInput();filterSS('marc')" onfocus="openSS('marc')" onblur="closeSS('marc')">
-            <div class="ss-list" id="list-marc"></div>
-          </div>
-          <div class="chip-row" id="chips-marc"></div>
-          <div class="desc" id="desc-marc"></div>
-          <div id="aviso-descatalogada-marc" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
-            ⚠ Motllura amb stock limitat — no es reposarà
           </div>
         </div>
         <div style="display:grid;gap:.75rem;margin-top:.85rem" id="fotos-grid">
