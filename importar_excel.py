@@ -44,7 +44,10 @@ else:
         except Exception:
             return None
 
-excel_path = sys.argv[1] if len(sys.argv) > 1 else 'Marcs_Objectiu_2026.xlsx'
+if len(sys.argv) < 2:
+    print("Ús: python importar_excel.py <ruta-al-xlsx>")
+    sys.exit(1)
+excel_path = sys.argv[1]
 if not os.path.exists(excel_path):
     print(f"ERROR: No trobo {excel_path}")
     sys.exit(1)

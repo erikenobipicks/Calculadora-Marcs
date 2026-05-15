@@ -10,7 +10,7 @@ python app.py
 
 ## Importacio de catalegs
 ```bash
-python importar_excel.py Marcs_Objectiu_2026.xlsx
+python importar_excel.py <ruta-al-xlsx>   # qualsevol .xlsx amb el format del cataleg
 python importar_impressio.py
 ```
 

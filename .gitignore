@@ -4,3 +4,5 @@ __pycache__/
 *.db
 .env
 *.zip
+*.xlsx
+.pytest_cache/

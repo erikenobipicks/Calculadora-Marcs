@@ -1402,53 +1402,6 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ── Passpartú: càlcul dinàmic de preu ────────────────────────────────────────
-_SHEET_W      = 80       # ample full en cm
-_SHEET_H      = 120      # alt full en cm
-_SHEET_PRICE  = 7.0      # preu full en €
-_COST_CM2     = 0.000729 # cost per cm²
-_MULT_PETITA  = 8.0      # multiplicador fins a _LIMIT_A cm²
-_MULT_MITJANA = 5.0      # multiplicador entre _LIMIT_A i _LIMIT_B cm²
-_MULT_GRAN    = 3.5      # multiplicador per sobre de _LIMIT_B cm²
-_LIMIT_A      = 900      # cm² (~30x30)
-_LIMIT_B      = 4800     # cm² (~60x80)
-_MIN_PRICE    = 5.50     # preu mínim per peça
-
-def _peces_per_full(ew, eh):
-    # Quantes peces caben en un full 80x120, provant les dues orientacions.
-    n1 = math.floor(_SHEET_W / ew) * math.floor(_SHEET_H / eh)
-    n2 = math.floor(_SHEET_W / eh) * math.floor(_SHEET_H / ew)
-    return max(1, n1, n2)
-
-def calcular_precio_passpartu(ew, eh):
-    """Legacy: retorna PVD directament (multiplicadors ja inclouen marge).
-    Mantingut per compatibilitat — nou codi hauria d'usar calcular_cost_passpartu()."""
-    area = ew * eh
-    n = _peces_per_full(ew, eh)
-    coste_cm2  = area * _COST_CM2
-    coste_hoja = _SHEET_PRICE / n
-    coste_base = max(coste_cm2, coste_hoja)
-    if area <= _LIMIT_A:
-        mult = _MULT_PETITA
-        t = (area - _LIMIT_A * 0.92) / (_LIMIT_A * 0.16)
-        if 0 < t < 1:
-            mult = _MULT_PETITA + t * (_MULT_MITJANA - _MULT_PETITA)
-    elif area <= _LIMIT_B:
-        mult = _MULT_MITJANA
-        t = (area - _LIMIT_B * 0.92) / (_LIMIT_B * 0.16)
-        if 0 < t < 1:
-            mult = _MULT_MITJANA + t * (_MULT_GRAN - _MULT_MITJANA)
-    else:
-        mult = _MULT_GRAN
-    return round(max(coste_base * mult, _MIN_PRICE), 2)
-
-
-def _closest_passpartu_taula(amplada, alcada, prefix='1PAS'):
-    """Min-contain lookup on the passpartout table. Returns row dict or None."""
-    rows = [dict(r) for r in query('SELECT * FROM passpartout')]
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
-
-
 def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', tolerancia=2.0):
     """Min-contain amb tolerància sobre la taula passpartout. Filtra per
     prefix de referència (1PAS, DOBPAS…). Considera ambdues orientacions
@@ -1560,13 +1513,6 @@ def _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var_cm2):
     temps = temps_base + (area * temps_var_cm2)
     mo = temps * cost_hora / 60
     return round(mat + mo, 4)
-
-
-def _closest_encolat_taula(amplada, alcada, prefix):
-    """Min-contain on encolat_pro filtered by prefix (ENC or PRO).
-    Returns cheapest row whose dimensions physically cover (amplada, alcada)."""
-    rows = [dict(r) for r in query('SELECT * FROM encolat_pro')]
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
 def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
@@ -5518,127 +5464,6 @@ def admin_marcar_descatalogades():
     if errors:
         out += [f"<b>Errors ({len(errors)})</b>"] + errors
     return '<br>'.join(out)
-
-
-@app.route('/admin/db-status')
-def admin_db_status():
-    """TEMPORAL: diagnòstic complet de l'estat de la BD.
-
-    Accés permès si es compleix qualsevol de les dues condicions:
-      1. Sessió d'admin al cookie (funcionament normal).
-      2. Paràmetre ?token=<valor> que coincideixi amb l'env var DB_STATUS_TOKEN.
-
-    La via 2 existeix per poder usar la ruta quan l'auth o la BD estan
-    trencades. Configura DB_STATUS_TOKEN a Railway i visita-la així:
-        /admin/db-status?token=<valor>
-
-    Si DB_STATUS_TOKEN no està definida, només serveix via admin session.
-    Eliminar aquesta ruta un cop la BD estigui estable."""
-    token_env = (os.environ.get('DB_STATUS_TOKEN') or '').strip()
-    token_req = (request.args.get('token') or '').strip()
-    is_admin  = bool(session.get('is_admin'))
-    token_ok  = bool(token_env) and hmac.compare_digest(token_env, token_req)
-    if not (is_admin or token_ok):
-        return 'No autoritzat', 403
-
-    import traceback
-    try:
-        result = {}
-
-        if USE_PG:
-            taules_sql = (
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema='public' ORDER BY table_name"
-            )
-        else:
-            taules_sql = (
-                "SELECT name AS table_name FROM sqlite_master "
-                "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )
-        taules_rows = query(taules_sql) or []
-        result['taules'] = [r['table_name'] for r in taules_rows]
-
-        # Comptar files per taula (protegit per si alguna fa error)
-        counts = {}
-        for t in result['taules']:
-            try:
-                r = query(f"SELECT COUNT(*) AS n FROM {t}", one=True)
-                counts[t] = r['n'] if r else 0
-            except Exception as e:
-                counts[t] = f'error: {str(e)[:60]}'
-        result['counts'] = counts
-
-        def _cols(taula):
-            if USE_PG:
-                rows = query(
-                    "SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_name=%s ORDER BY ordinal_position",
-                    [taula],
-                ) or []
-                return [{'nom': r['column_name'], 'tipus': r['data_type']} for r in rows]
-            else:
-                rows = query(f'PRAGMA table_info({taula})') or []
-                return [{'nom': r['name'], 'tipus': r['type']} for r in rows]
-
-        result['usuaris_columnes']  = _cols('usuaris')
-        result['moldures_columnes'] = _cols('moldures')
-        result['comandes_columnes'] = _cols('comandes')
-        result['historial_columnes'] = _cols('historial_preus_cost')
-
-        try:
-            result['usuaris_mostra'] = query(
-                'SELECT id, username, nom, is_admin, marge, '
-                'marge_pro_pct, marge_impressio_pro_pct FROM usuaris LIMIT 3'
-            ) or []
-        except Exception as e:
-            result['usuaris_mostra'] = f'error: {str(e)[:120]}'
-
-        try:
-            cfg_rows = query(
-                "SELECT clau, valor FROM config WHERE clau IN ("
-                "'marge_pro_actiu','marge_defecte','migration_v2_done',"
-                "'marge_admin_moldures_pct','cost_hora_taller')"
-            ) or []
-            result['config'] = {r['clau']: r['valor'] for r in cfg_rows}
-        except Exception as e:
-            result['config'] = f'error: {str(e)[:120]}'
-
-        result['use_pg'] = USE_PG
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
-
-
-@app.route('/admin/debug-fotos')
-@admin_required
-def admin_debug_fotos():
-    """Mostra per a cada motllura: referencia, ref2, foto resolta i si existeix el fitxer."""
-    rows = query('SELECT referencia, ref2, foto, proveidor FROM moldures ORDER BY referencia')
-    out = []
-    for r in (rows or []):
-        ref  = _row_get(r, 'referencia', '') or ''
-        ref2 = _row_get(r, 'ref2', '') or ''
-        foto = _row_get(r, 'foto', '') or ''
-        prov = _row_get(r, 'proveidor', '') or ''
-        resolved = _resolve_moldura_photo(ref, foto, ref2=ref2)
-        out.append({'ref': ref, 'ref2': ref2, 'proveidor': prov,
-                    'foto_db': foto, 'foto_resolta': resolved})
-    # Return as plain text table for easy reading
-    lines = ['referencia | ref2 | proveidor | foto_resolta']
-    lines.append('-' * 80)
-    no_foto = []
-    for o in out:
-        if o['foto_resolta']:
-            lines.append(f"OK  {o['ref']:<25} ref2={o['ref2']:<20} -> {o['foto_resolta']}")
-        else:
-            no_foto.append(o)
-    lines.append('')
-    lines.append(f'--- SENSE FOTO ({len(no_foto)}) ---')
-    for o in no_foto:
-        lines.append(f"    {o['ref']:<25} ref2={o['ref2']:<20} prov={o['proveidor']}")
-    lines.append('')
-    lines.append(f'Total: {len(out)} motllures, amb foto: {len(out)-len(no_foto)}, sense: {len(no_foto)}')
-    return '<pre>' + '\n'.join(lines) + '</pre>'
 
 
 @app.route('/admin/cataleg')
