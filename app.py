@@ -6153,14 +6153,23 @@ def _tarifa_parse_custom_sizes(text):
 
 
 def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
-    """Per a cada producte seleccionat, collect [{mida, pvd, pvp, ...}]."""
+    """Per a cada producte seleccionat, collect [{mida, pvd, pvp, ...}].
+
+    Mides del catàleg conserven la seva ref original. Mides addicionals
+    (passades per l'usuari) reben una ref generada amb format uniforme
+    per producte per evitar col·lisions: a impressió, el lookup intern
+    mapeja a la fila estàndard més propera (dins un threshold) i, si
+    hi cau, reutilitzaria la ref del catàleg → dos tamanys diferents
+    acabarien amb la mateixa ref a l'export, sobreescrivint productes
+    a FacturaDirecta. Forçar la ref aquí trenca aquesta col·lisió."""
     result = []
     for prod_key, label, _short in TARIFA_PRODUCTS:
         if prod_key not in products:
             continue
-        sizes = _tarifa_default_sizes(prod_key)
-        # Afegir custom (sense duplicar)
-        seen = set(sizes)
+        catalog_sizes = _tarifa_default_sizes(prod_key)
+        catalog_set = set(catalog_sizes)
+        sizes = list(catalog_sizes)
+        seen = set(catalog_set)
         for wh in custom_sizes_per_product.get(prod_key, []):
             if wh not in seen:
                 sizes.append(wh)
@@ -6170,8 +6179,11 @@ def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
         rows = []
         for w, h in sizes:
             r = _tarifa_compute_one(prod_key, w, h, usuari)
-            if r:
-                rows.append(r)
+            if not r:
+                continue
+            if prod_key == 'impressio' and (w, h) not in catalog_set:
+                r['ref'] = f'IMP{int(w)}x{int(h)}'
+            rows.append(r)
         result.append({'key': prod_key, 'label': label, 'rows': rows})
     return result
 
