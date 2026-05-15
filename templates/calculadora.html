@@ -3547,6 +3547,22 @@ function mrTramsModalAccio(accio){
   // 'mes_tard': només marcar com a vist, sense canviar valors
   fetch('/api/marcs-trams/vist', {method:'POST'}).finally(tancar);
 }
+
+// Permet tancar el modal amb Esc o clicant fora de la caixa blanca, com a
+// "Més tard". Sense això, l'overlay (z-index 9000, inset:0) intercepta tots
+// els clicks de la calculadora i sembla que no responguin els botons.
+(function(){
+  var modal = document.getElementById('mr-trams-modal');
+  if(!modal) return;
+  modal.addEventListener('click', function(e){
+    if(e.target === modal) mrTramsModalAccio('mes_tard');
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && getComputedStyle(modal).display !== 'none'){
+      mrTramsModalAccio('mes_tard');
+    }
+  });
+})();
 </script>
 {% endif %}
 
