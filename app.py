@@ -6152,16 +6152,89 @@ def _tarifa_parse_custom_sizes(text):
     return result
 
 
+# Mapeig producte → (taula catàleg, filtre prefix, columna preu, categoria marge).
+# Categoria marge serveix per derivar PVD = preu_cost · (1 + marge_admin_<cat>/100)
+# als productes on la taula desa preu_cost en lloc del PVD final (com fa
+# impressio.preu, que ja és PVD-equivalent directe).
+# protter_* es deixa fora del floor: és composite (foam + laminat) i no
+# té una sola fila de catàleg per a una mida.
+TARIFA_CATALOG_SPEC = {
+    'impressio':    ('impressio',    None,      'preu',      None),
+    'vidre':        ('vidres',       'NOT_DV_MIR', 'preu_cost', 'vidres'),
+    'doble_vidre':  ('vidres',       'DV-',     'preu_cost', 'vidres'),
+    'mirall':       ('vidres',       'MIR-',    'preu_cost', 'vidres'),
+    'passpartu':    ('passpartout',  '1PAS',    'preu_cost', 'passpartu'),
+    'doble_pas':    ('passpartout',  'DOBPAS',  'preu_cost', 'passpartu'),
+    'foam':         ('encolat_pro',  'ENC',     'preu_cost', 'encolat'),
+    'laminat_semi': ('encolat_pro',  'PRO',     'preu_cost', 'encolat'),
+    'laminat_mate': ('encolat_pro',  'PRO',     'preu_cost', 'encolat'),
+}
+
+
+def _tarifa_catalog_price_map(prod_key):
+    """Per a un producte, retorna {(w, h): pvd_catalog} amb les files exactes
+    del catàleg. pvd_catalog és el PVD que aplicaria el sistema si aquesta
+    mida fos l'exacta del catàleg. Útil com a sòl al floor de tarifa."""
+    spec = TARIFA_CATALOG_SPEC.get(prod_key)
+    if not spec:
+        return {}
+    table, prefix, col, categoria = spec
+    if prefix == 'NOT_DV_MIR':
+        sql = (f"SELECT referencia, {col} FROM {table} "
+               "WHERE UPPER(referencia) NOT LIKE 'DV-%' "
+               "AND UPPER(referencia) NOT LIKE 'MIR-%'")
+    elif prefix:
+        sql = f"SELECT referencia, {col} FROM {table} WHERE UPPER(referencia) LIKE '{prefix}%'"
+    else:
+        sql = f"SELECT referencia, {col} FROM {table}"
+    rows = query(sql) or []
+    result = {}
+    marge = 0.0
+    if categoria:
+        try:
+            marge = float(get_config_value(f'marge_admin_{categoria}_pct', '60'))
+        except (TypeError, ValueError):
+            marge = 60.0
+    for r in rows:
+        rw, rh = _parse_dims(r.get('referencia') or '')
+        if not (rw and rh):
+            continue
+        v = r.get(col)
+        if v is None:
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        # impressio.preu ja és PVD-equivalent; la resta de taules desen
+        # preu_cost i el PVD s'aplica multiplicant pel marge admin.
+        pvd_catalog = v if categoria is None else round(v * (1 + marge / 100), 2)
+        result[(rw, rh)] = pvd_catalog
+    return result
+
+
 def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
     """Per a cada producte seleccionat, collect [{mida, pvd, pvp, ...}].
 
-    Mides del catàleg conserven la seva ref original. Mides addicionals
-    (passades per l'usuari) reben una ref generada amb format uniforme
-    per producte per evitar col·lisions: a impressió, el lookup intern
-    mapeja a la fila estàndard més propera (dins un threshold) i, si
-    hi cau, reutilitzaria la ref del catàleg → dos tamanys diferents
-    acabarien amb la mateixa ref a l'export, sobreescrivint productes
-    a FacturaDirecta. Forçar la ref aquí trenca aquesta col·lisió."""
+    Dues garanties addicionals (sobre el càlcul base de _tarifa_compute_one):
+
+    1. Ref única per a mides addicionals. Mides del catàleg conserven la
+       seva ref original. Mides custom reben IMP{W}x{H} a impressió per
+       evitar col·lisions amb el catàleg (bug reportat: 9×13 i 10×15
+       acabaven amb la mateixa ref `IMP10x15`).
+
+    2. Floor "no baixar mai del catàleg actual": si una mida coincideix
+       exactament amb una fila del catàleg, el PVD final ha de ser ≥
+       PVD_catàleg × tarifa_floor_factor (default 1.03). Red de
+       seguretat tècnica per la directriu comercial 'la tarifa nova
+       mai és per sota de l'actual'. S'aplica a tots els productes amb
+       catàleg directe (no a protter, que és composite).
+    """
+    try:
+        floor_factor = float(get_config_value('tarifa_floor_factor', '1.03'))
+    except (TypeError, ValueError):
+        floor_factor = 1.03
+
     result = []
     for prod_key, label, _short in TARIFA_PRODUCTS:
         if prod_key not in products:
@@ -6176,6 +6249,8 @@ def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
                 seen.add(wh)
         sizes.sort(key=lambda wh: wh[0] * wh[1])
 
+        catalog_pvd_map = _tarifa_catalog_price_map(prod_key)
+
         rows = []
         for w, h in sizes:
             r = _tarifa_compute_one(prod_key, w, h, usuari)
@@ -6183,6 +6258,20 @@ def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
                 continue
             if prod_key == 'impressio' and (w, h) not in catalog_set:
                 r['ref'] = f'IMP{int(w)}x{int(h)}'
+            # Floor: si la mida està al catàleg, no baixar del PVD del
+            # catàleg × factor. Recalculem PVP a partir del PVD ajustat.
+            catalog_pvd = catalog_pvd_map.get((w, h))
+            if catalog_pvd is not None and floor_factor > 0:
+                floor_pvd = round(catalog_pvd * floor_factor, 2)
+                if (r.get('pvd') or 0) < floor_pvd:
+                    r['pvd'] = floor_pvd
+                    if prod_key == 'impressio':
+                        tram = get_marge_impressio_tram(w * h, usuari) or {}
+                        marge_pvp = float(tram.get('marge') or 0)
+                    else:
+                        marge_pvp = _get_marge_value(usuari) if usuari else 0.0
+                    r['pvp'] = round(floor_pvd * (1 + marge_pvp / 100), 2)
+                    r['origen'] = 'floor'
             rows.append(r)
         result.append({'key': prod_key, 'label': label, 'rows': rows})
     return result
@@ -8334,13 +8423,21 @@ def _imp_closest(fw, fh, paper='lustre'):
                     'area': round(area_sol, 2),
                 }
 
-    # 3) Fórmula
+    # 3) Fórmula amb DOBLE calibració (Option B): per a una mida
+    # sol·licitada agafem la ref de catàleg més propera per SOTA i la
+    # més propera per SOBRE en àrea. Calculem el preu a partir de
+    # cadascuna escalant linealment per cm² i tornem el MAX de les
+    # dues. Per què: la calibració amb ref menor sola subestima el
+    # preu de mides intermèdies (el €/cm² creix amb àrea per malbarat
+    # de paper i feina). La ref major dóna un sostre raonable. El max
+    # garanteix que el preu MAI baixa per sota de la pendent del
+    # catàleg en cap dels dos extrems.
     cost_cm2 = float(get_config_value(f'imp_{paper}_cost_cm2',
                                       get_config_value('imp_lustre_cost_cm2', '0.000703')))
     cost_real = area_sol * cost_cm2
 
-    # Calibració del factor: fila amb àrea més propera per sota
-    calib = None
+    calib_low = None    # max àrea entre les ≤ area_sol
+    calib_high = None   # min àrea entre les ≥ area_sol
     smallest = None
     for r in rows:
         try:
@@ -8355,18 +8452,26 @@ def _imp_closest(fw, fh, paper='lustre'):
         a = rw * rh
         if smallest is None or a < smallest[1]:
             smallest = (r, a, preu_r)
-        if a <= area_sol:
-            if calib is None or a > calib[1]:
-                calib = (r, a, preu_r)
+        if a <= area_sol and (calib_low is None or a > calib_low[1]):
+            calib_low = (r, a, preu_r)
+        if a >= area_sol and (calib_high is None or a < calib_high[1]):
+            calib_high = (r, a, preu_r)
 
-    if calib is None:
-        calib = smallest
-    if calib is None:
+    if calib_low is None and calib_high is None:
+        calib_low = smallest
+    if calib_low is None and calib_high is None:
         return None  # no hi ha cap fila utilitzable per calibrar
 
-    _r, calib_area, calib_preu = calib
-    factor = calib_preu / (calib_area * cost_cm2) if calib_area > 0 and cost_cm2 > 0 else 1.0
-    preu_formula = round(cost_real * factor, 2)
+    def _preu_from_calib(calib):
+        if calib is None:
+            return None
+        _r, ca, cp = calib
+        f = cp / (ca * cost_cm2) if ca > 0 and cost_cm2 > 0 else 1.0
+        return round(cost_real * f, 2)
+
+    candidates = [p for p in (_preu_from_calib(calib_low), _preu_from_calib(calib_high))
+                  if p is not None]
+    preu_formula = max(candidates) if candidates else 0.0
 
     return {
         'ref': f'imp-{int(fw)}x{int(fh)}',
