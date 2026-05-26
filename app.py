@@ -4211,6 +4211,7 @@ def admin_run_migrations():
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
         # FK a comandes (nul·lable: les comandes existents queden a NULL).
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
@@ -6785,16 +6786,23 @@ def admin_clients_externs():
     filtre = (request.args.get('tipus') or '').strip().lower()
     if filtre in ('taller', 'pvp'):
         clients = query("""
-            SELECT id, nom, nif, fd_contact_id, tipus, telefon, email, actiu, created_at
-            FROM clients_externs WHERE tipus = ? ORDER BY actiu DESC, nom
+            SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
+                   c.actiu, c.created_at, c.usuari_id, u.username AS usuari_username, u.nom AS usuari_nom
+            FROM clients_externs c
+            LEFT JOIN usuaris u ON c.usuari_id = u.id
+            WHERE c.tipus = ? ORDER BY c.actiu DESC, c.nom
         """, [filtre]) or []
     else:
         filtre = ''
         clients = query("""
-            SELECT id, nom, nif, fd_contact_id, tipus, telefon, email, actiu, created_at
-            FROM clients_externs ORDER BY actiu DESC, nom
+            SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
+                   c.actiu, c.created_at, c.usuari_id, u.username AS usuari_username, u.nom AS usuari_nom
+            FROM clients_externs c
+            LEFT JOIN usuaris u ON c.usuari_id = u.id
+            ORDER BY c.actiu DESC, c.nom
         """) or []
-    return render_template('admin_clients_externs.html', clients=clients, filtre=filtre)
+    usuaris = query('SELECT id, username, nom, nom_empresa FROM usuaris ORDER BY nom') or []
+    return render_template('admin_clients_externs.html', clients=clients, filtre=filtre, usuaris=usuaris)
 
 
 @app.route('/admin/clients-externs/import-fd', methods=['POST'])
@@ -6861,12 +6869,18 @@ def admin_clients_externs_crear():
     email = (payload.get('email') or '').strip() or None
     fd_id = (payload.get('fd_contact_id') or '').strip() or None
 
+    usuari_id = payload.get('usuari_id')
+    if usuari_id:
+        try: usuari_id = int(usuari_id)
+        except (TypeError, ValueError): usuari_id = None
+    else:
+        usuari_id = None
     new_id = execute(
-        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, actiu) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [nom, nif, fd_id, tipus, telefon, email, True],
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [nom, nif, fd_id, tipus, telefon, email, usuari_id, True],
     )
-    print(f"[clients_externs] crear: id={new_id} nom={nom} tipus={tipus}")
+    print(f"[clients_externs] crear: id={new_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True, 'id': new_id})
 
 
@@ -6887,11 +6901,17 @@ def admin_clients_externs_editar(client_id):
         tipus = 'pvp'
     telefon = (payload.get('telefon') or '').strip() or None
     email = (payload.get('email') or '').strip() or None
+    usuari_id = payload.get('usuari_id')
+    if usuari_id:
+        try: usuari_id = int(usuari_id)
+        except (TypeError, ValueError): usuari_id = None
+    else:
+        usuari_id = None
     execute(
-        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=? WHERE id=?",
-        [nom, nif, tipus, telefon, email, client_id],
+        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=? WHERE id=?",
+        [nom, nif, tipus, telefon, email, usuari_id, client_id],
     )
-    print(f"[clients_externs] editar: id={client_id} nom={nom} tipus={tipus}")
+    print(f"[clients_externs] editar: id={client_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True})
 
 
@@ -6912,7 +6932,7 @@ def admin_clients_externs_eliminar(client_id):
 def api_clients_externs():
     """Llista de clients externs actius — alimenta el selector del pressupost."""
     rows = query("""
-        SELECT id, nom, nif, tipus, telefon
+        SELECT id, nom, nif, tipus, telefon, usuari_id
         FROM clients_externs
         WHERE actiu = TRUE
         ORDER BY nom
@@ -6926,6 +6946,7 @@ def api_clients_externs():
                 'nif': _row_get(r, 'nif') or '',
                 'tipus': _row_get(r, 'tipus') or 'pvp',
                 'telefon': _row_get(r, 'telefon') or '',
+                'usuari_id': _row_get(r, 'usuari_id'),
             }
             for r in rows
         ],
