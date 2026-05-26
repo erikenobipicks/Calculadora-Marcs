@@ -394,15 +394,19 @@ function doSearch(q){
           var existing = ALL_CLIENTS.find(function(x){ return x.fd === fdId; });
           dupInfo = existing && !existing.actiu ? ' <em style="font-size:11px;color:var(--red)">importat (inactiu)</em>' : ' <em style="font-size:11px;color:var(--hint)">ja importat</em>';
         }
+        var nomDisplay = c.nom || '(sense nom)';
+        var comercial = c.nom_comercial || '';
+        if(comercial && comercial !== c.nom) nomDisplay += ' — <em>' + comercial + '</em>';
         var detail = [c.nif, c.telefon, c.email, c.poblacio].filter(Boolean).join(' · ');
         html += '<div class="result-item' + (isDup ? ' dup' : '') + '"'
           + ' data-fd-id="' + fdId + '"'
           + ' data-nom="' + (c.nom||'').replace(/"/g,'&quot;') + '"'
+          + ' data-nom-comercial="' + (comercial).replace(/"/g,'&quot;') + '"'
           + ' data-nif="' + (c.nif||'') + '"'
           + ' data-telefon="' + (c.telefon||'') + '"'
           + ' data-email="' + (c.email||'') + '"'
           + ' onclick="' + (isDup ? '' : 'selectResult(this)') + '">';
-        html += '<div style="min-width:0"><strong>' + (c.nom||'(sense nom)') + '</strong>' + dupInfo
+        html += '<div style="min-width:0"><strong>' + nomDisplay + '</strong>' + dupInfo
           + (detail ? '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + detail + '</div>' : '')
           + '</div>';
         html += '</div>';
@@ -413,7 +417,9 @@ function doSearch(q){
 function selectResult(el){
   document.querySelectorAll('.result-item').forEach(function(r){ r.classList.remove('selected'); });
   el.classList.add('selected');
-  selected = { fd_id: el.dataset.fdId, nom: el.dataset.nom, nif: el.dataset.nif, telefon: el.dataset.telefon || '', email: el.dataset.email || '' };
+  var nomComercial = el.dataset.nomComercial || '';
+  var nomFinal = nomComercial || el.dataset.nom;
+  selected = { fd_id: el.dataset.fdId, nom: nomFinal, nif: el.dataset.nif, telefon: el.dataset.telefon || '', email: el.dataset.email || '' };
   document.getElementById('import-btn').disabled = false;
 }
 function confirmImport(){
