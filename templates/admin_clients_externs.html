@@ -243,7 +243,8 @@ var DELETE_URL_TPL = '/admin/clients-externs/{id}/eliminar';
 var SEARCH_URL = '/admin/fd/contacts';
 var IMPORT_URL = '/admin/clients-externs/import-fd';
 var TOGGLE_URL_TPL = '/admin/clients-externs/{id}/toggle';
-var EXISTING_FD_IDS = [{% for c in clients %}{% if c.fd_contact_id %}'{{ c.fd_contact_id }}'{% if not loop.last %},{% endif %}{% endif %}{% endfor %}];
+var ALL_CLIENTS = [{% for c in clients %}{% if c.fd_contact_id %}{fd:'{{ c.fd_contact_id }}',actiu:{{ 'true' if c.actiu else 'false' }},nom:'{{ c.nom|e }}'}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}];
+var EXISTING_FD_IDS = ALL_CLIENTS.map(function(c){ return c.fd; });
 var selected = null;
 var debounceTimer = null;
 
@@ -366,10 +367,24 @@ function doSearch(q){
       }
       var html = '';
       d.results.forEach(function(c){
-        var isDup = EXISTING_FD_IDS.indexOf(String(c.id)) >= 0;
-        html += '<div class="result-item' + (isDup ? ' dup' : '') + '" data-fd-id="' + c.id + '" data-nom="' + (c.nom||'').replace(/"/g,'&quot;') + '" data-nif="' + (c.nif||'') + '" onclick="' + (isDup ? '' : 'selectResult(this)') + '">';
-        html += '<span>' + (c.nom||'(sense nom)') + (isDup ? ' <em style=\"font-size:11px;color:var(--hint)\">ja importat</em>' : '') + '</span>';
-        html += '<span class="nif">' + (c.nif||'') + '</span>';
+        var fdId = String(c.fd_id || c.id || '');
+        var isDup = EXISTING_FD_IDS.indexOf(fdId) >= 0;
+        var dupInfo = '';
+        if(isDup){
+          var existing = ALL_CLIENTS.find(function(x){ return x.fd === fdId; });
+          dupInfo = existing && !existing.actiu ? ' <em style="font-size:11px;color:var(--red)">importat (inactiu)</em>' : ' <em style="font-size:11px;color:var(--hint)">ja importat</em>';
+        }
+        var detail = [c.nif, c.telefon, c.email, c.poblacio].filter(Boolean).join(' · ');
+        html += '<div class="result-item' + (isDup ? ' dup' : '') + '"'
+          + ' data-fd-id="' + fdId + '"'
+          + ' data-nom="' + (c.nom||'').replace(/"/g,'&quot;') + '"'
+          + ' data-nif="' + (c.nif||'') + '"'
+          + ' data-telefon="' + (c.telefon||'') + '"'
+          + ' data-email="' + (c.email||'') + '"'
+          + ' onclick="' + (isDup ? '' : 'selectResult(this)') + '">';
+        html += '<div style="min-width:0"><strong>' + (c.nom||'(sense nom)') + '</strong>' + dupInfo
+          + (detail ? '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + detail + '</div>' : '')
+          + '</div>';
         html += '</div>';
       });
       list.innerHTML = html;
@@ -378,7 +393,7 @@ function doSearch(q){
 function selectResult(el){
   document.querySelectorAll('.result-item').forEach(function(r){ r.classList.remove('selected'); });
   el.classList.add('selected');
-  selected = { fd_id: el.dataset.fdId, nom: el.dataset.nom, nif: el.dataset.nif };
+  selected = { fd_id: el.dataset.fdId, nom: el.dataset.nom, nif: el.dataset.nif, telefon: el.dataset.telefon || '', email: el.dataset.email || '' };
   document.getElementById('import-btn').disabled = false;
 }
 function confirmImport(){
@@ -386,9 +401,10 @@ function confirmImport(){
   var tipus = document.querySelector('input[name="fd-tipus"]:checked').value;
   fetch(IMPORT_URL, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ fd_contact_id: selected.fd_id, nom: selected.nom, nif: selected.nif, tipus: tipus })
+    body: JSON.stringify({ fd_contact_id: selected.fd_id, nom: selected.nom, nif: selected.nif, telefon: selected.telefon, email: selected.email, tipus: tipus })
   }).then(function(r){ return r.json(); }).then(function(d){
     if(d.ok) location.reload();
+    else if(d.error === 'already_exists') alert('Aquest client ja està importat. Si no el veus, pot ser que estigui desactivat — filtra per "Tots".');
     else alert('Error: ' + (d.error || 'desconegut'));
   });
 }
