@@ -6933,10 +6933,12 @@ def admin_clients_externs_eliminar(client_id):
 def api_clients_externs():
     """Llista de clients externs actius — alimenta el selector del pressupost."""
     rows = query("""
-        SELECT id, nom, nif, tipus, telefon, usuari_id
-        FROM clients_externs
-        WHERE actiu = TRUE
-        ORDER BY nom
+        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+               u.nom_empresa AS empresa
+        FROM clients_externs c
+        LEFT JOIN usuaris u ON c.usuari_id = u.id
+        WHERE c.actiu = TRUE
+        ORDER BY c.nom
     """) or []
     return jsonify({
         'ok': True,
@@ -6947,7 +6949,9 @@ def api_clients_externs():
                 'nif': _row_get(r, 'nif') or '',
                 'tipus': _row_get(r, 'tipus') or 'pvp',
                 'telefon': _row_get(r, 'telefon') or '',
+                'email': _row_get(r, 'email') or '',
                 'usuari_id': _row_get(r, 'usuari_id'),
+                'empresa': _row_get(r, 'empresa') or '',
             }
             for r in rows
         ],

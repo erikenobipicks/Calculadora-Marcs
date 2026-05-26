@@ -1437,7 +1437,13 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
       opt.value = String(c.id);
       opt.dataset.nom = c.nom || '';
       opt.dataset.nif = c.nif || '';
-      opt.textContent = c.nom + (c.nif ? ' · ' + c.nif : '');
+      opt.dataset.tipus = c.tipus || 'pvp';
+      opt.dataset.telefon = c.telefon || '';
+      var label = c.nom;
+      if(c.empresa && c.empresa !== c.nom) label += ' — ' + c.empresa;
+      if(c.nif) label += ' · ' + c.nif;
+      var tag = c.tipus === 'taller' ? ' [Taller]' : ' [PVP]';
+      opt.textContent = label + tag;
       sel.appendChild(opt);
     });
   }).catch(function(){});
@@ -1452,7 +1458,7 @@ function onClientExternChange(){
   if(opt && opt.value){
     nomInp.value = opt.dataset.nom || nomInp.value;
     nomInp.readOnly = true;
-    if(telInp) telInp.readOnly = false;
+    if(telInp && opt.dataset.telefon) telInp.value = opt.dataset.telefon;
   } else {
     nomInp.readOnly = false;
   }
