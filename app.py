@@ -6766,7 +6766,13 @@ def admin_fd_contacts_search():
             main = (c.get('content') or {}).get('main') or {}
             nom = c.get('name') or main.get('name') or ''
             nif = c.get('fiscalId') or main.get('fiscalId') or ''
-            results.append({'fd_id': str(cid), 'nom': nom, 'nif': nif})
+            email = main.get('email') or c.get('email') or ''
+            telefon = main.get('phone') or main.get('mobile') or c.get('phone') or ''
+            poblacio = main.get('city') or main.get('town') or ''
+            results.append({
+                'fd_id': str(cid), 'nom': nom, 'nif': nif,
+                'email': email, 'telefon': telefon, 'poblacio': poblacio,
+            })
         return jsonify({'ok': True, 'results': results})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
@@ -6814,10 +6820,12 @@ def admin_clients_externs_import_fd():
         return jsonify({'ok': False, 'error': 'already_exists',
                         'id': _row_get(existing, 'id')}), 409
 
+    telefon = (payload.get('telefon') or '').strip() or None
+    email = (payload.get('email') or '').strip() or None
     new_id = execute(
-        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, actiu) "
-        "VALUES (?, ?, ?, ?, ?)",
-        [nom, nif or None, fd_id, tipus, True],
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [nom, nif or None, fd_id, tipus, telefon, email, True],
     )
     print(f"[clients_externs] import: id={new_id} fd_id={fd_id} nom={nom} tipus={tipus}")
     return jsonify({'ok': True, 'id': new_id})
