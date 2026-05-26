@@ -101,7 +101,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Nom</th><th>Tipus</th><th>NIF</th><th>Telèfon</th><th>Email</th><th>FD</th><th>Estat</th><th></th>
+          <th>Nom</th><th>Tipus</th><th>NIF</th><th>Telèfon</th><th>Email</th><th>Usuari web</th><th>Estat</th><th></th>
         </tr></thead>
         <tbody>
         {% for c in clients %}
@@ -117,7 +117,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           <td class="mono">{{ c.nif or '—' }}</td>
           <td>{{ c.telefon or '—' }}</td>
           <td>{{ c.email or '—' }}</td>
-          <td class="mono" style="color:var(--hint);font-size:11px">{{ c.fd_contact_id or '—' }}</td>
+          <td style="font-size:12px">{% if c.usuari_username %}<span style="color:var(--green);font-weight:600">{{ c.usuari_nom or c.usuari_username }}</span>{% else %}<span style="color:var(--hint)">—</span>{% endif %}</td>
           <td>
             {% if c.actiu %}
               <span class="badge badge-actiu">Actiu</span>
@@ -127,7 +127,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           </td>
           <td>
             <div class="actions-cell">
-              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}')">Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}', '{{ c.usuari_id or '' }}')">Editar</button>
               <button class="btn btn-ghost btn-sm" data-id="{{ c.id }}" onclick="toggleClient(this)" style="{% if c.actiu %}color:var(--red){% else %}color:var(--green){% endif %}">
                 {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
               </button>
@@ -168,6 +168,14 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     <label for="c-email">Email</label>
     <input type="email" id="c-email" placeholder="Opcional">
 
+    <label for="c-usuari">Usuari registrat a la web (opcional)</label>
+    <select id="c-usuari">
+      <option value="">— Cap —</option>
+      {% for u in usuaris %}
+      <option value="{{ u.id }}">{{ u.nom or u.username }}{% if u.nom_empresa %} · {{ u.nom_empresa }}{% endif %}</option>
+      {% endfor %}
+    </select>
+
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Cancel·lar</button>
       <button type="button" class="btn btn-primary" id="create-btn" onclick="confirmCreate()">Crear client</button>
@@ -199,6 +207,14 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 
     <label for="e-email">Email</label>
     <input type="email" id="e-email">
+
+    <label for="e-usuari">Usuari registrat a la web (opcional)</label>
+    <select id="e-usuari">
+      <option value="">— Cap —</option>
+      {% for u in usuaris %}
+      <option value="{{ u.id }}">{{ u.nom or u.username }}{% if u.nom_empresa %} · {{ u.nom_empresa }}{% endif %}</option>
+      {% endfor %}
+    </select>
 
     <div class="modal-actions">
       <button type="button" class="btn btn-danger btn-sm" onclick="confirmDelete()" id="e-del-btn">Eliminar</button>
@@ -256,6 +272,7 @@ function openCreateModal(){
 function closeCreateModal(){
   document.getElementById('create-modal').classList.remove('is-open');
   ['c-nom','c-nif','c-tel','c-email'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('c-usuari').value = '';
   document.querySelector('input[name="c-tipus"][value="pvp"]').checked = true;
 }
 function confirmCreate(){
@@ -269,7 +286,8 @@ function confirmCreate(){
       nif: document.getElementById('c-nif').value.trim().toUpperCase(),
       tipus: tipus,
       telefon: document.getElementById('c-tel').value.trim(),
-      email: document.getElementById('c-email').value.trim()
+      email: document.getElementById('c-email').value.trim(),
+      usuari_id: document.getElementById('c-usuari').value || null
     })
   }).then(function(r){ return r.json(); }).then(function(d){
     if(d.ok) location.reload();
@@ -278,12 +296,13 @@ function confirmCreate(){
 }
 
 /* --- Editar --- */
-function openEditModal(id, nom, nif, tipus, tel, email){
+function openEditModal(id, nom, nif, tipus, tel, email, usuariId){
   document.getElementById('e-id').value = id;
   document.getElementById('e-nom').value = nom;
   document.getElementById('e-nif').value = nif;
   document.getElementById('e-tel').value = tel;
   document.getElementById('e-email').value = email;
+  document.getElementById('e-usuari').value = usuariId || '';
   var radio = document.querySelector('input[name="e-tipus"][value="' + tipus + '"]');
   if(radio) radio.checked = true;
   document.getElementById('edit-modal').classList.add('is-open');
@@ -303,7 +322,8 @@ function confirmEdit(){
       nif: document.getElementById('e-nif').value.trim().toUpperCase(),
       tipus: tipus,
       telefon: document.getElementById('e-tel').value.trim(),
-      email: document.getElementById('e-email').value.trim()
+      email: document.getElementById('e-email').value.trim(),
+      usuari_id: document.getElementById('e-usuari').value || null
     })
   }).then(function(r){ return r.json(); }).then(function(d){
     if(d.ok) location.reload();
