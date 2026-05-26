@@ -2637,6 +2637,39 @@ def public_pricing():
     })
 
 
+@app.route('/api/public/impressio-price', methods=['GET'])
+def public_impressio_price():
+    """Retorna el preu d'impressió calculat per a unes dimensions exactes,
+    usant la mateixa lògica híbrida (taula + fórmula) que /api/closest.
+    Autenticació: X-Bridge-Token.
+    Params: w, h (cm), paper (lustre|silk|baryta, default lustre).
+    """
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    w = float(request.args.get('w', 0))
+    h = float(request.args.get('h', 0))
+    paper = (request.args.get('paper') or 'lustre').strip().lower()
+    if paper not in ('lustre', 'silk', 'baryta'):
+        paper = 'lustre'
+    if w <= 0 or h <= 0:
+        return jsonify({'ok': False, 'error': 'w and h must be positive'}), 400
+
+    result = _imp_closest(w, h, paper=paper)
+    if not result:
+        return jsonify({'ok': False, 'error': 'no pricing data available'}), 404
+
+    return jsonify({
+        'ok': True,
+        'ref': result.get('ref', ''),
+        'preu': result.get('preu', 0),
+        'origen': result.get('origen', ''),
+        'area': result.get('area', 0),
+    })
+
+
 def _pro_clients_lookup_user_id(username):
     """Resol username (case-insensitive) → usuaris.id. Retorna None si no
     existeix o si l'usuari està bloquejat."""
