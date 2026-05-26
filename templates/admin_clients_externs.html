@@ -3,25 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Objectiu — Clients externs</title>
+<title>Objectiu — Clients habituals</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--blue:#3B6BAA;--blue-l:#EAF0F8;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .container{max-width:1120px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
 .page-title{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;margin-bottom:.25rem}
 .muted-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem}
 .section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
-.row-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1rem}
+.row-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
 .row-head h2{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;margin:0}
 .btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif}
 .btn-primary{background:var(--green);color:#fff}
 .btn-primary:hover{background:#155c3a}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{background:#F5F4F1}
 .btn-sm{padding:6px 11px;font-size:12px}
-.btn-toggle{padding:6px 11px;font-size:12px;border:1px solid #E8B4B4;background:var(--red-l);color:var(--red);border-radius:8px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.btn-toggle.is-active{border-color:#B8DCC9;background:var(--green-l);color:var(--green)}
+.btn-danger{background:var(--red-l);color:var(--red);border:1px solid #E8B4B4}
+.btn-danger:hover{background:#F5D0D0}
+.btn-group{display:flex;gap:.4rem;flex-wrap:wrap}
+.filter-btn{padding:5px 14px;border-radius:20px;font-size:13px;font-weight:500;text-decoration:none;color:var(--muted);background:var(--bg);border:1px solid var(--border);transition:all .15s}
+.filter-btn:hover{border-color:var(--green);color:var(--green)}
+.filter-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
 table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
 th{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#F5F4F1}
@@ -29,17 +34,22 @@ td{padding:11px 12px;border-bottom:1px solid #F3F1EB;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 .empty{padding:2rem;text-align:center;color:var(--hint);font-size:13px}
 .mono{font-family:Consolas,monospace;font-size:12px}
+.badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700}
+.badge-taller{background:var(--amber-l);color:var(--amber)}
+.badge-pvp{background:var(--blue-l);color:var(--blue)}
+.badge-actiu{background:var(--green-l);color:var(--green)}
+.badge-inactiu{background:var(--red-l);color:var(--red)}
 .alert-ok{background:var(--green-l);border:1px solid #B8DCC9;color:var(--green);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
 .alert-err{background:var(--red-l);border:1px solid #F1B9B9;color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
-/* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(28,27,24,.5);display:none;align-items:center;justify-content:center;z-index:200;padding:1rem}
 .modal-overlay.is-open{display:flex}
 .modal{background:#fff;border-radius:14px;max-width:520px;width:100%;padding:1.5rem;max-height:90vh;overflow:auto}
 .modal h3{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;margin-bottom:.5rem}
 .modal .muted{font-size:12px;color:var(--muted);margin-bottom:.85rem;line-height:1.5}
-.modal label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
-.modal input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;background:#fff}
-.modal input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.modal label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;margin-top:.7rem}
+.modal input,.modal select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;background:#fff}
+.modal input:focus,.modal select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+.modal-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem}
 .results-list{margin-top:.85rem;border:1px solid var(--border);border-radius:10px;max-height:260px;overflow:auto;background:#fcfbf8}
 .result-item{padding:.65rem .85rem;border-bottom:1px solid #F3F1EB;cursor:pointer;display:flex;justify-content:space-between;gap:.5rem;align-items:center}
 .result-item:hover{background:#F5F4F1}
@@ -47,10 +57,13 @@ tr:last-child td{border-bottom:none}
 .result-item.dup{opacity:.55;cursor:not-allowed}
 .result-item:last-child{border-bottom:none}
 .result-item .nif{font-family:Consolas,monospace;font-size:11px;color:var(--muted)}
-.modal-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem}
 .search-state{padding:1rem;text-align:center;color:var(--hint);font-size:12px}
 .fd-link{display:inline-block;margin-top:.55rem;font-size:12px;color:var(--green);text-decoration:none}
 .fd-link:hover{text-decoration:underline}
+.tipus-toggle{display:flex;gap:.3rem;margin-top:.3rem}
+.tipus-toggle label{display:flex;align-items:center;gap:.4rem;padding:6px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:500;margin:0}
+.tipus-toggle input{accent-color:var(--green)}
+.actions-cell{display:flex;gap:.4rem;justify-content:flex-end}
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
 </head>
@@ -61,8 +74,8 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 </script>
 
 <div class="container">
-  <div class="page-title">Clients externs</div>
-  <div class="muted-sub">Clients freqüents que NO són usuaris de la calculadora, però que apareixen sovint a albarans. Importa'ls de FacturaDirecta una vegada i el seu <code>fd_contact_id</code> queda cached — així t'estalvies la cerca a cada albarà.</div>
+  <div class="page-title">Clients habituals</div>
+  <div class="muted-sub">Clients de taller (preu taller) i clients PVP (tarifa client). Pots afegir-los manualment o importar-los des de FacturaDirecta.</div>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}<div class="alert-{{ 'ok' if cat == 'ok' else 'err' }}">{{ msg }}</div>{% endfor %}
@@ -70,35 +83,55 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 
   <div class="section">
     <div class="row-head">
-      <h2>{{ clients|length }} client{% if clients|length != 1 %}s{% endif %}</h2>
-      <button type="button" class="btn btn-primary" onclick="openImportModal()">+ Importar des de FacturaDirecta</button>
+      <div>
+        <h2>{{ clients|length }} client{% if clients|length != 1 %}s{% endif %}{% if filtre %} ({{ filtre }}){% endif %}</h2>
+        <div class="btn-group" style="margin-top:.5rem">
+          <a href="/admin/clients-externs" class="filter-btn {% if not filtre %}active{% endif %}">Tots</a>
+          <a href="/admin/clients-externs?tipus=taller" class="filter-btn {% if filtre == 'taller' %}active{% endif %}">🔧 Taller</a>
+          <a href="/admin/clients-externs?tipus=pvp" class="filter-btn {% if filtre == 'pvp' %}active{% endif %}">🏷️ PVP</a>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button type="button" class="btn btn-primary" onclick="openCreateModal()">+ Afegir client</button>
+        <button type="button" class="btn btn-ghost" onclick="openImportModal()">Importar de FD</button>
+      </div>
     </div>
 
     {% if clients %}
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Nom</th><th>NIF</th><th>FD ID</th><th>Estat</th><th>Creat</th><th></th>
+          <th>Nom</th><th>Tipus</th><th>NIF</th><th>Telèfon</th><th>Email</th><th>FD</th><th>Estat</th><th></th>
         </tr></thead>
         <tbody>
         {% for c in clients %}
         <tr id="row-{{ c.id }}">
           <td><strong>{{ c.nom }}</strong></td>
-          <td class="mono">{{ c.nif or '—' }}</td>
-          <td class="mono" style="color:var(--hint)">{{ c.fd_contact_id }}</td>
           <td>
-            {% if c.actiu %}
-              <span style="background:var(--green-l);color:var(--green);font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700">Actiu</span>
+            {% if c.tipus == 'taller' %}
+              <span class="badge badge-taller">Taller</span>
             {% else %}
-              <span style="background:var(--red-l);color:var(--red);font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700">Inactiu</span>
+              <span class="badge badge-pvp">PVP</span>
             {% endif %}
           </td>
-          <td class="mono" style="color:var(--muted);font-size:11px">{{ c.created_at or '—' }}</td>
-          <td style="text-align:right">
-            <button type="button" class="btn-toggle {% if c.actiu %}is-active{% endif %}"
-                    data-id="{{ c.id }}" onclick="toggleClient(this)">
-              {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
-            </button>
+          <td class="mono">{{ c.nif or '—' }}</td>
+          <td>{{ c.telefon or '—' }}</td>
+          <td>{{ c.email or '—' }}</td>
+          <td class="mono" style="color:var(--hint);font-size:11px">{{ c.fd_contact_id or '—' }}</td>
+          <td>
+            {% if c.actiu %}
+              <span class="badge badge-actiu">Actiu</span>
+            {% else %}
+              <span class="badge badge-inactiu">Inactiu</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="actions-cell">
+              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}')">Editar</button>
+              <button class="btn btn-ghost btn-sm" data-id="{{ c.id }}" onclick="toggleClient(this)" style="{% if c.actiu %}color:var(--red){% else %}color:var(--green){% endif %}">
+                {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
+              </button>
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -106,20 +139,91 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       </table>
     </div>
     {% else %}
-    <div class="empty">Cap client extern importat encara. Clica "+ Importar des de FacturaDirecta" per començar.</div>
+    <div class="empty">Cap client habitual{% if filtre %} de tipus "{{ filtre }}"{% endif %}. Clica "+ Afegir client" per començar.</div>
     {% endif %}
   </div>
 </div>
 
-<!-- Modal -->
+<!-- Modal: Crear client -->
+<div class="modal-overlay" id="create-modal" onclick="if(event.target===this) closeCreateModal()">
+  <div class="modal">
+    <h3>Afegir client habitual</h3>
+    <div class="muted">Crea un client manualment. Si el vols vincular amb FacturaDirecta, pots importar-lo amb el botó "Importar de FD".</div>
+
+    <label for="c-nom">Nom *</label>
+    <input type="text" id="c-nom" placeholder="Nom del client o empresa" autocomplete="off">
+
+    <label for="c-nif">NIF / CIF</label>
+    <input type="text" id="c-nif" placeholder="Opcional" style="text-transform:uppercase">
+
+    <label>Tipus de client</label>
+    <div class="tipus-toggle">
+      <label><input type="radio" name="c-tipus" value="taller"> 🔧 Taller (preu taller)</label>
+      <label><input type="radio" name="c-tipus" value="pvp" checked> 🏷️ PVP (tarifa client)</label>
+    </div>
+
+    <label for="c-tel">Telèfon</label>
+    <input type="text" id="c-tel" placeholder="Opcional">
+
+    <label for="c-email">Email</label>
+    <input type="email" id="c-email" placeholder="Opcional">
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Cancel·lar</button>
+      <button type="button" class="btn btn-primary" id="create-btn" onclick="confirmCreate()">Crear client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar client -->
+<div class="modal-overlay" id="edit-modal" onclick="if(event.target===this) closeEditModal()">
+  <div class="modal">
+    <h3>Editar client</h3>
+
+    <input type="hidden" id="e-id">
+
+    <label for="e-nom">Nom *</label>
+    <input type="text" id="e-nom" autocomplete="off">
+
+    <label for="e-nif">NIF / CIF</label>
+    <input type="text" id="e-nif" style="text-transform:uppercase">
+
+    <label>Tipus de client</label>
+    <div class="tipus-toggle">
+      <label><input type="radio" name="e-tipus" value="taller"> 🔧 Taller</label>
+      <label><input type="radio" name="e-tipus" value="pvp"> 🏷️ PVP</label>
+    </div>
+
+    <label for="e-tel">Telèfon</label>
+    <input type="text" id="e-tel">
+
+    <label for="e-email">Email</label>
+    <input type="email" id="e-email">
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-danger btn-sm" onclick="confirmDelete()" id="e-del-btn">Eliminar</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-ghost" onclick="closeEditModal()">Cancel·lar</button>
+      <button type="button" class="btn btn-primary" onclick="confirmEdit()">Desar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Importar FD -->
 <div class="modal-overlay" id="import-modal" onclick="if(event.target===this) closeImportModal()">
   <div class="modal">
     <h3>Importar contacte de FacturaDirecta</h3>
-    <div class="muted">Cerca un contacte ja existent a FacturaDirecta i importa'l com a client extern local. <strong>No es creen contactes</strong> nous a FD des d'aquí.</div>
+    <div class="muted">Cerca un contacte ja existent a FacturaDirecta i importa'l com a client habitual.</div>
 
     <label for="fd-search">Cercar a FacturaDirecta</label>
     <input type="text" id="fd-search" placeholder="Mínim 2 caràcters · nom o NIF" autocomplete="off" oninput="onSearchInput(event)">
     <a href="https://app.facturadirecta.com/" target="_blank" rel="noopener" class="fd-link">Si el client no apareix, crea'l primer a FacturaDirecta →</a>
+
+    <label style="margin-top:.7rem">Tipus de client</label>
+    <div class="tipus-toggle">
+      <label><input type="radio" name="fd-tipus" value="taller"> 🔧 Taller</label>
+      <label><input type="radio" name="fd-tipus" value="pvp" checked> 🏷️ PVP</label>
+    </div>
 
     <div class="results-list" id="results-list" style="display:none">
       <div class="search-state">Escriu per cercar…</div>
@@ -133,13 +237,98 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 </div>
 
 <script>
+var CREATE_URL = '/admin/clients-externs/crear';
+var EDIT_URL_TPL = '/admin/clients-externs/{id}/editar';
+var DELETE_URL_TPL = '/admin/clients-externs/{id}/eliminar';
 var SEARCH_URL = '/admin/fd/contacts';
 var IMPORT_URL = '/admin/clients-externs/import-fd';
 var TOGGLE_URL_TPL = '/admin/clients-externs/{id}/toggle';
-var EXISTING_FD_IDS = [{% for c in clients %}'{{ c.fd_contact_id }}'{% if not loop.last %},{% endif %}{% endfor %}];
+var EXISTING_FD_IDS = [{% for c in clients %}{% if c.fd_contact_id %}'{{ c.fd_contact_id }}'{% if not loop.last %},{% endif %}{% endif %}{% endfor %}];
 var selected = null;
 var debounceTimer = null;
 
+/* --- Crear --- */
+function openCreateModal(){
+  document.getElementById('create-modal').classList.add('is-open');
+  document.getElementById('c-nom').focus();
+}
+function closeCreateModal(){
+  document.getElementById('create-modal').classList.remove('is-open');
+  ['c-nom','c-nif','c-tel','c-email'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.querySelector('input[name="c-tipus"][value="pvp"]').checked = true;
+}
+function confirmCreate(){
+  var nom = document.getElementById('c-nom').value.trim();
+  if(!nom){ alert('El nom és obligatori'); return; }
+  var tipus = document.querySelector('input[name="c-tipus"]:checked').value;
+  fetch(CREATE_URL, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      nom: nom,
+      nif: document.getElementById('c-nif').value.trim().toUpperCase(),
+      tipus: tipus,
+      telefon: document.getElementById('c-tel').value.trim(),
+      email: document.getElementById('c-email').value.trim()
+    })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok) location.reload();
+    else alert('Error: ' + (d.error || 'desconegut'));
+  });
+}
+
+/* --- Editar --- */
+function openEditModal(id, nom, nif, tipus, tel, email){
+  document.getElementById('e-id').value = id;
+  document.getElementById('e-nom').value = nom;
+  document.getElementById('e-nif').value = nif;
+  document.getElementById('e-tel').value = tel;
+  document.getElementById('e-email').value = email;
+  var radio = document.querySelector('input[name="e-tipus"][value="' + tipus + '"]');
+  if(radio) radio.checked = true;
+  document.getElementById('edit-modal').classList.add('is-open');
+}
+function closeEditModal(){
+  document.getElementById('edit-modal').classList.remove('is-open');
+}
+function confirmEdit(){
+  var id = document.getElementById('e-id').value;
+  var nom = document.getElementById('e-nom').value.trim();
+  if(!nom){ alert('El nom és obligatori'); return; }
+  var tipus = document.querySelector('input[name="e-tipus"]:checked').value;
+  fetch(EDIT_URL_TPL.replace('{id}', id), {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      nom: nom,
+      nif: document.getElementById('e-nif').value.trim().toUpperCase(),
+      tipus: tipus,
+      telefon: document.getElementById('e-tel').value.trim(),
+      email: document.getElementById('e-email').value.trim()
+    })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok) location.reload();
+    else alert('Error: ' + (d.error || 'desconegut'));
+  });
+}
+function confirmDelete(){
+  var id = document.getElementById('e-id').value;
+  if(!confirm('Eliminar aquest client? Només es pot si no té comandes vinculades.')) return;
+  fetch(DELETE_URL_TPL.replace('{id}', id), {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(d.ok) location.reload();
+      else alert(d.error || 'No s\'ha pogut eliminar');
+    });
+}
+
+/* --- Toggle --- */
+function toggleClient(btn){
+  var id = btn.dataset.id || btn.closest('tr').id.replace('row-','');
+  fetch(TOGGLE_URL_TPL.replace('{id}', id), {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(d.ok) location.reload();
+    });
+}
+
+/* --- Import FD --- */
 function openImportModal(){
   document.getElementById('import-modal').classList.add('is-open');
   document.getElementById('fd-search').focus();
@@ -151,7 +340,6 @@ function closeImportModal(){
   document.getElementById('import-btn').disabled = true;
   selected = null;
 }
-
 function onSearchInput(ev){
   var q = ev.target.value.trim();
   clearTimeout(debounceTimer);
@@ -161,7 +349,6 @@ function onSearchInput(ev){
   }
   debounceTimer = setTimeout(function(){ doSearch(q); }, 300);
 }
-
 function doSearch(q){
   var list = document.getElementById('results-list');
   list.style.display = 'block';
@@ -177,78 +364,32 @@ function doSearch(q){
         list.innerHTML = '<div class="search-state">Cap resultat per "' + q + '"</div>';
         return;
       }
-      list.innerHTML = '';
+      var html = '';
       d.results.forEach(function(c){
-        var dup = EXISTING_FD_IDS.indexOf(c.fd_id) >= 0;
-        var item = document.createElement('div');
-        item.className = 'result-item' + (dup ? ' dup' : '');
-        item.dataset.fdId = c.fd_id;
-        item.dataset.nom = c.nom;
-        item.dataset.nif = c.nif || '';
-        item.innerHTML = '<div><strong>' + escapeHtml(c.nom) + '</strong>' +
-                          (dup ? ' <small style="color:var(--amber)">· ja importat</small>' : '') +
-                         '</div>' +
-                         '<div class="nif">' + escapeHtml(c.nif || '—') + '</div>';
-        if(!dup){
-          item.addEventListener('click', function(){ selectResult(item); });
-        }
-        list.appendChild(item);
+        var isDup = EXISTING_FD_IDS.indexOf(String(c.id)) >= 0;
+        html += '<div class="result-item' + (isDup ? ' dup' : '') + '" data-fd-id="' + c.id + '" data-nom="' + (c.nom||'').replace(/"/g,'&quot;') + '" data-nif="' + (c.nif||'') + '" onclick="' + (isDup ? '' : 'selectResult(this)') + '">';
+        html += '<span>' + (c.nom||'(sense nom)') + (isDup ? ' <em style=\"font-size:11px;color:var(--hint)\">ja importat</em>' : '') + '</span>';
+        html += '<span class="nif">' + (c.nif||'') + '</span>';
+        html += '</div>';
       });
-    })
-    .catch(function(e){
-      list.innerHTML = '<div class="search-state" style="color:var(--red)">Error de xarxa</div>';
+      list.innerHTML = html;
     });
 }
-
-function selectResult(item){
-  document.querySelectorAll('.result-item.selected').forEach(function(el){ el.classList.remove('selected'); });
-  item.classList.add('selected');
-  selected = {
-    fd_contact_id: item.dataset.fdId,
-    nom: item.dataset.nom,
-    nif: item.dataset.nif,
-  };
+function selectResult(el){
+  document.querySelectorAll('.result-item').forEach(function(r){ r.classList.remove('selected'); });
+  el.classList.add('selected');
+  selected = { fd_id: el.dataset.fdId, nom: el.dataset.nom, nif: el.dataset.nif };
   document.getElementById('import-btn').disabled = false;
 }
-
 function confirmImport(){
   if(!selected) return;
-  var btn = document.getElementById('import-btn');
-  btn.disabled = true;
+  var tipus = document.querySelector('input[name="fd-tipus"]:checked').value;
   fetch(IMPORT_URL, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(selected),
-  })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if(!d.ok){
-        alert('Error: ' + (d.error || 'desconegut'));
-        btn.disabled = false;
-        return;
-      }
-      window.location.reload();
-    })
-    .catch(function(){
-      alert('Error de xarxa');
-      btn.disabled = false;
-    });
-}
-
-function toggleClient(btn){
-  var id = btn.dataset.id;
-  btn.disabled = true;
-  fetch(TOGGLE_URL_TPL.replace('{id}', id), {method: 'POST'})
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if(!d.ok){ alert('Error: ' + (d.error || 'desconegut')); btn.disabled = false; return; }
-      window.location.reload();
-    });
-}
-
-function escapeHtml(s){
-  return String(s || '').replace(/[&<>"']/g, function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ fd_contact_id: selected.fd_id, nom: selected.nom, nif: selected.nif, tipus: tipus })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok) location.reload();
+    else alert('Error: ' + (d.error || 'desconegut'));
   });
 }
 </script>
