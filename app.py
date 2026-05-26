@@ -5737,8 +5737,14 @@ def historial():
     filtre_uid = int(filtre_uid_raw) if filtre_uid_raw.isdigit() else None
     filtre_all  = filtre_uid_raw == 'all'
     filtre_albara = request.args.get('albara') == 'pendent'
+    filtre_client_raw = request.args.get('client', '').strip()
+    filtre_client = int(filtre_client_raw) if filtre_client_raw.isdigit() else None
     if session.get('is_admin'):
-        if filtre_albara:
+        if filtre_client:
+            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                               JOIN usuaris u ON c.user_id=u.id
+                               WHERE c.client_extern_id=? ORDER BY c.id DESC''', [filtre_client])
+        elif filtre_albara:
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.observacions LIKE '%[ACCEPTAT]%'
@@ -5753,18 +5759,19 @@ def historial():
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         else:
-            # Per defecte l'admin veu les seves pròpies comandes
             filtre_uid = session['user_id']
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         usuaris_list = query('SELECT id, nom, username FROM usuaris WHERE is_admin=0 ORDER BY nom')
+        clients_habituals = query('SELECT id, nom, tipus FROM clients_externs WHERE actiu=TRUE ORDER BY nom') or []
         n_pendents_albara = query('''SELECT COUNT(*) as n FROM comandes
                                     WHERE observacions LIKE '%[ACCEPTAT]%'
                                       AND (fd_albara IS NULL OR fd_albara='')''', one=True)
         n_pendents_albara = n_pendents_albara['n'] if n_pendents_albara else 0
     else:
         usuaris_list = []
+        clients_habituals = []
         comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                            JOIN usuaris u ON c.user_id=u.id
                            WHERE c.user_id=? ORDER BY c.id DESC''', [session['user_id']])
@@ -5781,10 +5788,16 @@ def historial():
     for grp in sessio_list:
         grp[0]['pagat']    = any(op.get('pagat')    for op in grp)
         grp[0]['entregat'] = any(op.get('entregat') for op in grp)
+    filtre_client_nom = ''
+    if filtre_client:
+        _fc = query('SELECT nom FROM clients_externs WHERE id=?', [filtre_client], one=True)
+        filtre_client_nom = _row_get(_fc, 'nom', '') if _fc else ''
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
                            usuaris_list=usuaris_list if session.get('is_admin') else [],
+                           clients_habituals=clients_habituals if session.get('is_admin') else [],
                            filtre_uid=filtre_uid, filtre_all=filtre_all if session.get('is_admin') else False,
                            filtre_albara=filtre_albara if session.get('is_admin') else False,
+                           filtre_client=filtre_client, filtre_client_nom=filtre_client_nom,
                            n_pendents_albara=n_pendents_albara if session.get('is_admin') else 0,
                            web_return_url=_current_web_return_url())
 
