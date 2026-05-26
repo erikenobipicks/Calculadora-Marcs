@@ -8440,21 +8440,15 @@ def _imp_closest(fw, fh, paper='lustre'):
             'area': round(area_sol, 2),
         }
 
-    # 1) Min-contain
+    # 1) Min-contain (només per a la ref de referència al resultat)
     fila = _find_min_contain(rows, fw, fh)
 
-    # 2) Si la fila és prou ajustada, usar taula
-    if fila:
-        rw, rh = _parse_dims(fila['referencia'])
-        if rw and rh:
-            ratio = (rw * rh) / area_sol
-            if ratio <= ratio_max:
-                return {
-                    'ref': fila['referencia'],
-                    'preu': float(fila.get('preu') or 0),
-                    'origen': 'taula',
-                    'area': round(area_sol, 2),
-                }
+    # 2) Impressió s'imprimeix de BOBINA (43, 60, 111 cm) — el cost és
+    #    proporcional a l'àrea real, no a mides de full fix. Per tant
+    #    SEMPRE usem fórmula per calcular el preu. Les refs del catàleg
+    #    serveixen com a punts de calibració, no com a preus finals.
+    #    (Altres productes com vidre o passpartú sí usen el threshold
+    #    perquè es tallen de planchas fixes.)
 
     # 3) Fórmula amb DOBLE calibració (Option B): per a una mida
     # sol·licitada agafem la ref de catàleg més propera per SOTA i la
@@ -8506,8 +8500,19 @@ def _imp_closest(fw, fh, paper='lustre'):
                   if p is not None]
     preu_formula = max(candidates) if candidates else 0.0
 
+    # Si existeix una ref exacta al catàleg per aquesta mida, la usem
+    # com a etiqueta (millor per a facturació); si no, generem imp-WxH.
+    if fila:
+        rw, rh = _parse_dims(fila['referencia'])
+        if rw and rh and rw * rh == area_sol:
+            ref_label = fila['referencia']
+        else:
+            ref_label = f'IMP{int(fw)}x{int(fh)}'
+    else:
+        ref_label = f'IMP{int(fw)}x{int(fh)}'
+
     return {
-        'ref': f'imp-{int(fw)}x{int(fh)}',
+        'ref': ref_label,
         'preu': preu_formula,
         'origen': 'formula',
         'area': round(area_sol, 2),
