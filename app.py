@@ -2670,6 +2670,39 @@ def public_impressio_price():
     })
 
 
+@app.route('/api/public/clients-habituals', methods=['GET'])
+def public_clients_habituals():
+    """Llista de clients habituals actius per a consum des de reusrevela-web.
+    Autenticació: X-Bridge-Token."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    rows = query("""
+        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+               u.nom_empresa AS empresa
+        FROM clients_externs c
+        LEFT JOIN usuaris u ON c.usuari_id = u.id
+        WHERE c.actiu = TRUE
+        ORDER BY c.nom
+    """) or []
+    return jsonify({
+        'ok': True,
+        'clients': [
+            {
+                'id': _row_get(r, 'id'),
+                'nom': _row_get(r, 'nom') or '',
+                'nif': _row_get(r, 'nif') or '',
+                'tipus': _row_get(r, 'tipus') or 'pvp',
+                'telefon': _row_get(r, 'telefon') or '',
+                'email': _row_get(r, 'email') or '',
+                'empresa': _row_get(r, 'empresa') or '',
+            }
+            for r in rows
+        ],
+    })
+
+
 def _pro_clients_lookup_user_id(username):
     """Resol username (case-insensitive) → usuaris.id. Retorna None si no
     existeix o si l'usuari està bloquejat."""
