@@ -6766,12 +6766,13 @@ def admin_fd_contacts_search():
                 continue
             main = (c.get('content') or {}).get('main') or {}
             nom = c.get('name') or main.get('name') or ''
+            nom_comercial = main.get('commercialName') or main.get('tradeName') or main.get('company') or c.get('commercialName') or ''
             nif = c.get('fiscalId') or main.get('fiscalId') or ''
             email = main.get('email') or c.get('email') or ''
             telefon = main.get('phone') or main.get('mobile') or c.get('phone') or ''
             poblacio = main.get('city') or main.get('town') or ''
             results.append({
-                'fd_id': str(cid), 'nom': nom, 'nif': nif,
+                'fd_id': str(cid), 'nom': nom, 'nom_comercial': nom_comercial, 'nif': nif,
                 'email': email, 'telefon': telefon, 'poblacio': poblacio,
             })
         return jsonify({'ok': True, 'results': results})
