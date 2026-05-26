@@ -1459,6 +1459,10 @@ function onClientExternChange(){
     nomInp.value = opt.dataset.nom || nomInp.value;
     nomInp.readOnly = true;
     if(telInp && opt.dataset.telefon) telInp.value = opt.dataset.telefon;
+    var tipus = opt.dataset.tipus || 'pvp';
+    var needCost = tipus === 'taller';
+    if(needCost && rmode !== 'cost') toggleCost();
+    else if(!needCost && rmode === 'cost') toggleCost();
   } else {
     nomInp.readOnly = false;
   }
