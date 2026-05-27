@@ -718,7 +718,15 @@ body.has-sticky-bar{padding-bottom:78px}
         <div id="cost-panel" style="display:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:.85rem;margin-top:.7rem">
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost dels materials</span><strong id="ci-mat" style="color:#fff">—</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost de les motllures</span><strong id="ci-mol" style="color:#fff">—</strong></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total</span><strong id="ci-tot" style="color:#fff">—</strong></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total (PVD)</span><strong id="ci-tot" style="color:#fff">—</strong></div>
+          {% if session.is_admin %}
+          <div style="border-top:1px solid rgba(255,255,255,.15);margin-top:6px;padding-top:6px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:5px">Cost intern real</div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost real (preu_cost)</span><strong id="ac-cost" style="color:#fff">—</strong></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:#6BBA8A"><span>Marge s/ PVD</span><strong id="ac-marge-pvd">—</strong></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:#dba24f"><span>Marge s/ PVP</span><strong id="ac-marge-pvp">—</strong></div>
+          </div>
+          {% endif %}
         </div>
         <input type="hidden" id="marc-w" value="0">
         <input type="hidden" id="marc-h" value="0">
@@ -749,17 +757,6 @@ body.has-sticky-bar{padding-bottom:78px}
           <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="calcular()"></div>
           <div class="r-row"><span class="r-lbl">Pendent de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
         </div>
-        {% if session.is_admin %}
-        <div id="admin-cost-panel" style="margin-top:.75rem;padding:.85rem;border-radius:10px;background:#1C1B18;color:#fff;font-size:13px">
-          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:.6rem;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:.4rem">Només admin — Cost intern</div>
-          <div style="display:grid;gap:4px">
-            <div style="display:flex;justify-content:space-between"><span style="color:rgba(255,255,255,.5)">Cost real total</span><strong id="ac-cost">—</strong></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:rgba(255,255,255,.5)">PVD (preu taller)</span><strong id="ac-pvd">—</strong></div>
-            <div style="display:flex;justify-content:space-between;padding-top:4px;border-top:1px solid rgba(255,255,255,.1)"><span style="color:#6BBA8A">Marge brut s/ PVD</span><strong id="ac-marge-pvd" style="color:#6BBA8A">—</strong></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:#dba24f">Marge brut s/ PVP</span><strong id="ac-marge-pvp" style="color:#dba24f">—</strong></div>
-          </div>
-        </div>
-        {% endif %}
       </div>
 
       <div class="card">
@@ -2572,9 +2569,9 @@ function calcular(){
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
   updateExtrasLabels();
 
-  // Admin cost panel
-  var acPanel = document.getElementById('admin-cost-panel');
-  if(acPanel){
+  // Admin cost (inside € panel, only rendered for admins)
+  var acCost = document.getElementById('ac-cost');
+  if(acCost){
     var costReal = 0;
     var mappings = {muntatge:'muntatge',proteccio:'proteccio',interior:'interior'};
     for(var g in mappings){
@@ -2607,8 +2604,7 @@ function calcular(){
     var margePvp = pvpTotal - costReal;
     var pctPvd = pvdTotal > 0 ? (margePvd / pvdTotal * 100) : 0;
     var pctPvp = pvpTotal > 0 ? (margePvp / pvpTotal * 100) : 0;
-    document.getElementById('ac-cost').textContent = fmt(costReal);
-    document.getElementById('ac-pvd').textContent = fmt(pvdTotal);
+    acCost.textContent = fmt(costReal);
     document.getElementById('ac-marge-pvd').textContent = fmt(margePvd) + ' (' + pctPvd.toFixed(1) + '%)';
     document.getElementById('ac-marge-pvp').textContent = fmt(margePvp) + ' (' + pctPvp.toFixed(1) + '%)';
   }
