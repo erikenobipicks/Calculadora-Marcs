@@ -1294,6 +1294,8 @@ function setPrintState(checked, mode, title){
   printBtn.title = title || '';
   printChk.checked = !!checked;
   printBtn.classList.toggle('selected', !!checked);
+  var paperRow = document.getElementById('impressio-paper-row');
+  if(paperRow) paperRow.style.display = checked ? 'block' : 'none';
   if(printChk.checked && !CLOSEST.impressio){
     _lastFetchKey='';
     fetchClosest();
@@ -2276,19 +2278,22 @@ function canviarTipusLaminat(tipus){
 function toggleImpressio(){
   var chk = document.getElementById('chk-impressio');
   var printBtn = document.getElementById('opt-impressio');
+
+  // Si està locked perquè l'origen és "client", canviar a "laboratori" automàticament
+  if(printBtn.dataset.locked === '1' && !chk.checked){
+    var photoOrigin = document.getElementById('photo-origin');
+    if(photoOrigin && photoOrigin.value === 'client'){
+      photoOrigin.value = 'laboratori';
+      onPieceContextChange();
+      return;
+    }
+  }
+
   if(printBtn.classList.contains('disabled') || printBtn.dataset.locked === '1'){
     showAlert('La impressió només està disponible quan la peça a emmarcar és una fotografia.', 'err');
     return;
   }
   chk.checked = !chk.checked;  // toggle manually
-  // Si activem impressió i l'origen diu "client porta la imatge", canviar a "laboratori"
-  if(chk.checked){
-    var photoOrigin = document.getElementById('photo-origin');
-    if(photoOrigin && photoOrigin.value === 'client'){
-      photoOrigin.value = 'laboratori';
-      onPieceContextChange();
-    }
-  }
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
   if(chk.checked && !canPrintSize(fw, fh)){
