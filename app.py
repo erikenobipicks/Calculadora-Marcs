@@ -2464,6 +2464,7 @@ def public_professional_summary():
             'ok': True,
             'name': user['nom'] or '',
             'business_name': user['nom_empresa'] or '',
+            'is_admin': bool(_row_get(user, 'is_admin', False)),
             'profile_type': _clean_profile_type(user['profile_type']),
             'access_status': _user_access_status(user),
             'recent_quotes': recent_quotes,
