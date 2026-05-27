@@ -8801,6 +8801,8 @@ def api_closest():
         imp_res['tram'] = tram_info['tram']
         imp_res['area'] = round(foto_w * foto_h, 2)
         imp_res['pvp'] = round(preu_pvd * (1 + marge_aplicat / 100), 4)
+        if session.get('is_admin'):
+            imp_res['preu_cost'] = preu_pvd
 
     return jsonify(result)
 
