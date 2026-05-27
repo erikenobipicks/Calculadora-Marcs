@@ -656,13 +656,16 @@ body.has-sticky-bar{padding-bottom:78px}
               <span class="opt-preu" id="preu-impressio">—</span>
             </div>
           </div>
-          <div id="impressio-paper-row" style="display:none;margin-top:.5rem;font-size:13px;color:var(--muted)">
-            <label style="margin-right:1rem;cursor:pointer">
-              <input type="radio" name="impressio-paper" value="lustre" checked onchange="onPaperChange()"> Lustre
-            </label>
-            <label style="cursor:pointer">
-              <input type="radio" name="impressio-paper" value="baryta" onchange="onPaperChange()"> Photo Rag Baryta
-            </label>
+          <div id="impressio-paper-row" style="display:none;margin-top:.55rem">
+            <div style="font-size:11px;font-weight:600;color:var(--hint);margin-bottom:.3rem;letter-spacing:.3px">Paper</div>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+              <label style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;background:#fff" id="lbl-paper-lustre">
+                <input type="radio" name="impressio-paper" value="lustre" checked onchange="onPaperChange()" style="display:none"> Paper fotogràfic Lustre
+              </label>
+              <label style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;background:#fff" id="lbl-paper-baryta">
+                <input type="radio" name="impressio-paper" value="baryta" onchange="onPaperChange()" style="display:none"> Hahnemühle Photo Rag Baryta
+              </label>
+            </div>
           </div>
         </div>
 
@@ -2278,6 +2281,14 @@ function toggleImpressio(){
     return;
   }
   chk.checked = !chk.checked;  // toggle manually
+  // Si activem impressió i l'origen diu "client porta la imatge", canviar a "laboratori"
+  if(chk.checked){
+    var photoOrigin = document.getElementById('photo-origin');
+    if(photoOrigin && photoOrigin.value === 'client'){
+      photoOrigin.value = 'laboratori';
+      onPieceContextChange();
+    }
+  }
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
   if(chk.checked && !canPrintSize(fw, fh)){
@@ -2300,11 +2311,20 @@ showAlert(lm.print, 'err');
 }
 
 function onPaperChange(){
-  // Re-fetch perquè la tarifa del paper actual canvia (Baryta usa trams,
-  // Lustre la taula impressio + fórmula). Sense això el preu mostraria
-  // el del paper anterior.
+  // Actualitzar estil visual dels botons de paper
+  var labels = document.querySelectorAll('#impressio-paper-row label');
+  labels.forEach(function(l){
+    var radio = l.querySelector('input[type="radio"]');
+    if(radio && radio.checked){
+      l.style.background='var(--green)'; l.style.color='#fff'; l.style.borderColor='var(--green)';
+    } else {
+      l.style.background='#fff'; l.style.color='var(--text)'; l.style.borderColor='var(--border)';
+    }
+  });
   _lastFetchKey=''; fetchClosest();
 }
+// Aplicar estil inicial al paper seleccionat
+document.addEventListener('DOMContentLoaded', function(){ onPaperChange(); });
 function onImpressioChange(){ toggleImpressio(); }
 
 var _marcLookupTimer = null;
