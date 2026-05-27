@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objectiu — Auditoria de costos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F8F7F4;--card:#fff;--border:#E5E2DB;--text:#1C1B18;--muted:#6B6860;--hint:#9E9B94;--green:{{ brand_color|default('#1A6B45') }};--green-l:{{ brand_color_light|default('#E8F3EE') }};--amber:#C8873A;--amber-l:#FDF3E8;--red:#B84040;--red-l:#FAEAEA;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#FFFFFF') }};--nav-muted:{{ nav_muted_color|default('#D7D0C4') }};--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:1100px;margin:0 auto;padding:1.6rem 1.1rem 3rem}
+.page-title{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;margin-bottom:.25rem}
+.muted-sub{font-size:13px;color:var(--muted);margin-bottom:1.25rem;line-height:1.6}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+.section h2{font-family:'DM Serif Display',serif;font-size:20px;font-weight:400;margin-bottom:.75rem}
+.form-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-bottom:1rem}
+.form-row label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.form-row input,.form-row select{padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;min-width:100px}
+.form-row button{padding:8px 18px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+.form-row button:hover{background:#155c3a}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);font-weight:700;color:var(--hint);font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:#F5F4F1}
+td{padding:10px 12px;border-bottom:1px solid #F3F1EB;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.mono{font-family:Consolas,monospace;font-size:12px}
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700}
+.badge-taula{background:var(--green-l);color:var(--green)}
+.badge-formula{background:var(--amber-l);color:var(--amber)}
+.badge-tram{background:#EAF0F8;color:#3B6BAA}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.detall{font-size:11px;color:var(--hint);line-height:1.5;max-width:320px}
+.marge-ok{color:var(--green);font-weight:700}
+.marge-low{color:var(--red);font-weight:700}
+.config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.5rem}
+.config-item{display:flex;justify-content:space-between;padding:6px 10px;border:1px solid #F3F1EB;border-radius:8px;font-size:12px}
+.config-item .key{color:var(--muted);font-family:Consolas,monospace;font-size:11px}
+.config-item .val{font-weight:700}
+.summary-box{margin-top:1rem;padding:1rem;border-radius:12px;background:#1C1B18;color:#fff}
+.summary-box h3{font-size:14px;font-weight:600;margin-bottom:.5rem;color:rgba(255,255,255,.5)}
+.summary-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.summary-row.total{border-top:1px solid rgba(255,255,255,.15);margin-top:4px;padding-top:8px;font-weight:700}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+{% include '_nav.html' %}
+<script>function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classList.toggle('nav-open'); }</script>
+
+<div class="container">
+  <div class="page-title">Auditoria de costos</div>
+  <div class="muted-sub">Introdueix una mida i veuràs el desglossament complet de cost, PVD i marge de cada component. Tot calculat amb els mateixos paràmetres que fa servir la calculadora en producció.</div>
+
+  <div class="section">
+    <form method="get" class="form-row">
+      <div><label>Ample (cm)</label><input type="number" name="w" value="{{ w }}" min="1" step="0.1"></div>
+      <div><label>Alt (cm)</label><input type="number" name="h" value="{{ h }}" min="1" step="0.1"></div>
+      <div><label>Paper impressió</label>
+        <select name="paper">
+          <option value="lustre" {{ 'selected' if paper == 'lustre' }}>Lustre</option>
+          <option value="silk" {{ 'selected' if paper == 'silk' }}>Silk</option>
+          <option value="baryta" {{ 'selected' if paper == 'baryta' }}>Baryta</option>
+        </select>
+      </div>
+      <div><label>Moldura (ref, opcional)</label><input type="text" name="moldura" value="{{ moldura_ref }}" placeholder="Ex: 10038"></div>
+      <button type="submit">Calcular</button>
+    </form>
+  </div>
+
+  <div class="section">
+    <h2>Desglossament per a {{ w|int }}×{{ h|int }} cm (àrea {{ (w*h)|int }} cm²)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Component</th>
+          <th>Origen</th>
+          <th>Ref</th>
+          <th class="num">Cost real</th>
+          <th class="num">Marge admin</th>
+          <th class="num">PVD (taller)</th>
+          <th class="num">Marge €</th>
+          <th class="num">Marge %</th>
+          <th>Paràmetres / detall</th>
+        </tr></thead>
+        <tbody>
+        {% for c in components %}
+        <tr>
+          <td><strong>{{ c.nom }}</strong></td>
+          <td><span class="badge badge-{{ c.origen }}">{{ c.origen }}</span></td>
+          <td class="mono">{{ c.get('ref', '—') }}</td>
+          <td class="num mono">{{ '%.4f'|format(c.cost) }} €</td>
+          <td class="num">{{ '%.0f'|format(c.marge_pct) }}%</td>
+          <td class="num mono">{{ '%.4f'|format(c.pvd) }} €</td>
+          <td class="num {% if c.pvd - c.cost > 0 %}marge-ok{% else %}marge-low{% endif %}">{{ '%.4f'|format(c.pvd - c.cost) }} €</td>
+          <td class="num {% if c.cost > 0 and ((c.pvd - c.cost) / c.cost * 100) > 30 %}marge-ok{% else %}marge-low{% endif %}">{% if c.cost > 0 %}{{ '%.1f'|format((c.pvd - c.cost) / c.cost * 100) }}%{% else %}—{% endif %}</td>
+          <td class="detall">{{ c.detall }}{% if c.get('preu_cost_unitari') is not none %}<br>preu_cost unitari: {{ c.preu_cost_unitari }} {{ c.get('unitat', '') }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="summary-box">
+      <h3>Resum (tots els components junts)</h3>
+      {% set total_cost = components|sum(attribute='cost') %}
+      {% set total_pvd = components|sum(attribute='pvd') %}
+      <div class="summary-row"><span>Cost real total</span><span>{{ '%.2f'|format(total_cost) }} €</span></div>
+      <div class="summary-row"><span>PVD total (preu taller)</span><span>{{ '%.2f'|format(total_pvd) }} €</span></div>
+      <div class="summary-row total" style="color:#6BBA8A"><span>Marge brut total</span><span>{{ '%.2f'|format(total_pvd - total_cost) }} € ({% if total_cost > 0 %}{{ '%.1f'|format((total_pvd - total_cost) / total_cost * 100) }}%{% else %}—{% endif %})</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Paràmetres de configuració actuals</h2>
+    <div class="muted-sub" style="margin-bottom:.75rem">Aquests valors es poden canviar a <a href="/admin" style="color:var(--green)">/admin → Configuració</a>. Canviar-los afecta tots els càlculs.</div>
+    <div class="config-grid">
+      {% for key, val in config.items() %}
+      <div class="config-item"><span class="key">{{ key }}</span><span class="val">{{ val }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+</body>
+</html>
