@@ -239,6 +239,9 @@ tr:hover td{background:#FAFAF8}
             </td>
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
+              {% if session.is_admin and op.client_extern_id %}
+              <a href="/pdf/{{ op.id }}?mode=dual" class="btn-sm btn-albara" target="_blank" title="PDF amb preu taller + PVP suggerit">PDF Taller</a>
+              {% endif %}
               {% if session.is_admin %}
               {% if op.fd_albara %}
               <span class="btn-sm btn-albara-ok" title="Albarà: {{ op.fd_albara }}">✓ {{ op.fd_albara }}</span>
