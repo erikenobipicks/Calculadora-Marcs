@@ -8708,9 +8708,9 @@ def api_closest():
         return jsonify({})
 
     def _build_result(r, preu_col='preu'):
-        """Build a result dict with preu_cost if available."""
+        """Build a result dict with preu_cost only for admins."""
         res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
-        if r.get('preu_cost') is not None:
+        if session.get('is_admin') and r.get('preu_cost') is not None:
             res['preu_cost'] = float(r['preu_cost'])
         return res
 
@@ -8754,7 +8754,10 @@ def api_closest():
 
     def _fn_result(r):
         """Format foam/laminat/passpartu result for closest API."""
-        return {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'preu_cost': r['cost'], 'origen': r['origen']}
+        res = {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'origen': r['origen']}
+        if session.get('is_admin'):
+            res['preu_cost'] = r['cost']
+        return res
 
     # Foam (encolat simple). ProEco: àlies de compatibilitat històrica.
     foam = _fn_result(calcular_cost_foam(w, h))
