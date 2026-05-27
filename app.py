@@ -2698,6 +2698,7 @@ def public_clients_habituals():
                 'telefon': _row_get(r, 'telefon') or '',
                 'email': _row_get(r, 'email') or '',
                 'empresa': _row_get(r, 'empresa') or '',
+                'dropbox_url': _row_get(r, 'dropbox_url') or '',
             }
             for r in rows
         ],
@@ -4378,6 +4379,7 @@ def admin_run_migrations():
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
         # FK a comandes (nul·lable: les comandes existents queden a NULL).
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
@@ -6968,7 +6970,7 @@ def admin_clients_externs():
     if filtre in ('taller', 'pvp'):
         clients = query("""
             SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
-                   c.actiu, c.created_at, c.usuari_id, u.username AS usuari_username, u.nom AS usuari_nom
+                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, u.username AS usuari_username, u.nom AS usuari_nom
             FROM clients_externs c
             LEFT JOIN usuaris u ON c.usuari_id = u.id
             WHERE c.tipus = ? ORDER BY c.actiu DESC, c.nom
@@ -6977,7 +6979,7 @@ def admin_clients_externs():
         filtre = ''
         clients = query("""
             SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
-                   c.actiu, c.created_at, c.usuari_id, u.username AS usuari_username, u.nom AS usuari_nom
+                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, u.username AS usuari_username, u.nom AS usuari_nom
             FROM clients_externs c
             LEFT JOIN usuaris u ON c.usuari_id = u.id
             ORDER BY c.actiu DESC, c.nom
@@ -7056,10 +7058,11 @@ def admin_clients_externs_crear():
         except (TypeError, ValueError): usuari_id = None
     else:
         usuari_id = None
+    dropbox_url = (payload.get('dropbox_url') or '').strip() or None
     new_id = execute(
-        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, actiu) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [nom, nif, fd_id, tipus, telefon, email, usuari_id, True],
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [nom, nif, fd_id, tipus, telefon, email, usuari_id, dropbox_url, True],
     )
     print(f"[clients_externs] crear: id={new_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True, 'id': new_id})
@@ -7088,9 +7091,10 @@ def admin_clients_externs_editar(client_id):
         except (TypeError, ValueError): usuari_id = None
     else:
         usuari_id = None
+    dropbox_url = (payload.get('dropbox_url') or '').strip() or None
     execute(
-        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=? WHERE id=?",
-        [nom, nif, tipus, telefon, email, usuari_id, client_id],
+        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=? WHERE id=?",
+        [nom, nif, tipus, telefon, email, usuari_id, dropbox_url, client_id],
     )
     print(f"[clients_externs] editar: id={client_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True})
