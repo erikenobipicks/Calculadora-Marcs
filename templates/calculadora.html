@@ -749,6 +749,17 @@ body.has-sticky-bar{padding-bottom:78px}
           <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="calcular()"></div>
           <div class="r-row"><span class="r-lbl">Pendent de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
         </div>
+        {% if session.is_admin %}
+        <div id="admin-cost-panel" style="margin-top:.75rem;padding:.85rem;border-radius:10px;background:#1C1B18;color:#fff;font-size:13px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:.6rem;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:.4rem">Només admin — Cost intern</div>
+          <div style="display:grid;gap:4px">
+            <div style="display:flex;justify-content:space-between"><span style="color:rgba(255,255,255,.5)">Cost real total</span><strong id="ac-cost">—</strong></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:rgba(255,255,255,.5)">PVD (preu taller)</span><strong id="ac-pvd">—</strong></div>
+            <div style="display:flex;justify-content:space-between;padding-top:4px;border-top:1px solid rgba(255,255,255,.1)"><span style="color:#6BBA8A">Marge brut s/ PVD</span><strong id="ac-marge-pvd" style="color:#6BBA8A">—</strong></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#dba24f">Marge brut s/ PVP</span><strong id="ac-marge-pvp" style="color:#dba24f">—</strong></div>
+          </div>
+        </div>
+        {% endif %}
       </div>
 
       <div class="card">
@@ -2561,6 +2572,47 @@ function calcular(){
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
   updateExtrasLabels();
 
+  // Admin cost panel
+  var acPanel = document.getElementById('admin-cost-panel');
+  if(acPanel){
+    var costReal = 0;
+    var mappings = {muntatge:'muntatge',proteccio:'proteccio',interior:'interior'};
+    for(var g in mappings){
+      var sel = document.querySelector('input[name="'+g+'"]:checked');
+      var k = sel ? sel.value : '';
+      if(k && k!=='cap' && k!=='conservar' && CLOSEST[k] && CLOSEST[k].preu_cost!=null)
+        costReal += CLOSEST[k].preu_cost;
+    }
+    if(CLOSEST.impressio && CLOSEST.impressio.preu_cost!=null && document.getElementById('chk-impressio').checked)
+      costReal += CLOSEST.impressio.preu_cost;
+    // Marc cost from preu_cost per cm lineal (same calc as cMol but with real cost)
+    var marcCostUnit = PREUS._marc_cost || 0;
+    if(marcCostUnit > 0 && (mW>0||mH>0)){
+      var perM = (mW*2)+(mH*2);
+      var longBM = (perM+(GRUIX.marc||0)*8)*(1+(MERMA.marc.pct||10)/100);
+      var longFM = Math.max(longBM, MERMA.marc.min||100);
+      costReal += longFM * (marcCostUnit/100);
+      // Premarc cost
+      var preCostUnit = PREUS._pre_cost || 0;
+      if(preCostUnit > 0 && PREUS.pre > 0){
+        var longBP = (perM+((GRUIX.pre||0)+(GRUIX.marc||0))*8)*(1+(MERMA.pre.pct||10)/100);
+        var longFP = Math.max(longBP, MERMA.pre.min||100);
+        costReal += longFP * (preCostUnit/100);
+      }
+    }
+    costReal = costReal * qty;
+    var pvdTotal = cTot * qty;
+    var pvpTotal = pNet;
+    var margePvd = pvdTotal - costReal;
+    var margePvp = pvpTotal - costReal;
+    var pctPvd = pvdTotal > 0 ? (margePvd / pvdTotal * 100) : 0;
+    var pctPvp = pvpTotal > 0 ? (margePvp / pvpTotal * 100) : 0;
+    document.getElementById('ac-cost').textContent = fmt(costReal);
+    document.getElementById('ac-pvd').textContent = fmt(pvdTotal);
+    document.getElementById('ac-marge-pvd').textContent = fmt(margePvd) + ' (' + pctPvd.toFixed(1) + '%)';
+    document.getElementById('ac-marge-pvp').textContent = fmt(margePvp) + ' (' + pctPvp.toFixed(1) + '%)';
+  }
+
   window._c={
     preu_net:pNet,
     preu_final:pFin,
@@ -3057,6 +3109,7 @@ function restauraEstat(e){
           if(d.ok){
             PREUS.marc=d.preu; GRUIX.marc=d.gruix;
             MERMA.marc={pct:d.merma_pct||10, min:d.minim_cm||100};
+            if(d.preu_cost!=null) PREUS._marc_cost=d.preu_cost;
             setChips('marc',[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
             document.getElementById('desc-marc').textContent=d.descripcio||'';
             document.getElementById('desc-marc').style.color='';
@@ -3070,6 +3123,7 @@ function restauraEstat(e){
           if(d.ok){
             PREUS.pre=d.preu; GRUIX.pre=d.gruix;
             MERMA.pre={pct:d.merma_pct||10, min:d.minim_cm||100};
+            if(d.preu_cost!=null) PREUS._pre_cost=d.preu_cost;
             setChips('pre',[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
             document.getElementById('desc-pre').textContent=d.descripcio||'';
             document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="">':'<div class="no-foto">Sense foto</div>';
