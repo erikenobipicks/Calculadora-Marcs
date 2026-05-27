@@ -5986,7 +5986,8 @@ def generar_pdf(comanda_id):
     if not c: return 'No trobat', 404
     if not session.get('is_admin') and c['user_id'] != session['user_id']:
         return 'No autoritzat', 403
-    pdf = crear_pdf(dict(c))
+    mode = (request.args.get('mode') or '').strip().lower()
+    pdf = crear_pdf(dict(c), mode=mode)
     return send_file(pdf, mimetype='application/pdf',
                      download_name=f"pressupost_{c['client_nom']}_{comanda_id}.pdf")
 
@@ -8068,7 +8069,7 @@ PDF_T = {
     }
 }
 
-def crear_pdf(c):
+def crear_pdf(c, mode=''):
     import os as _os
     from reportlab.platypus import Image as RLImage
     buf = io.BytesIO()
@@ -8317,6 +8318,65 @@ def crear_pdf(c):
         ('LINEABOVE',(0,pend_idx), (-1,pend_idx), 1.5,colors.HexColor("#B84040")),
     ]))
     story.append(t3)
+
+    # ── Secció dual taller (només si mode='dual' i client de taller) ──────
+    if mode == 'dual':
+        client_extern_id = _row_get(c, 'client_extern_id')
+        taller_client = None
+        taller_marge = 60.0
+        if client_extern_id:
+            taller_client = query('SELECT tipus, usuari_id FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+        if taller_client and _row_get(taller_client, 'tipus') == 'taller':
+            usuari_id = _row_get(taller_client, 'usuari_id')
+            if usuari_id:
+                u_taller = query('SELECT marge FROM usuaris WHERE id=?', [usuari_id], one=True)
+                if u_taller and _row_get(u_taller, 'marge') is not None:
+                    taller_marge = float(_row_get(u_taller, 'marge'))
+            cost_prod = float(c.get('cost_produccio') or 0)
+            qty = int(c.get('quantitat') or 1)
+            pvd_unit = cost_prod / qty if qty > 0 else cost_prod
+            pvp_suggerit_unit = round(pvd_unit * (1 + taller_marge / 100), 2)
+            pvp_suggerit_total = round(pvp_suggerit_unit * qty, 2)
+            pvp_suggerit_iva = round(pvp_suggerit_total * 1.21, 2)
+
+            story.append(Spacer(1, 5*mm))
+            dual_header = Table([[
+                p('Preus per al teu client final', bold=True, size=11, color=WHITE),
+            ]], colWidths=[W])
+            dual_header.setStyle(TableStyle([
+                ('BACKGROUND',(0,0),(-1,-1), AMBER),
+                ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
+                ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+            ]))
+            story.append(dual_header)
+
+            dual_data = [
+                [p('Preu taller (el que pagues)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+                 p(f'{cost_prod:.2f} €', size=10, align='RIGHT')],
+                [p(f'PVP suggerit (marge {taller_marge:.0f}%)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+                 p(f'{pvp_suggerit_total:.2f} €', size=10, align='RIGHT')],
+                [p('PVP suggerit amb IVA 21%', bold=True, size=11, color=AMBER),
+                 p(f'{pvp_suggerit_iva:.2f} €', bold=True, size=14, color=AMBER, align='RIGHT')],
+            ]
+            if qty > 1:
+                dual_data.insert(1, [
+                    p(f'PVP suggerit per unitat', bold=True, size=9, color=colors.HexColor("#6B6860")),
+                    p(f'{pvp_suggerit_unit:.2f} € × {qty}', size=10, align='RIGHT'),
+                ])
+
+            t_dual = Table(dual_data, colWidths=[W*0.6, W*0.4])
+            pvp_idx = len(dual_data) - 1
+            t_dual.setStyle(TableStyle([
+                ('BACKGROUND',(0,pvp_idx),(-1,pvp_idx), colors.HexColor("#FDF3E8")),
+                ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, colors.white]),
+                ('BOX',(0,0),(-1,-1),0.5,BRD),
+                ('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+                ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+                ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+                ('LINEABOVE',(0,pvp_idx),(-1,pvp_idx),1.5,AMBER),
+            ]))
+            story.append(t_dual)
+
     story.append(Spacer(1, 6*mm))
     story.append(HRFlowable(width=W, thickness=0.5, color=BRD))
     story.append(Spacer(1, 2*mm))
