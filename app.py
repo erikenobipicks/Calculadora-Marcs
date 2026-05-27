@@ -3304,6 +3304,138 @@ def admin_preus_cost():
                            proveidor=proveidor, verificat=verificat, proveidors=proveidors, stats=stats, config=cfg)
 
 
+@app.route('/admin/auditoria-costos')
+@admin_required
+def admin_auditoria_costos():
+    w = float(request.args.get('w', 60))
+    h = float(request.args.get('h', 80))
+    paper = (request.args.get('paper') or 'lustre').strip().lower()
+    if paper not in ('lustre', 'silk', 'baryta'):
+        paper = 'lustre'
+    moldura_ref = (request.args.get('moldura') or '').strip()
+
+    components = []
+
+    # Marc
+    if moldura_ref:
+        mol = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm, descripcio FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_ref], one=True)
+        if mol:
+            marc_res = calcular_preu_marc(w, h, _row_get(mol, 'gruix', 0), _row_get(mol, 'preu_cost'), _row_get(mol, 'merma_pct', 10), _row_get(mol, 'minim_cm', 100))
+            marge_mol = float(get_config_value('marge_admin_moldures_pct', '60'))
+            components.append({
+                'nom': f'Marc ({moldura_ref})',
+                'preu_cost_unitari': _row_get(mol, 'preu_cost'),
+                'unitat': '€/cm lineal',
+                'cost': marc_res['cost'] if marc_res else 0,
+                'pvd': marc_res['pvd'] if marc_res else 0,
+                'origen': 'taula',
+                'marge_pct': marge_mol,
+                'detall': f"Perímetre={2*(w+h):.0f}cm, gruix={_row_get(mol,'gruix',0)}, merma={_row_get(mol,'merma_pct',10)}%, mínim={_row_get(mol,'minim_cm',100)}cm",
+            })
+
+    # Vidre
+    vidre = calcular_cost_vidre(w, h)
+    marge_v = float(get_config_value('marge_admin_vidres_pct', '60'))
+    components.append({
+        'nom': 'Vidre simple',
+        'cost': vidre['cost'], 'pvd': vidre['pvd'], 'origen': vidre['origen'], 'ref': vidre['ref'],
+        'marge_pct': marge_v,
+        'detall': f"cost_cm2={get_config_value('vidre_cost_cm2','0.002880')}, t_base={get_config_value('vidre_temps_base_min','3')}min, t_lineal={get_config_value('vidre_temps_lineal_m','0.5')}min/m, cost_hora={get_config_value('cost_hora_taller','25')}€/h",
+    })
+
+    # Doble vidre
+    dv = calcular_cost_doble_vidre(w, h)
+    components.append({
+        'nom': 'Doble vidre',
+        'cost': dv['cost'], 'pvd': dv['pvd'], 'origen': dv['origen'], 'ref': dv['ref'],
+        'marge_pct': marge_v,
+        'detall': f"vidre×2 + muntatge ({get_config_value('vidre_dv_muntatge_eur','1.30')}€)",
+    })
+
+    # Passpartú simple
+    pas = calcular_cost_passpartu(w, h, tipus='simple')
+    marge_p = float(get_config_value('marge_admin_passpartu_pct', '60'))
+    components.append({
+        'nom': 'Passpartú simple',
+        'cost': pas['cost'], 'pvd': pas['pvd'], 'origen': pas['origen'], 'ref': pas['ref'],
+        'marge_pct': marge_p,
+        'detall': f"cost_cm2={get_config_value('passpartu_cost_cm2','0.001200')}, t_base={get_config_value('passpartu_temps_base_min','5')}min",
+    })
+
+    # Passpartú doble
+    dpas = calcular_cost_passpartu(w, h, tipus='doble')
+    components.append({
+        'nom': 'Passpartú doble',
+        'cost': dpas['cost'], 'pvd': dpas['pvd'], 'origen': dpas['origen'], 'ref': dpas['ref'],
+        'marge_pct': marge_p,
+        'detall': 'simple×2 + finestres extra',
+    })
+
+    # Foam
+    foam = calcular_cost_foam(w, h)
+    marge_e = float(get_config_value('marge_admin_encolat_pct', '60'))
+    components.append({
+        'nom': 'Foam (encolat)',
+        'cost': foam['cost'], 'pvd': foam['pvd'], 'origen': foam['origen'], 'ref': foam['ref'],
+        'marge_pct': marge_e,
+        'detall': f"foam_cost_cm2={get_config_value('foam_cost_cm2','0.001143')}, t_base={get_config_value('foam_temps_base_min','9')}min",
+    })
+
+    # Laminat
+    lam_semi = calcular_cost_laminat(w, h, tipus='semibrillo')
+    components.append({
+        'nom': 'Laminat semibrillo',
+        'cost': lam_semi['cost'], 'pvd': lam_semi['pvd'], 'origen': lam_semi['origen'], 'ref': lam_semi['ref'],
+        'marge_pct': marge_e,
+        'detall': f"laminat_cost_cm2={get_config_value('laminat_cost_cm2','0.001000')}",
+    })
+
+    # Protter
+    prot = calcular_cost_protter(w, h, tipus='semibrillo')
+    components.append({
+        'nom': 'Protter (foam+laminat)',
+        'cost': prot['cost'], 'pvd': prot['pvd'], 'origen': prot['origen'], 'ref': prot['ref'],
+        'marge_pct': marge_e,
+        'detall': 'foam + laminat combinats',
+    })
+
+    # Impressió
+    imp = _imp_closest(w, h, paper=paper)
+    if imp:
+        components.append({
+            'nom': f'Impressió ({paper})',
+            'cost': imp['preu'], 'pvd': imp['preu'], 'origen': imp['origen'], 'ref': imp.get('ref', ''),
+            'marge_pct': 0,
+            'detall': f"cost_cm2={get_config_value(f'imp_{paper}_cost_cm2', get_config_value('imp_lustre_cost_cm2','0.000703'))}, àrea={w*h:.0f}cm²",
+        })
+
+    # Mirall
+    mir = calcular_cost_mirall(w, h)
+    components.append({
+        'nom': 'Mirall',
+        'cost': mir['cost'], 'pvd': mir['pvd'], 'origen': mir['origen'], 'ref': mir['ref'],
+        'marge_pct': marge_v,
+        'detall': 'Mirall tallat a mida',
+    })
+
+    config_params = {
+        'marge_admin_moldures_pct': get_config_value('marge_admin_moldures_pct', '60'),
+        'marge_admin_vidres_pct': get_config_value('marge_admin_vidres_pct', '60'),
+        'marge_admin_passpartu_pct': get_config_value('marge_admin_passpartu_pct', '60'),
+        'marge_admin_encolat_pct': get_config_value('marge_admin_encolat_pct', '60'),
+        'vidre_cost_cm2': get_config_value('vidre_cost_cm2', '0.002880'),
+        'foam_cost_cm2': get_config_value('foam_cost_cm2', '0.001143'),
+        'laminat_cost_cm2': get_config_value('laminat_cost_cm2', '0.001000'),
+        'passpartu_cost_cm2': get_config_value('passpartu_cost_cm2', '0.001200'),
+        'imp_lustre_cost_cm2': get_config_value('imp_lustre_cost_cm2', '0.000703'),
+        'cost_hora_taller': get_config_value('cost_hora_taller', '25'),
+    }
+
+    return render_template('admin_auditoria_costos.html',
+                           w=w, h=h, paper=paper, moldura_ref=moldura_ref,
+                           components=components, config=config_params)
+
+
 @app.route('/admin/preus-cost/update', methods=['POST'])
 @admin_required
 def admin_preus_cost_update():
