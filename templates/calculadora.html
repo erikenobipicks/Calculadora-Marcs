@@ -2044,12 +2044,22 @@ function applyIncompatibilities(){
       forcedSelections.proteccio = 'vidre';
       note = 'Si el puzzle ja ve sobre base, pots treballar-lo amb marc i vidre o bé amb laminat sol sense foam.';
     } else {
+      // Sense base: cal una base sòlida + protecció. Marquem
+      // automàticament Protter (foam + laminat) com a muntatge, que ja és
+      // exactament aquesta combinació. Desactivem encolat/laminat/proeco
+      // sols perquè no doblin el foam, i traiem vidre/proteccions perquè
+      // Protter ja fa de protecció superficial.
+      rules.protter = false;
       rules.encolat = true;
-      rules.proeco = false;
+      rules.proeco = true;
       rules.laminat = true;
-      rules['interior-cap'] = true;
-      forcedSelections.interior = 'proeco';
-      note = 'Si el puzzle no porta base, cal afegir un suport tipus ProEco abans d’emmarcar-lo.';
+      rules.vidre = true;
+      rules['interior-cap'] = false;
+      rules['proteccio-cap'] = false;
+      forcedSelections.muntatge = 'protter';
+      forcedSelections.interior = '';
+      forcedSelections.proteccio = '';
+      note = 'Si el puzzle no porta base, marquem foam + laminat (Protter) automàticament com a base i protecció.';
     }
   }
   if(pieceType === 'pintura_sense_bastidor'){
