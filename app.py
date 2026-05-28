@@ -4192,9 +4192,21 @@ def admin_ensure_clients_externs():
             actiu BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
+        # Columnes afegides posteriorment a la taula original. El panell
+        # /admin/clients-externs fa SELECT d'aquestes columnes, així que la
+        # taula creada abans amb només el CREATE TABLE de dalt provoca un
+        # error "column does not exist" (HTTP 500). Aquestes ALTERs són
+        # IF NOT EXISTS, per tant idempotents.
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS tipus VARCHAR(20) DEFAULT 'pvp'",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+        "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
     ]
@@ -4370,16 +4382,20 @@ def admin_run_migrations():
             actiu BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
-        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
-        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
-        "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
-        "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
+        # ALTER abans dels índexs: la primera vegada que s'executa això sobre
+        # una taula vella (creada amb /admin/ensure-clients-externs), la
+        # columna `tipus` encara no existeix, així que el seu CREATE INDEX
+        # fallaria si anés primer.
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS tipus VARCHAR(20) DEFAULT 'pvp'",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
         # FK a comandes (nul·lable: les comandes existents queden a NULL).
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
