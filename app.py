@@ -4169,20 +4169,22 @@ def cataleg():
 @app.route('/admin/ensure-clients-externs')
 @admin_required
 def admin_ensure_clients_externs():
-    """Emergència: només crea la taula clients_externs + índexs + FK a
-    comandes, sense passar pel loop sencer de /admin/run-migrations. Pensat
-    per quan run-migrations es queda penjat darrere d'ALTERs lentes i el
-    panell /admin/clients-externs torna 500."""
+    """Emergència: crea/posa al dia la taula clients_externs + índexs + FK
+    a comandes. Pensat per quan run-migrations es queda penjat i el panell
+    /admin/clients-externs torna 500.
+
+    Versió defensiva: cada sentència s'executa amb el seu propi commit/
+    rollback explícit, sense lock_timeout (que en alguns casos enverina la
+    connexió quan una ALTER triga més del previst). Si tot peta, retorna
+    igualment HTML amb el traceback per poder diagnosticar."""
+    import traceback
     resultats = []
-    db = get_db()
-    if USE_PG:
-        try:
-            execute("SET lock_timeout = '3000ms'")
-            db.commit()
-        except Exception as e:
-            try: db.rollback()
-            except Exception: pass
-            resultats.append(f"SKIP lock_timeout: {str(e)[:120]}")
+    try:
+        db = get_db()
+    except Exception:
+        return ("<h2>clients_externs</h2><pre>get_db() failed:\n"
+                + traceback.format_exc() + "</pre>"), 500
+
     sentencies = [
         """CREATE TABLE IF NOT EXISTS clients_externs (
             id SERIAL PRIMARY KEY,
@@ -4213,12 +4215,52 @@ def admin_ensure_clients_externs():
     for sql in sentencies:
         try:
             execute(sql)
+            try:
+                db.commit()
+            except Exception:
+                pass
             resultats.append(f"OK: {sql[:80].strip()}…")
         except Exception as e:
-            try: db.rollback()
-            except Exception: pass
-            resultats.append(f"SKIP: {str(e)[:120]}")
+            # Important: fer rollback per sortir de l'estat "transaction
+            # aborted" que deixa Postgres després d'una sentència fallida.
+            # Sense això, totes les sentències següents també fallarien.
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP: {sql[:80].strip()}… — {type(e).__name__}: {str(e)[:200]}")
     return "<h2>clients_externs</h2><pre>" + "\n".join(resultats) + "</pre>"
+
+
+@app.route('/admin/clients-externs-debug')
+@admin_required
+def admin_clients_externs_debug():
+    """Diagnòstic: llista columnes actuals i nombre de files de
+    clients_externs. Útil quan /admin/clients-externs encara peta després
+    d'executar /admin/ensure-clients-externs."""
+    import traceback
+    try:
+        if USE_PG:
+            cols = query("""
+                SELECT column_name, data_type, is_nullable, column_default
+                FROM information_schema.columns
+                WHERE table_name = 'clients_externs'
+                ORDER BY ordinal_position
+            """) or []
+        else:
+            cols = query("PRAGMA table_info(clients_externs)") or []
+        try:
+            count_row = query("SELECT COUNT(*) AS n FROM clients_externs", one=True)
+            count = count_row['n'] if count_row else 0
+        except Exception as e:
+            count = f"(no es pot comptar: {e})"
+        lines = [f"Files: {count}", "", "Columnes:"]
+        for c in cols:
+            lines.append(f"  - {dict(c)}")
+        return "<h2>clients_externs (debug)</h2><pre>" + "\n".join(lines) + "</pre>"
+    except Exception:
+        return ("<h2>clients_externs (debug)</h2><pre>ERROR:\n"
+                + traceback.format_exc() + "</pre>"), 500
 
 
 @app.route('/admin/ensure-pro-clients')
