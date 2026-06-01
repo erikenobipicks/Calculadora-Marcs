@@ -140,6 +140,13 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .opt-btn.disabled{opacity:.35;pointer-events:none}
 .opt-btn.locked{cursor:not-allowed;pointer-events:none}
 .opt-btn.locked .opt-text{opacity:.82}
+/* Icona d'ajuda "?" amb bombolla (hover + clic/tap). Va dins del botó d'opció;
+   el clic no selecciona l'opció (toggleHelp fa stopPropagation/preventDefault). */
+.help-tip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--border2);background:#fff;color:var(--muted);font-size:10px;font-weight:700;line-height:1;cursor:help;margin-left:5px;margin-right:auto;position:relative;flex:0 0 auto}
+.help-tip:hover,.opt-btn.selected .help-tip{border-color:var(--green);color:var(--green)}
+.help-bubble{display:none;position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%);width:250px;max-width:72vw;background:#1C1B18;color:#fff;font-size:11.5px;font-weight:400;line-height:1.45;text-align:left;padding:9px 11px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.28);z-index:1000;cursor:default;white-space:normal}
+.help-bubble::after{content:'';position:absolute;bottom:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-bottom-color:#1C1B18}
+.help-tip:hover .help-bubble,.help-tip:focus .help-bubble,.help-tip.open .help-bubble{display:block}
 
 /* DARK CARD (marge) */
 .dcard{background:#1C1B18;border-color:#333;color:#fff;margin-bottom:1.1rem}
@@ -538,16 +545,19 @@ body.has-sticky-bar{padding-bottom:78px}
             <label class="opt-btn" id="opt-encolat">
               <input type="radio" name="muntatge" value="encolat" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Encolat</span>
+              <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">Consisteix a enganxar la peça sobre un foam de 5 o 10 mm. És un suport necessari en algunes peces per poder penjar-les directament o posar-hi un marc amb vidre. Per exemple, un punt de creu cal enganxar-lo perquè sol no s'aguantaria.</span></span>
               <span class="opt-preu" id="preu-encolat">—</span>
             </label>
-            <label class="opt-btn" id="opt-protter" title="Foam + laminat">
+            <label class="opt-btn" id="opt-protter">
               <input type="radio" name="muntatge" value="protter" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Protter+Foam</span>
+              <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">Laminat al buit i en calent que protegeix la peça, muntat sobre un foam de 5 o 10 mm. Ideal per emmarcar fotografies sense pes extra (com el vidre). Sense marc es pot penjar directament (hi posem penjadors), però no es recomana del tot: amb el temps i els canvis de temperatura el foam es pot deformar una mica.</span></span>
               <span class="opt-preu" id="preu-protter">—</span>
             </label>
-            <label class="opt-btn" id="opt-laminat" title="Laminat al buit sense foam">
+            <label class="opt-btn" id="opt-laminat">
               <input type="radio" name="muntatge" value="laminat" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Laminat</span>
+              <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">S'utilitza només en casos molt puntuals, per protegir una peça sense cap suport. És com el plastificat de tota la vida però de més qualitat, amb acabat Mate o SemiBrillant (el més utilitzat).</span></span>
               <span class="opt-preu" id="preu-laminat">—</span>
             </label>
             <div id="laminat-subtipus" style="display:none;flex-basis:100%;padding:6px 0 0 14px">
@@ -589,6 +599,7 @@ body.has-sticky-bar{padding-bottom:78px}
             <label class="opt-btn opt-conservar" id="opt-conservar-vidre">
               <input type="radio" name="proteccio" value="conservar" onchange="onGrupChange('proteccio')">
               <span class="opt-text">Conservar vidre</span>
+              <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">Per quan el client porta el seu marc i només en vol canviar la motllura: reaprofitem el vidre. Comporta una feina extra que se suma automàticament al preu.</span></span>
               <span class="opt-preu" style="background:#E8F3EE;color:#1A6B45">0,00 €</span>
             </label>
             <label class="opt-btn opt-none" id="opt-proteccio-cap">
@@ -605,11 +616,13 @@ body.has-sticky-bar{padding-bottom:78px}
             <label class="opt-btn" id="opt-passpartu">
               <input type="radio" name="interior" value="passpartu" onchange="onGrupChange('interior')">
               <span class="opt-text">Passpartú</span>
+              <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">La mida extra que recomanem és d'uns 5 cm (4,5 cm de vista) quan es fa finestra. Si no en voleu, poseu 0 i indiqueu a les observacions com procedir. Amb passpartú també es poden emmarcar medalles, samarretes i altres elements que es puguin enganxar (sense finestra).</span></span>
               <span class="opt-preu" id="preu-passpartu">—</span>
             </label>
             <label class="opt-btn" id="opt-doble_pas">
               <input type="radio" name="interior" value="doble_pas" onchange="onGrupChange('interior')">
               <span class="opt-text">Doble passpartú</span>
+              <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">La mida extra que recomanem és d'uns 5 cm (4,5 cm de vista) quan es fa finestra. Si no en voleu, poseu 0 i indiqueu a les observacions com procedir. Amb passpartú també es poden emmarcar medalles, samarretes i altres elements que es puguin enganxar (sense finestra).</span></span>
               <span class="opt-preu" id="preu-doble_pas">—</span>
             </label>
             <label class="opt-btn opt-none" id="opt-interior-cap">
@@ -1257,6 +1270,26 @@ function getReversPeuIncludedText(){
     en: 'Included'
   }[_lang] || 'Inclos');
 }
+// ── Icones d'ajuda "?" ──────────────────────────────────────────────────────
+// Obre/tanca la bombolla d'ajuda. Important: stopPropagation + preventDefault
+// perquè el clic dins del botó d'opció NO seleccioni l'opció ni navegui enlloc.
+function toggleHelp(e, el){
+  e.preventDefault(); e.stopPropagation();
+  if(e.target && e.target.closest && e.target.closest('.help-bubble')) return; // clic dins la bombolla: no fer res
+  var willOpen = !el.classList.contains('open');
+  document.querySelectorAll('.help-tip.open').forEach(function(t){ t.classList.remove('open'); });
+  if(willOpen) el.classList.add('open');
+}
+function helpKey(e, el){
+  if(e.key==='Enter' || e.key===' '){ toggleHelp(e, el); }
+  else if(e.key==='Escape'){ el.classList.remove('open'); if(el.blur) el.blur(); }
+}
+// Tanca qualsevol bombolla oberta en clicar fora.
+document.addEventListener('click', function(e){
+  if(!(e.target.closest && e.target.closest('.help-tip'))){
+    document.querySelectorAll('.help-tip.open').forEach(function(t){ t.classList.remove('open'); });
+  }
+});
 function preuDisplay(cost, isImp){
   if(rmode==='cost') return fmtCost(cost);
   var margin = isImp ? (marge_impressio||marge) : marge;
