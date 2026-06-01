@@ -2630,7 +2630,10 @@ function calcular(){
   var muntatgeSel   = (document.querySelector('input[name="muntatge"]:checked')||{}).value || '';
   var interiorSel2  = (document.querySelector('input[name="interior"]:checked')||{}).value || '';
   var teProtter     = muntatgeSel === 'protter';
-  var teFoam        = (muntatgeSel === 'encolat' || interiorSel2 === 'proeco' || isPuzzlePreset(muntatgeSel)) && !teProtter;
+  // Nota: els presets de puzzle NO compten com a foam aquí a propòsit, perquè
+  // no volem que aparegui cap línia de "Descompte pack" al resum quan es tria
+  // un puzzle. El descompte del foam del puzzle ja va dins del preu del preset.
+  var teFoam        = (muntatgeSel === 'encolat' || interiorSel2 === 'proeco') && !teProtter;
   var comboPct = 0, comboLbl = '';
   if(teMarc && teImpressio && teProtter){
     comboPct = COMBO_DESC.marc_imp_protter;
