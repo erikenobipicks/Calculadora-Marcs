@@ -92,6 +92,15 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .chip-r{background:var(--red-l);color:var(--red)}
 .desc{font-size:11px;color:var(--hint);margin-top:3px;font-style:italic}
 .piece-context-box{margin-top:.85rem;padding:.9rem 1rem;border:1px solid var(--border);border-radius:9px;background:#fcfbf8;display:grid;gap:.7rem}
+.extras-list{display:grid;gap:.5rem}
+.extra-toggle{display:flex;align-items:flex-start;gap:.75rem;padding:.75rem .9rem;border:1px solid var(--border);border-radius:9px;background:#fcfbf8;cursor:pointer;transition:background .15s,border-color .15s}
+.extra-toggle:hover{background:#f7f5ef;border-color:var(--border2)}
+.extra-toggle input{margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--green)}
+.extra-toggle-body{flex:1;display:grid;gap:2px;min-width:0}
+.extra-toggle-body strong{font-size:13px;font-weight:700;color:var(--text)}
+.extra-toggle-desc{font-size:12px;color:var(--muted);line-height:1.4}
+.extra-toggle-price{flex-shrink:0;font-size:11px;font-weight:800;color:var(--green);background:var(--green-l);padding:3px 8px;border-radius:999px;align-self:center;white-space:nowrap}
+.extra-toggle:has(input:checked){background:color-mix(in srgb, var(--green-l) 60%, white);border-color:color-mix(in srgb, var(--green) 30%, white)}
 .piece-context-note{font-size:12px;color:var(--muted);line-height:1.6;padding:.7rem .85rem;border-radius:8px;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 28%, white)}
 .foto-box{margin-top:.6rem;border:1px solid #e5dfd4;border-radius:8px;background:#fbfaf7;height:102px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in}
 .foto-box img{max-width:100%;max-height:100%;object-fit:contain}
@@ -101,6 +110,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .zoom-panel::before{content:'Zoom';position:absolute;left:10px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(28,27,24,.78);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 .nota{font-size:11px;color:var(--muted);background:var(--amber-l);border-left:3px solid var(--amber);padding:7px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.6}
 #bloc-passpartu{animation:fadeIn .2s ease}
+#bloc-passpartu[data-mode="doble-vidre"] .pp-color-section,
+#bloc-passpartu[data-mode="doble-vidre"] .pp-finestres-section{display:none}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
 /* GRUPS DE MATERIALS */
@@ -111,14 +122,21 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .opt-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;user-select:none;min-height:44px}
 .opt-btn:hover{border-color:var(--green);background:var(--green-l)}
 .opt-btn input{display:none}
-.opt-btn.selected{background:var(--green-l);border-color:var(--green);color:var(--green)}
+/* Indicador circular sempre present (no shift en seleccionar). Buit a sense
+   selecció, ple a seleccionat — així el contrast és inequívoc fins i tot a
+   pantalles de gamma baixa on la diferència de fons és subtil. */
+.opt-btn::before{content:'';width:9px;height:9px;border-radius:50%;border:1.5px solid var(--border2);background:#fff;flex-shrink:0;transition:all .15s}
+.opt-btn.opt-none::before{display:none}
+.opt-btn.selected{background:#D4E9DD;border-color:var(--green);color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
+.opt-btn.selected::before{background:var(--green);border-color:var(--green);box-shadow:0 0 0 2px rgba(26,107,69,.18)}
+.opt-btn.selected .opt-text{font-weight:700}
 .opt-btn.opt-none{border-style:dashed}
-.opt-btn.opt-none.selected{background:var(--bg);border-color:var(--border2);color:var(--muted)}
+.opt-btn.opt-none.selected{background:var(--bg);border-color:var(--border2);color:var(--muted);box-shadow:none}
 .opt-btn.opt-conservar{border-color:#B8DCC9;color:var(--green)}
-.opt-btn.opt-conservar.selected{background:var(--green-l);border-color:var(--green)}
+.opt-btn.opt-conservar.selected{background:#D4E9DD;border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
 .opt-text{font-size:12px;font-weight:600}
 .opt-preu{font-size:10px;font-weight:700;color:var(--green);background:var(--green-l);padding:2px 6px;border-radius:999px;margin-left:2px;white-space:nowrap}
-.opt-btn.selected .opt-preu{background:rgba(26,107,69,.15)}
+.opt-btn.selected .opt-preu{background:rgba(26,107,69,.2);color:#0F4A30}
 .opt-btn.disabled{opacity:.35;pointer-events:none}
 .opt-btn.locked{cursor:not-allowed;pointer-events:none}
 .opt-btn.locked .opt-text{opacity:.82}
@@ -144,8 +162,12 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 
 /* RESULT */
 .res-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-top:0;box-shadow:0 16px 32px rgba(28,27,24,.06)}
-.res-head{background:var(--nav);padding:.9rem 1.25rem;display:flex;align-items:center;justify-content:space-between}
+.res-head{background:var(--nav);padding:.9rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .res-head span{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.4)}
+.res-head-l{display:flex;align-items:center;gap:10px;min-width:0}
+.res-mini-marc{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:7px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);overflow:hidden}
+.res-mini-marc img{width:100%;height:100%;object-fit:contain}
+.res-mini-marc.is-empty{display:none}
 .rtog{display:flex;gap:3px}
 .rtog button{font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif;padding:3px 10px;border-radius:4px;border:none;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.45);transition:all .15s}
 .rtog button.on{background:var(--green);color:#fff}
@@ -173,10 +195,22 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .btn-o{background:transparent;border:1px solid #D4D0C8;color:var(--muted)}.btn-o:hover{background:var(--bg)}
 .btn-wa,.btn-wa2{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}
 .btn-wa:hover,.btn-wa2:hover{background:#ddeee5}
-.actions .btn-a,.actions .btn-o{grid-column:1 / -1}
+.actions .btn-a,.actions .btn-o,.actions .more-actions{grid-column:1 / -1}
 .btn:only-child{grid-column:1 / -1}
 @media(max-width:640px){.actions{grid-template-columns:1fr}}
 .btn:disabled{opacity:.35;cursor:not-allowed}
+.more-actions{position:relative}
+.more-actions>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 14px;border:1px solid #D4D0C8;border-radius:8px;background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;transition:background .15s}
+.more-actions>summary::-webkit-details-marker{display:none}
+.more-actions>summary::marker{content:""}
+.more-actions>summary::after{content:"▾";font-size:11px;opacity:.7;transition:transform .15s}
+.more-actions[open]>summary{background:var(--bg)}
+.more-actions[open]>summary::after{transform:rotate(180deg)}
+.more-actions-menu{position:absolute;right:0;bottom:calc(100% + 6px);z-index:220;display:grid;gap:2px;min-width:240px;padding:6px;border:1px solid var(--border);border-radius:10px;background:#fff;box-shadow:0 18px 40px rgba(0,0,0,.14)}
+.more-action{display:flex;align-items:center;width:100%;padding:9px 12px;border:none;background:transparent;border-radius:6px;font:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer;transition:background .12s}
+.more-action:hover:not(:disabled){background:var(--green-l)}
+.more-action:disabled{opacity:.4;cursor:not-allowed}
+.more-action-sep{height:1px;background:var(--border);margin:4px 0}
 
 /* ALERT */
 .alert{border-radius:7px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:1.25rem;display:none}
@@ -195,6 +229,31 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .modal h3{font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:.4rem;font-weight:400}
 .modal p{font-size:13px;color:var(--muted);margin-bottom:1.1rem;line-height:1.6}
 .steps-box{background:var(--amber-l);border-left:3px solid var(--amber);padding:9px 12px;border-radius:0 6px 6px 0;font-size:12px;color:var(--text);line-height:1.7;margin-bottom:1.1rem}
+.sticky-bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:240;display:inline-flex;align-items:center;gap:14px;padding:9px 10px 9px 16px;border-radius:999px;background:rgba(28,27,24,.96);color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.28);max-width:calc(100vw - 24px)}
+.sticky-bar-info{display:grid;gap:1px;line-height:1.15;min-width:0}
+.sticky-bar-label{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600}
+.sticky-bar-total{font-family:'DM Serif Display',serif;font-size:21px;font-weight:400;line-height:1;letter-spacing:.2px}
+.sticky-bar-meta{font-size:11px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30ch}
+.sticky-bar-cta{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:8px 14px;border:none;border-radius:999px;background:var(--green);color:#fff;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:filter .15s ease,opacity .15s ease}
+.sticky-bar-cta:hover{filter:brightness(1.08)}
+.sticky-bar-cta:disabled,.sticky-bar-cta.is-disabled{opacity:.45;pointer-events:none;filter:grayscale(.4)}
+.sticky-bar-actions{display:inline-flex;align-items:center;gap:6px}
+.sb-secondary{background:#3a3935;color:#fff}
+.sb-secondary:hover{background:#4a4843}
+.sb-wa{background:#dcefe1;color:#0e5430;border:1px solid rgba(184,220,201,.65)}
+.sb-wa:hover{filter:brightness(.96)}
+.sticky-bar-cta svg{display:block;flex-shrink:0}
+body.has-sticky-bar{padding-bottom:78px}
+@media (max-width:640px){
+  .sticky-bar{left:8px;right:8px;bottom:8px;transform:none;max-width:none;padding:7px 8px 7px 13px;gap:9px}
+  .sticky-bar-total{font-size:18px}
+  .sticky-bar-meta{font-size:10px;max-width:22ch}
+  .sticky-bar-cta{min-height:36px;padding:7px 12px;font-size:12px}
+  .sticky-bar-actions{gap:4px}
+  .sb-secondary,.sb-wa{padding:8px 10px}
+  .sb-secondary .sb-label,.sb-wa .sb-label{display:none}
+  body.has-sticky-bar{padding-bottom:66px}
+}
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
 </head>
@@ -217,6 +276,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
     <a href="https://reusrevela.cat/area-privada" target="_self">Inici</a>
     <a href="/historial">Pressupostos</a>
     <a href="/cataleg">Cat&agrave;leg</a>
+    <a href="https://reusrevela.cat/area-privada/lienzos" target="_blank" rel="noopener noreferrer">Llen&ccedil;os &#8599;</a>
     {% if not session.is_admin %}
     <a href="/ajustos">Ajustos</a>
     {% endif %}
@@ -224,6 +284,21 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
     <a href="/logout">Sortir</a>
   </div>
 </nav>
+
+{% if user_has_email is defined and not user_has_email %}
+<div id="email-prompt-banner" style="background:#FFF8EC;border-bottom:1px solid #F5DFA0;color:#7A5C00;padding:10px 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-size:13px">
+  <span>
+    ✉ Encara no tens un <strong>email de contacte</strong> configurat.
+    L'usem per a suport i comunicacions importants —
+    <a href="/ajustos" style="color:#7A5C00;text-decoration:underline;font-weight:600">configura'l a Ajustos</a>.
+  </span>
+  <button type="button" onclick="document.getElementById('email-prompt-banner').remove()"
+          style="background:transparent;border:1px solid #E0CC9E;color:#7A5C00;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600">
+    Ocultar
+  </button>
+</div>
+{% endif %}
+
 {% if session.is_admin %}
 <style>
 .nav-pendents{position:relative}
@@ -303,6 +378,15 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       {% endif %}
       <div class="card client-card">
         <div class="card-t">Dades del client</div>
+        {% if session.is_admin %}
+        <div class="f" style="margin-bottom:.6rem">
+          <label>Client habitual (opcional)</label>
+          <select id="client_extern_id" onchange="onClientExternChange()" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:#fff">
+            <option value="">— Client nou (no habitual) —</option>
+          </select>
+          <div style="font-size:11px;color:var(--hint);margin-top:4px">Si selecciones un client habitual, l'albarà anirà a preu taller (PVD) i amb l'ID de FacturaDirecta ja cached. <a href="/admin/clients-externs" target="_blank" rel="noopener" style="color:var(--green)">Gestionar →</a></div>
+        </div>
+        {% endif %}
         <div class="client-grid">
           <div class="f client-name"><label>Nom del client</label><input type="text" id="client_nom"></div>
           <div class="f client-phone"><label>Telèfon</label><input type="text" id="client_tel"></div>
@@ -336,15 +420,33 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
           <div class="desc" id="moldura-filter-meta" style="margin-top:0">Mostrant totes les motllures disponibles.</div>
           <button type="button" class="btn btn-o" style="padding:7px 12px;font-size:12px" onclick="resetMolduraFilters()">Netejar filtres</button>
         </div>
+        <!-- Marc principal: SEMPRE primer i destacat. El premarc opcional va a sota. -->
+        <div class="f" style="padding:.6rem .85rem;background:var(--green-l);border:1px solid color-mix(in srgb,var(--green) 25%,white);border-radius:9px;margin-bottom:.6rem">
+          <label style="font-size:14px;font-weight:800;color:var(--text);letter-spacing:.1px;display:flex;align-items:center;gap:6px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:11px;font-weight:800">1</span>
+            Marc principal
+          </label>
+          <div class="ss" id="ss-marc">
+            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off"
+                   oninput="onMarcInput();filterSS('marc')" onfocus="openSS('marc')" onblur="closeSS('marc')">
+            <div class="ss-list" id="list-marc"></div>
+          </div>
+          <div class="chip-row" id="chips-marc"></div>
+          <div class="desc" id="desc-marc"></div>
+          <div id="aviso-descatalogada-marc" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
+            ⚠ Motllura amb stock limitat — no es reposarà
+          </div>
+        </div>
+        <!-- Premarc: opcional, va A DINS del marc principal. Sempre per sota. -->
         <div class="f" style="margin-bottom:.5rem">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
             <input type="checkbox" id="chk-premarc" onchange="togglePremarc()" style="width:15px;height:15px;cursor:pointer">
-            <span style="font-size:12px;font-weight:600;color:var(--muted)">Afegir premarc <span style="font-weight:400">(segon marc interior, poc habitual)</span></span>
+            <span style="font-size:12px;font-weight:600;color:var(--muted)">2. Afegir premarc <span style="font-weight:400">(segon marc interior opcional, poc habitual)</span></span>
           </label>
         </div>
         <div id="bloc-premarc" style="display:none;margin-bottom:.85rem;padding:.85rem;background:var(--amber-l);border:1px solid color-mix(in srgb,var(--amber) 30%,white);border-radius:9px">
           <div class="f" style="margin-bottom:0">
-            <label>Referència del premarc</label>
+            <label>Referència del premarc <span style="font-size:11px;font-weight:400;color:var(--muted)">(secundari)</span></label>
             <div class="ss" id="ss-pre">
               <input type="text" id="pre_marc" placeholder="Escriu per cercar..." autocomplete="off"
                      onfocus="openSS('pre')" oninput="filterSS('pre')" onblur="closeSS('pre')">
@@ -357,25 +459,12 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
             </div>
           </div>
         </div>
-        <div class="f">
-          <label style="font-weight:700;color:var(--text)">Marc principal <span style="font-size:11px;font-weight:400;color:var(--hint)">(marc exterior/principal)</span></label>
-          <div class="ss" id="ss-marc">
-            <input type="text" id="marc_principal" placeholder="Escriu per cercar, ex: M2185..." autocomplete="off"
-                   oninput="onMarcInput();filterSS('marc')" onfocus="openSS('marc')" onblur="closeSS('marc')">
-            <div class="ss-list" id="list-marc"></div>
-          </div>
-          <div class="chip-row" id="chips-marc"></div>
-          <div class="desc" id="desc-marc"></div>
-          <div id="aviso-descatalogada-marc" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
-            ⚠ Motllura amb stock limitat — no es reposarà
-          </div>
-        </div>
         <div style="display:grid;gap:.75rem;margin-top:.85rem" id="fotos-grid">
           <div id="foto-col-pre" style="display:none">
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Premarc</div>
             <div class="foto-box js-moldura-zoom" id="foto-box-pre"><div class="no-foto">—</div></div>
           </div>
-          <div>
+          <div id="foto-col-main" style="display:none">
             <div style="font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Marc principal</div>
             <div class="foto-box js-moldura-zoom" id="foto-box"><div class="no-foto">Selecciona un marc<br>per veure'n la imatge</div></div>
           </div>
@@ -396,6 +485,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
             <option value="pintura_amb_bastidor">Pintura amb bastidor</option>
             <option value="puzzle">Puzzle</option>
             <option value="punt_de_creu">Punt de creu</option>
+            <option value="samarreta">Samarreta</option>
           </select>
         </div>
         <div class="f2">
@@ -421,6 +511,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         </div>
         <div id="mida-total-simple" style="margin-top:.5rem;font-size:12px;color:var(--hint)"></div>
       </div>
+
     </div>
 
     <!-- COL DRETA -->
@@ -526,8 +617,9 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <span class="opt-text">Cap</span>
             </label>
           </div>
-          <!-- Bloc passpartú: apareix quan es selecciona passpartú -->
+          <!-- Bloc passpartú/doble vidre: apareix quan es selecciona passpartú O doble vidre -->
           <div id="bloc-passpartu" style="display:none;margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)">
+            <div class="pp-color-section">
             <div class="f2" style="margin-bottom:.5rem;align-items:center">
               <div class="f">
                 <label>Color / referència</label>
@@ -540,16 +632,18 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
                 <span id="passpartu-foto-empty" style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:8px;background:#F5F4F1;color:#9E9B94;font-size:11px;border:1px dashed var(--border)">sense foto</span>
               </div>
             </div>
+            </div>
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
-                <label>Marge passpartú (cm per banda)</label>
-                <input type="number" id="cm-passpartu" value="4" min="0" step="0.5" oninput="recalcMides()">
+                <label id="cm-passpartu-label">Marge per banda (cm)</label>
+                <input type="number" id="cm-passpartu" value="5" min="0" step="0.5" oninput="onCmPasspartuInput()">
               </div>
               <div class="f">
                 <label>Mida total del marc</label>
                 <input type="text" id="mida-total" readonly style="font-weight:600;color:var(--green)">
               </div>
             </div>
+            <div class="pp-finestres-section">
             <div class="f2" style="margin-bottom:.5rem">
               <div class="f">
                 <label>Finestres extra <span style="font-size:11px;color:var(--hint)">(+2,00€/finestra)</span></label>
@@ -558,6 +652,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <div class="f" style="display:flex;align-items:flex-end">
                 <span style="font-size:12px;color:var(--muted);padding-bottom:10px">Per defecte: 1 finestra inclosa</span>
               </div>
+            </div>
             </div>
             <div class="nota" style="margin-top:0">Marc i vidre es calculen amb la mida gran (peça + passpartú). La impressió usa la mida original de la peça.</div>
           </div>
@@ -571,6 +666,17 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
               <input type="checkbox" id="chk-impressio" style="display:none">
               <span class="opt-text">Impressió</span>
               <span class="opt-preu" id="preu-impressio">—</span>
+            </div>
+          </div>
+          <div id="impressio-paper-row" style="display:none;margin-top:.55rem">
+            <div style="font-size:11px;font-weight:600;color:var(--hint);margin-bottom:.3rem;letter-spacing:.3px">Paper</div>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+              <label style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;background:#fff" id="lbl-paper-lustre">
+                <input type="radio" name="impressio-paper" value="lustre" checked onchange="onPaperChange()" style="display:none"> Paper fotogràfic Lustre
+              </label>
+              <label style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;background:#fff" id="lbl-paper-baryta">
+                <input type="radio" name="impressio-paper" value="baryta" onchange="onPaperChange()" style="display:none"> Hahnemühle Photo Rag Baryta
+              </label>
             </div>
           </div>
         </div>
@@ -594,6 +700,27 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <input type="hidden" id="ref-impressio-val" value="">
       </div>
 
+      {% set manual_extras = (extras or []) | selectattr('actiu') | selectattr('mode', 'equalto', 'manual') | list %}
+      <div class="card" id="extras-card"{% if not manual_extras %} style="display:none"{% endif %}>
+        <div class="card-t">Extres</div>
+        <div class="extras-list">
+          {% for ex in manual_extras %}
+          <label class="extra-toggle" data-extra-key="{{ ex.key }}"
+                 data-extra-piece-types="{{ ex.piece_types|join(',') }}">
+            <input type="checkbox" class="extra-toggle-input" data-extra-key="{{ ex.key }}" onchange="calcular()">
+            <span class="extra-toggle-body">
+              <strong>{{ ex.name }}</strong>
+              {% if ex.description %}<span class="extra-toggle-desc">{{ ex.description }}</span>{% endif %}
+            </span>
+            <span class="extra-toggle-price"
+                  data-extra-key="{{ ex.key }}"
+                  data-extra-price-pvd="{{ '%.2f'|format(ex.price_pvd) }}"
+                  data-extra-margin="{{ ex.margin_pct if ex.margin_pct is not none else '' }}">+{{ '%.2f'|format(ex.price_pvd) }} €</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
       <div class="summary-sidebar">
       <div class="card dcard">
         <div class="card-t">Preu i descompte</div>
@@ -606,28 +733,26 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         <div id="cost-panel" style="display:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:.85rem;margin-top:.7rem">
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost dels materials</span><strong id="ci-mat" style="color:#fff">—</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost de les motllures</span><strong id="ci-mol" style="color:#fff">—</strong></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total</span><strong id="ci-tot" style="color:#fff">—</strong></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0 3px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.1);margin-top:4px"><span>Cost total (PVD)</span><strong id="ci-tot" style="color:#fff">—</strong></div>
+          {% if session.is_admin %}
+          <div style="border-top:1px solid rgba(255,255,255,.15);margin-top:6px;padding-top:6px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:5px">Cost intern real</div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:rgba(255,255,255,.5)"><span>Cost real (preu_cost)</span><strong id="ac-cost" style="color:#fff">—</strong></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:#6BBA8A"><span>Marge s/ PVD</span><strong id="ac-marge-pvd">—</strong></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:#dba24f"><span>Marge s/ PVP</span><strong id="ac-marge-pvp">—</strong></div>
+          </div>
+          {% endif %}
         </div>
         <input type="hidden" id="marc-w" value="0">
         <input type="hidden" id="marc-h" value="0">
       </div>
 
-      <div class="card">
-        <div class="card-t">Dades finals</div>
-        <div class="f"><label>Observacions i termini</label><input type="text" id="observacions" placeholder="Termini d'entrega, indicacions especials..."></div>
-        <div class="f" style="margin-top:.75rem">
-          <label>Idioma del pressupost</label>
-          <div style="display:flex;gap:.4rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px;width:max-content">
-            <button type="button" id="btn-lang-ca" onclick="setLang('ca')" style="padding:5px 11px;border:none;border-radius:5px;background:var(--green);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Català</button>
-            <button type="button" id="btn-lang-es" onclick="setLang('es')" style="padding:5px 11px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer">Castellano</button>
-            <button type="button" id="btn-lang-en" onclick="setLang('en')" style="padding:5px 11px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer">English</button>
-          </div>
-        </div>
-      </div>
-
       <div class="res-card">
         <div class="res-head">
-          <span>Resum econòmic</span>
+          <div class="res-head-l">
+            <div class="res-mini-marc is-empty" id="res-mini-marc" aria-hidden="true"></div>
+            <span>Resum econòmic</span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px">
             <span id="res-mode-lbl" style="font-size:10px;color:rgba(255,255,255,.3)"></span>
             <button id="rb-cost" onclick="toggleCost()" title="Veure preu de cost"
@@ -649,14 +774,33 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-t">Dades finals</div>
+        <div class="f"><label>Observacions i termini</label><input type="text" id="observacions" placeholder="Termini d'entrega, indicacions especials..."></div>
+        <div class="f" style="margin-top:.75rem">
+          <label>Idioma del pressupost</label>
+          <div style="display:flex;gap:.4rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px;width:max-content">
+            <button type="button" id="btn-lang-ca" onclick="setLang('ca')" style="padding:5px 11px;border:none;border-radius:5px;background:var(--green);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Català</button>
+            <button type="button" id="btn-lang-es" onclick="setLang('es')" style="padding:5px 11px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer">Castellano</button>
+            <button type="button" id="btn-lang-en" onclick="setLang('en')" style="padding:5px 11px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer">English</button>
+          </div>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="btn btn-g" onclick="guardar()">Desar opció</button>
-        <button class="btn btn-g" id="btn-desar-totes" onclick="guardarTotes()" style="display:none" title="Desa totes les opcions en un sol clic">Desar totes</button>
         <button class="btn btn-d" id="btn-pdf" onclick="generarPDF()" disabled>PDF</button>
-        <button class="btn btn-wa" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
-        <button class="btn btn-wa2" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp taller</button>
-        <button class="btn btn-a" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
-        <button class="btn btn-o" onclick="novaComanda()">Nou pressupost</button>
+        <button class="btn btn-g" id="btn-desar-totes" onclick="guardarTotes()" style="display:none" title="Desa totes les opcions en un sol clic">Desar totes</button>
+        <details class="more-actions" id="more-actions">
+          <summary>Més accions</summary>
+          <div class="more-actions-menu" role="menu">
+            <button type="button" class="more-action" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
+            <button type="button" class="more-action" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp Reus Revela</button>
+            <button type="button" class="more-action" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
+            <div class="more-action-sep" role="separator"></div>
+            <button type="button" class="more-action" onclick="novaComanda()">Nou pressupost</button>
+          </div>
+        </details>
       </div>
       </div>
     </div>
@@ -665,11 +809,35 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 
 
 
+<div class="sticky-bar" id="sticky-bar" aria-live="polite">
+  <div class="sticky-bar-info">
+    <span class="sticky-bar-label" id="sticky-bar-label">Total amb IVA</span>
+    <strong class="sticky-bar-total" id="sticky-bar-total">0,00 €</strong>
+    <span class="sticky-bar-meta" id="sticky-bar-meta">Sense marc</span>
+  </div>
+  <div class="sticky-bar-actions">
+    <button type="button" class="sticky-bar-cta" id="sticky-bar-cta" onclick="guardar()" title="Desar opció"><span class="sb-label">Desar</span></button>
+    <button type="button" class="sticky-bar-cta sb-secondary" id="sb-pdf" onclick="generarPDF()" disabled title="Generar PDF">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="sb-label">PDF</span>
+    </button>
+    <button type="button" class="sticky-bar-cta sb-wa" id="sb-wa-client" onclick="whatsappClient()" disabled title="WhatsApp al client">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <span class="sb-label">Client</span>
+    </button>
+    <button type="button" class="sticky-bar-cta sb-wa" id="sb-wa-rr" onclick="whatsappObjectiu()" disabled title="WhatsApp Reus Revela">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <span class="sb-label">Reus Revela</span>
+    </button>
+  </div>
+</div>
+
 <div class="zoom-panel" id="zoom-panel"></div>
 <script>
 var MARGE_PRO = {{ marge_pro | tojson }};
 var MARGE_IMPRESSIO_PRO = {{ marge_impressio_pro | tojson }};
 var IS_ADMIN = {{ is_admin | tojson }};
+var EXTRAS_DATA = {{ extras | tojson }};
 var adminModeExtra = 60.0;  // % extra aplicat al PVP final en mode client (default). Només admin.
 
 function toggleAdminMode(){
@@ -1138,6 +1306,8 @@ function setPrintState(checked, mode, title){
   printBtn.title = title || '';
   printChk.checked = !!checked;
   printBtn.classList.toggle('selected', !!checked);
+  var paperRow = document.getElementById('impressio-paper-row');
+  if(paperRow) paperRow.style.display = checked ? 'block' : 'none';
   if(printChk.checked && !CLOSEST.impressio){
     _lastFetchKey='';
     fetchClosest();
@@ -1277,6 +1447,51 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
   document.getElementById('marge_val').value = marge;
   calcular();
 });
+
+// Clients externs (només admin veurà el selector). Si el camp no existeix
+// al DOM (usuari no admin), aquest fetch no fa res visible. La idea: omplim
+// el dropdown amb la llista d'actius de la BD i, en seleccionar-ne un,
+// auto-omplim el camp Nom del client i el blokegem com a read-only.
+(function loadClientsExterns(){
+  var sel = document.getElementById('client_extern_id');
+  if(!sel) return;
+  fetch('/api/clients-externs').then(function(r){return r.json();}).then(function(d){
+    if(!d || !d.ok) return;
+    (d.clients||[]).forEach(function(c){
+      var opt = document.createElement('option');
+      opt.value = String(c.id);
+      opt.dataset.nom = c.nom || '';
+      opt.dataset.nif = c.nif || '';
+      opt.dataset.tipus = c.tipus || 'pvp';
+      opt.dataset.telefon = c.telefon || '';
+      var label = c.nom;
+      if(c.empresa && c.empresa !== c.nom) label += ' — ' + c.empresa;
+      if(c.nif) label += ' · ' + c.nif;
+      var tag = c.tipus === 'taller' ? ' [Taller]' : ' [PVP]';
+      opt.textContent = label + tag;
+      sel.appendChild(opt);
+    });
+  }).catch(function(){});
+})();
+
+function onClientExternChange(){
+  var sel = document.getElementById('client_extern_id');
+  var nomInp = document.getElementById('client_nom');
+  var telInp = document.getElementById('client_tel');
+  if(!sel || !nomInp) return;
+  var opt = sel.selectedOptions && sel.selectedOptions[0];
+  if(opt && opt.value){
+    nomInp.value = opt.dataset.nom || nomInp.value;
+    nomInp.readOnly = true;
+    if(telInp && opt.dataset.telefon) telInp.value = opt.dataset.telefon;
+    var tipus = opt.dataset.tipus || 'pvp';
+    var needCost = tipus === 'taller';
+    if(needCost && rmode !== 'cost') toggleCost();
+    else if(!needCost && rmode === 'cost') toggleCost();
+  } else {
+    nomInp.readOnly = false;
+  }
+}
 
 // Load moldura options once, then derive the filtered refs for both selectors
 fetch('/api/moldura-options').then(function(r){return r.json();}).then(function(items){
@@ -1580,18 +1795,30 @@ function lookupRef(t,ref){
     });
 }
 
+// L'usuari ha tocat manualment cm-passpartu? Si no, el default s'auto-ajusta
+// (5 cm per passpartú, 4 cm per doble vidre) quan canvia la selecció.
+var _cmPasspartuTouched = false;
+function onCmPasspartuInput(){
+  _cmPasspartuTouched = true;
+  recalcMides();
+}
+
 // ── Fetch closest ─────────────────────────────────────────────────────────
 function recalcMides(){
   var w = parseFloat(document.getElementById('amplada').value)||0;
   var h = parseFloat(document.getElementById('alcada').value)||0;
   var interior = document.querySelector('input[name="interior"]:checked');
-  var hasP = interior && (interior.value==='passpartu'||interior.value==='doble_pas');
-  var cms = hasP ? (parseFloat(document.getElementById('cm-passpartu').value)||0) : 0;
+  var proteccio = document.querySelector('input[name="proteccio"]:checked');
+  var hasPass = !!(interior && (interior.value==='passpartu'||interior.value==='doble_pas'));
+  var hasDV   = !!(proteccio && proteccio.value==='doble_vidre');
+  // Doble vidre també afegeix marge per banda (com el passpartú).
+  var hasExtra = hasPass || hasDV;
+  var cms = hasExtra ? (parseFloat(document.getElementById('cm-passpartu').value)||0) : 0;
   var mW = w>0 ? w+cms*2 : 0;
   var mH = h>0 ? h+cms*2 : 0;
   document.getElementById('marc-w').value=mW;
   document.getElementById('marc-h').value=mH;
-  if(hasP&&cms>0){
+  if(hasExtra&&cms>0){
     document.getElementById('mida-total').value=mW+' x '+mH+' cm';
     document.getElementById('mida-total-simple').textContent='Mida marc: '+mW+'x'+mH+' cm (peça '+w+'x'+h+')';
   } else {
@@ -1619,10 +1846,12 @@ function fetchClosest(){
     }
   }
   if(!fW) fW=w; if(!fH) fH=h;
-  var key = w+'x'+h+'_'+fW+'x'+fH;
+  var paperSel = document.querySelector('input[name="impressio-paper"]:checked');
+  var paper = paperSel ? paperSel.value : 'lustre';
+  var key = w+'x'+h+'_'+fW+'x'+fH+'_'+paper;
   if(key===_lastFetchKey){ calcular(); return; }
   _lastFetchKey=key;
-  fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH)
+  fetch('/api/closest?w='+w+'&h='+h+'&foto_w='+fW+'&foto_h='+fH+'&paper='+encodeURIComponent(paper))
     .then(function(r){return r.json();}).then(function(d){
       CLOSEST=d;
       // Reset selector de subtipus a SemiBrillo quan canvia la mida
@@ -1708,15 +1937,17 @@ function costImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
   return CLOSEST.impressio?CLOSEST.impressio.preu:(PREUS.impressio||0);
 }
-// PVP per unitat de la impressió segons el mode de visualització:
-//  - Admin en vista taller (cost): PVD sense marge (impressio.preu)
-//  - Vista PVP (client): impressio.pvp del servidor (ja inclou el marge per tram d'àrea)
-//  - Fallback per a calc antiga sense pvp: marge legacy aplicat sobre PVD
+// PVP per unitat de la impressió:
+//  - Si el backend ja retorna 'pvp' (preu amb marge per tram d'àrea aplicat),
+//    el fem servir tal qual — és el preu al client final per a tots els
+//    usuaris, admin inclòs.
+//  - Fallback per a calc antiga sense pvp: aplica el marge legacy sobre PVD.
+// Si l'usuari vol veure el cost de taller, ha de canviar a rmode='cost'
+// amb el botó "€" del resum (no depèn d'IS_ADMIN).
 function pvpImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
   var c = CLOSEST.impressio;
   if(!c) return PREUS.impressio || 0;
-  if(IS_ADMIN && adminModeExtra === 0) return c.preu || 0;
   if(c.pvp != null) return c.pvp;
   var m = (typeof marge_impressio !== 'undefined' && marge_impressio) ? marge_impressio : marge;
   return (c.preu || 0) * (1 + (m||0)/100);
@@ -1917,6 +2148,8 @@ function applyIncompatibilities(){
       note = 'El puzzle ja va encolat sobre base: només cal laminar-lo (sense foam).';
     } else {
       // Sense base: s'afegeix foam (50%) via els presets; laminat sol no s'ofereix.
+      // (Substitueix l'auto-selecció de Protter que feia main: ara el foam es
+      // cobra al 50% i s'ofereix foam+cristal o foam+laminat.)
       rules.laminat = true;
       note = 'El puzzle arriba sense base: s’hi afegeix foam (50%) i s’acaba amb cristal o laminat.';
     }
@@ -1962,6 +2195,25 @@ function applyIncompatibilities(){
     forcedSelections.muntatge = 'encolat';
     forcedSelections.proteccio = 'vidre';
     note = 'El punt de creu requereix encolat i vidre. No admet laminat, Protter, ProEco, doble vidre ni impressió fotogràfica.';
+  }
+
+  if(pieceType === 'samarreta'){
+    // Només es permeten 2 combos: doble vidre, o vidre + passpartú.
+    rules.encolat = true;
+    rules.protter = true;
+    rules.laminat = true;
+    rules.proeco = true;
+    rules['muntatge-cap'] = false;
+    rules.mirall = true;
+    rules['conservar-vidre'] = true;
+    rules['proteccio-cap'] = true;
+    rules.doble_pas = true;
+    rules['interior-cap'] = false;
+    forcedSelections.muntatge = '';
+    if(proteccio !== 'vidre' && proteccio !== 'doble_vidre'){
+      forcedSelections.proteccio = 'doble_vidre';
+    }
+    note = 'Per a samarreta tria doble vidre, o bé vidre amb passpartú. S\'aplica un càrrec de feina addicional (configurable a /admin/extras).';
   }
 
   Object.keys(rules).forEach(function(k){
@@ -2019,7 +2271,38 @@ function applyIncompatibilities(){
     }
   }
 
-  document.getElementById('bloc-passpartu').style.display=hasPasspartu?'block':'none';
+  // Samarreta: si l'usuari tria 'vidre' sense passpartú, forcem 'passpartú'
+  // (no es permet samarreta amb marc + 1 vidre sol).
+  if(pieceType === 'samarreta' && proteccio === 'vidre' && interior !== 'passpartu'){
+    setGroupValue('interior','passpartu');
+    // Re-llegim la selecció: el setGroupValue acaba de canviar l'interior i el
+    // bloc-passpartu ha d'aparèixer a la mateixa execució (sense esperar
+    // un segon esdeveniment).
+    interior = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+    hasPasspartu = interior==='passpartu'||interior==='doble_pas';
+  }
+
+  // Mostrem el bloc d'extra margin si hi ha passpartú O doble vidre. Els
+  // selectors de color/foto i finestres queden amagats automàticament en mode
+  // doble vidre via CSS (data-mode="doble-vidre").
+  var hasDV = proteccio === 'doble_vidre';
+  var bloc = document.getElementById('bloc-passpartu');
+  if(hasPasspartu){
+    bloc.style.display = 'block';
+    bloc.dataset.mode = 'passpartu';
+    // Default suggerit per passpartú: 5 cm. Només sobreescrivim si l'usuari
+    // no ha tocat el valor manualment.
+    if(!_cmPasspartuTouched) document.getElementById('cm-passpartu').value = '5';
+    document.getElementById('cm-passpartu-label').textContent = 'Marge passpartú (cm per banda)';
+  } else if(hasDV){
+    bloc.style.display = 'block';
+    bloc.dataset.mode = 'doble-vidre';
+    if(!_cmPasspartuTouched) document.getElementById('cm-passpartu').value = '4';
+    document.getElementById('cm-passpartu-label').textContent = 'Marge doble vidre (cm per banda)';
+  } else {
+    bloc.style.display = 'none';
+    delete bloc.dataset.mode;
+  }
   document.getElementById('vidre-obligatori').style.display=hasPasspartu?'inline':'none';
   setPieceContextNote(note);
 }
@@ -2062,7 +2345,9 @@ function onGrupChange(grup){
   }
 
   applyIncompatibilities();
-  if(grup==='interior') recalcMides();
+  // El cm-passpartu pot afectar les mides del marc tant per passpartú com per
+  // doble vidre — recalculem sempre que es toca un d'aquests dos grups.
+  if(grup==='interior' || grup==='proteccio') recalcMides();
   enforceMaterialLimits(true);
   if(grup==='muntatge' && isPuzzlePreset(val)) applyPuzzlePreset(val);
   else updateGrupPreu(grup,val);
@@ -2096,6 +2381,17 @@ function canviarTipusLaminat(tipus){
 function toggleImpressio(){
   var chk = document.getElementById('chk-impressio');
   var printBtn = document.getElementById('opt-impressio');
+
+  // Si està locked perquè l'origen és "client", canviar a "laboratori" automàticament
+  if(printBtn.dataset.locked === '1' && !chk.checked){
+    var photoOrigin = document.getElementById('photo-origin');
+    if(photoOrigin && photoOrigin.value === 'client'){
+      photoOrigin.value = 'laboratori';
+      onPieceContextChange();
+      return;
+    }
+  }
+
   if(printBtn.classList.contains('disabled') || printBtn.dataset.locked === '1'){
     showAlert('La impressió només està disponible quan la peça a emmarcar és una fotografia.', 'err');
     return;
@@ -2113,12 +2409,30 @@ showAlert(lm.print, 'err');
     return;
   }
   document.getElementById('opt-impressio').classList.toggle('selected', chk.checked);
+  var paperRow = document.getElementById('impressio-paper-row');
+  if(paperRow) paperRow.style.display = chk.checked ? 'block' : 'none';
   if(chk.checked && !CLOSEST.impressio){
     _lastFetchKey=''; fetchClosest();
   } else {
     updateImpressioPreu(); calcular();
   }
 }
+
+function onPaperChange(){
+  // Actualitzar estil visual dels botons de paper
+  var labels = document.querySelectorAll('#impressio-paper-row label');
+  labels.forEach(function(l){
+    var radio = l.querySelector('input[type="radio"]');
+    if(radio && radio.checked){
+      l.style.background='var(--green)'; l.style.color='#fff'; l.style.borderColor='var(--green)';
+    } else {
+      l.style.background='#fff'; l.style.color='var(--text)'; l.style.borderColor='var(--border)';
+    }
+  });
+  _lastFetchKey=''; fetchClosest();
+}
+// Aplicar estil inicial al paper seleccionat
+document.addEventListener('DOMContentLoaded', function(){ onPaperChange(); });
 function onImpressioChange(){ toggleImpressio(); }
 
 var _marcLookupTimer = null;
@@ -2152,6 +2466,97 @@ function onMarcInput(){
   }, 600);
 }
 
+// ── Save/restore d'estat dels extras manuals ─────────────────────────────
+function collectExtrasState(){
+  var state = {};
+  document.querySelectorAll('.extra-toggle-input').forEach(function(cb){
+    var k = cb.dataset.extraKey;
+    if (k) state[k] = !!cb.checked;
+  });
+  return state;
+}
+function restoreExtrasState(e){
+  var state = (e && e.extras_state) || {};
+  // Backwards compat: anteriorment es desava com a 'extra_desmuntar_marc:bool'.
+  if (e && Object.prototype.hasOwnProperty.call(e, 'extra_desmuntar_marc') &&
+      state.desmuntar_marc === undefined){
+    state.desmuntar_marc = !!e.extra_desmuntar_marc;
+  }
+  document.querySelectorAll('.extra-toggle-input').forEach(function(cb){
+    var k = cb.dataset.extraKey;
+    cb.checked = !!(k && state[k]);
+  });
+}
+
+// ── Extras (configurables des de /admin/extras) ──────────────────────────
+// Retorna l'aportació dels extras al cost i al PVP. La part `costGlobalMargin`
+// és el sumatori dels PVDs dels extras que han de fer servir el marge global
+// del pressupost (s'afegeixen abans del *(1+marge/100) a calcular()).
+// La part `pvpFixed` és la suma ja amb marge propi aplicat pels extras que
+// porten un marge específic — ja no s'ha de multiplicar pel marge global.
+function extraAppliesToPiece(ex, pieceType){
+  var pts = ex.piece_types || [];
+  if (ex.mode === 'auto'){
+    // Auto s'aplica només si el tipus de peça hi és (buit = mai s'aplica auto).
+    return pts.length > 0 && pts.indexOf(pieceType) !== -1;
+  }
+  // Manual: si hi ha llista de tipus de peça, l'extra només està disponible
+  // per a aquells; buit = disponible per a tots.
+  return pts.length === 0 || pts.indexOf(pieceType) !== -1;
+}
+
+function computeExtrasCosts(){
+  var pieceType = getPieceTypeValue();
+  var cost = 0, costGlobalMargin = 0, pvpFixed = 0;
+  (EXTRAS_DATA||[]).forEach(function(ex){
+    if (!ex || !ex.actiu) return;
+    if (!extraAppliesToPiece(ex, pieceType)) return;
+    var applies;
+    if (ex.mode === 'auto'){
+      applies = true;
+    } else {
+      var cb = document.querySelector('.extra-toggle-input[data-extra-key="' + ex.key + '"]');
+      applies = !!(cb && cb.checked);
+    }
+    if (!applies) return;
+    var price = Number(ex.price_pvd)||0;
+    cost += price;
+    if (ex.margin_pct === null || ex.margin_pct === undefined || ex.margin_pct === ''){
+      costGlobalMargin += price;
+    } else {
+      pvpFixed += price * (1 + Number(ex.margin_pct)/100);
+    }
+  });
+  return {cost: cost, costGlobalMargin: costGlobalMargin, pvpFixed: pvpFixed};
+}
+
+// Refresca les etiquetes de preu dels toggles manuals (canvia entre PVP i PVD
+// segons el mode actual rmode). També amaga les files manuals que no apliquen
+// al tipus de peça seleccionat.
+function updateExtrasLabels(){
+  var pieceType = getPieceTypeValue();
+  var anyVisible = false;
+  document.querySelectorAll('.extra-toggle[data-extra-key]').forEach(function(row){
+    var key = row.dataset.extraKey;
+    var ex = (EXTRAS_DATA||[]).find(function(e){return e && e.key===key;});
+    if (!ex){ row.style.display='none'; return; }
+    var fits = extraAppliesToPiece(ex, pieceType);
+    row.style.display = fits ? '' : 'none';
+    if (fits) anyVisible = true;
+    var priceEl = row.querySelector('.extra-toggle-price');
+    if (priceEl){
+      var pvd = Number(ex.price_pvd)||0;
+      var marginEx = (ex.margin_pct===null||ex.margin_pct===undefined||ex.margin_pct==='')
+        ? (typeof marge === 'number' ? marge : 60) : Number(ex.margin_pct);
+      var pvp = pvd * (1 + marginEx/100);
+      var fmt = function(v){ return (Math.round(v*100)/100).toFixed(2).replace('.', ',') + ' €'; };
+      priceEl.textContent = (rmode==='cost') ? ('+' + fmt(pvd) + ' PVD') : ('+' + fmt(pvp));
+    }
+  });
+  var card = document.getElementById('extras-card');
+  if (card) card.style.display = anyVisible ? '' : 'none';
+}
+
 // ── Càlcul ────────────────────────────────────────────────────────────────
 function calcular(){
   refreshDescatalogadaWarnings();
@@ -2177,6 +2582,11 @@ function calcular(){
     finestresExtra = nFin * 2.0;  // Fixed PVP price per extra window
   }
   var cImpressio = costImpressio();
+  // Extres configurables des de /admin/extras (auto per tipus de peça i manual).
+  // Retorna {cost: PVD total, costGlobalMargin: part PVD que usa el marge global,
+  //          pvpFixed: part ja amb marge propi aplicat}.
+  var extrasCalc = computeExtrasCosts();
+  var cExtres = extrasCalc.cost;
 
   var cMol=0;
   if((PREUS.marc>0||GRUIX.marc>0)&&(mW>0||mH>0)){
@@ -2192,7 +2602,7 @@ function calcular(){
       cMol += longFinalPre * ((PREUS.pre||0)/100);
     }
   }
-  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra;
+  var cTot=cMuntatge+cProteccio+cInterior+cRevers+cImpressio+cMol+finestresExtra+cExtres;
 
   // PVP net (amb marge, sense IVA, sense descompte)
   // Marcs: marge per trams segons àrea exterior del marc (cm²).
@@ -2200,17 +2610,18 @@ function calcular(){
   var areaMarc = (mW>0 && mH>0) ? (mW*mH) : 0;
   var margeMarc = areaMarc>0 ? getMrTramPct(areaMarc) : marge;
   var pvpMarc = cMol*(1+margeMarc/100);
-  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra)*(1+marge/100);
+  // Extras amb marge propi van per separat (pvpFixed ja inclou el seu marge);
+  // els que usen marge global s'inclouen al sumatori que multiplica per (1+marge/100).
+  var pvpExt  = (cMuntatge+cProteccio+cInterior+cRevers+finestresExtra+extrasCalc.costGlobalMargin)*(1+marge/100) + extrasCalc.pvpFixed;
   // pvpImp: en vista taller (admin cost) usem PVD; en vista PVP usem el pvp del
   // servidor (impressio.pvp) que ja inclou el marge per tram d'àrea, així el
   // marge legacy ja no s'aplica aquí.
   var pvpImp  = pvpImpressio();
-  // Mode admin: si l'admin escull "client", aplica un +60% extra sobre el PVP
-  // per simular el preu al client final. Usuaris no-admin mai toquen aquest factor.
-  // NOTA: factorModeAdmin NO s'aplica a impressions — el seu pvp ja inclou el
-  // marge per tram d'àrea (que per a admin ja és el preu al client final).
-  var factorModeAdmin = IS_ADMIN ? (1 + adminModeExtra / 100) : 1.0;
-  var pNet    = (pvpMarc+pvpExt)*qty*factorModeAdmin + pvpImp*qty;
+  // Admin és un usuari més: aplica el mateix marge_pro / trams que un
+  // distribuïdor. Si vols veure el cost de taller, fes servir el botó "€"
+  // (rmode='cost'). El toggle "PVD/Client" del bloc d'admin queda en
+  // desús (es pot retirar més endavant).
+  var pNet    = pvpMarc*qty + pvpExt*qty + pvpImp*qty;
 
   // Descompte combo (per combinació de productes). Detectem components
   // i apliquem el % corresponent ABANS del descompte manual del client.
@@ -2281,9 +2692,50 @@ function calcular(){
   }
   document.getElementById('r-lbl-final').textContent=isCost?'Cost total (amb IVA)':(desc>0?'Total amb IVA (desc. inclòs)':'Total amb IVA 21%');
   // Cost detail (only update if elements exist)
-  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers);
+  var eci=document.getElementById('ci-mat'); if(eci) eci.textContent=fmt(cMuntatge+cProteccio+cInterior+cRevers+cExtres);
   var ecm=document.getElementById('ci-mol'); if(ecm) ecm.textContent=fmt(cMol);
   var ect=document.getElementById('ci-tot'); if(ect) ect.textContent=fmt(cTot);
+  updateExtrasLabels();
+
+  // Admin cost (inside € panel, only rendered for admins)
+  var acCost = document.getElementById('ac-cost');
+  if(acCost){
+    var costReal = 0;
+    var mappings = {muntatge:'muntatge',proteccio:'proteccio',interior:'interior'};
+    for(var g in mappings){
+      var sel = document.querySelector('input[name="'+g+'"]:checked');
+      var k = sel ? sel.value : '';
+      if(k && k!=='cap' && k!=='conservar' && CLOSEST[k] && CLOSEST[k].preu_cost!=null)
+        costReal += CLOSEST[k].preu_cost;
+    }
+    if(CLOSEST.impressio && CLOSEST.impressio.preu_cost!=null && document.getElementById('chk-impressio').checked)
+      costReal += CLOSEST.impressio.preu_cost;
+    // Marc cost from preu_cost per cm lineal (same calc as cMol but with real cost)
+    var marcCostUnit = PREUS._marc_cost || 0;
+    if(marcCostUnit > 0 && (mW>0||mH>0)){
+      var perM = (mW*2)+(mH*2);
+      var longBM = (perM+(GRUIX.marc||0)*8)*(1+(MERMA.marc.pct||10)/100);
+      var longFM = Math.max(longBM, MERMA.marc.min||100);
+      costReal += longFM * (marcCostUnit/100);
+      // Premarc cost
+      var preCostUnit = PREUS._pre_cost || 0;
+      if(preCostUnit > 0 && PREUS.pre > 0){
+        var longBP = (perM+((GRUIX.pre||0)+(GRUIX.marc||0))*8)*(1+(MERMA.pre.pct||10)/100);
+        var longFP = Math.max(longBP, MERMA.pre.min||100);
+        costReal += longFP * (preCostUnit/100);
+      }
+    }
+    costReal = costReal * qty;
+    var pvdTotal = cTot * qty;
+    var pvpTotal = pNet;
+    var margePvd = pvdTotal - costReal;
+    var margePvp = pvpTotal - costReal;
+    var pctPvd = pvdTotal > 0 ? (margePvd / pvdTotal * 100) : 0;
+    var pctPvp = pvpTotal > 0 ? (margePvp / pvpTotal * 100) : 0;
+    acCost.textContent = fmt(costReal);
+    document.getElementById('ac-marge-pvd').textContent = fmt(margePvd) + ' (' + pctPvd.toFixed(1) + '%)';
+    document.getElementById('ac-marge-pvp').textContent = fmt(margePvp) + ' (' + pctPvp.toFixed(1) + '%)';
+  }
 
   window._c={
     preu_net:pNet,
@@ -2335,6 +2787,7 @@ function guardar(){
     sessio_id:sessioId, opcio_nom:opcions[opcioActual].nom,
     client_nom:document.getElementById('client_nom').value,
     client_tel:document.getElementById('client_tel').value,
+    client_extern_id: (document.getElementById('client_extern_id')||{}).value || null,
     pre_marc:document.getElementById('pre_marc').value||'-',
     marc_principal:document.getElementById('marc_principal').value,
     tipus_peca:getPieceTypeValue(),
@@ -2712,6 +3165,7 @@ function capturaEstat(){
   return {
     client_nom:document.getElementById('client_nom').value,
     client_tel:document.getElementById('client_tel').value,
+    client_extern_id:(document.getElementById('client_extern_id')||{}).value || null,
     pre_marc:document.getElementById('pre_marc').value||'',
     marc_principal:document.getElementById('marc_principal').value||'',
     tipus_peca:getPieceTypeValue(),
@@ -2731,6 +3185,7 @@ function capturaEstat(){
     entrega:document.getElementById('entrega').value,
     observacions:document.getElementById('observacions').value,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
+    extras_state: collectExtrasState(),
     lang:_lang,
     _closest:JSON.parse(JSON.stringify(CLOSEST)),
     _preus:JSON.parse(JSON.stringify(PREUS)),
@@ -2752,7 +3207,9 @@ function restauraEstat(e){
   document.getElementById('puzzle-support').value=e.puzzle_support||e.tipus_peca_detall||'sense_base';
   document.getElementById('amplada').value=(e.amplada !== undefined && e.amplada !== null && e.amplada !== 0) ? e.amplada : '';
   document.getElementById('alcada').value=(e.alcada !== undefined && e.alcada !== null && e.alcada !== 0) ? e.alcada : '';
-  document.getElementById('cm-passpartu').value=e.cm_passpartu||4;
+  document.getElementById('cm-passpartu').value=e.cm_passpartu||5;
+  // L'usuari ja l'havia desat → considerem-lo "tocat" perquè no s'auto-ajusti.
+  _cmPasspartuTouched = true;
   document.getElementById('descompte').value=e.descompte||0;
   document.getElementById('quantitat').value=e.quantitat||1;
   document.getElementById('entrega').value=e.entrega||0;
@@ -2767,6 +3224,7 @@ function restauraEstat(e){
   var impChecked = !!e.impressio;
   document.getElementById('chk-impressio').checked = impChecked;
   document.getElementById('opt-impressio').classList.toggle('selected', impChecked);
+  restoreExtrasState(e);
   if(e._closest) CLOSEST=e._closest;
   if(e._preus)   PREUS=e._preus;
   if(e._gruix)   GRUIX=e._gruix;
@@ -2788,6 +3246,7 @@ function restauraEstat(e){
           if(d.ok){
             PREUS.marc=d.preu; GRUIX.marc=d.gruix;
             MERMA.marc={pct:d.merma_pct||10, min:d.minim_cm||100};
+            if(d.preu_cost!=null) PREUS._marc_cost=d.preu_cost;
             setChips('marc',[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
             document.getElementById('desc-marc').textContent=d.descripcio||'';
             document.getElementById('desc-marc').style.color='';
@@ -2801,6 +3260,7 @@ function restauraEstat(e){
           if(d.ok){
             PREUS.pre=d.preu; GRUIX.pre=d.gruix;
             MERMA.pre={pct:d.merma_pct||10, min:d.minim_cm||100};
+            if(d.preu_cost!=null) PREUS._pre_cost=d.preu_cost;
             setChips('pre',[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
             document.getElementById('desc-pre').textContent=d.descripcio||'';
             document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="">':'<div class="no-foto">Sense foto</div>';
@@ -2904,6 +3364,7 @@ function netejar(){
   document.getElementById('opt-impressio').title='';
   document.getElementById('chk-revers-peu').checked=false;
   document.getElementById('chk-revers-peu').disabled=true;
+  document.querySelectorAll('.extra-toggle-input').forEach(function(cb){ cb.checked = false; });
   document.getElementById('opt-revers-peu').classList.remove('selected');
   document.getElementById('opt-revers-peu').classList.add('disabled');
   document.getElementById('preu-revers-peu').textContent='-';
@@ -2933,6 +3394,8 @@ function novaComanda(){
   document.getElementById('btn-pdf').disabled=true;
   document.getElementById('btn-wa-client').disabled=true;
   document.getElementById('btn-wa-objectiu').disabled=true;
+  // Reset: el cm-passpartu torna a auto-ajustar el default al següent canvi.
+  _cmPasspartuTouched = false;
   netejar(); renderTabs();
 }
 
@@ -3104,6 +3567,101 @@ placeReversPeuGroup();
 applyIncompatibilities();
 recalcMides();
 
+// ── Sticky bottom bar: mirror total + marc principal ─────────────────────
+(function(){
+  var bar = document.getElementById('sticky-bar');
+  if (!bar) return;
+  document.body.classList.add('has-sticky-bar');
+
+  var totalEl = document.getElementById('r-final');
+  var labelEl = document.getElementById('r-lbl-final');
+  var marcInput = document.getElementById('marc_principal');
+  var btnSave = document.querySelector('.actions .btn-g');
+
+  var barTotal = document.getElementById('sticky-bar-total');
+  var barLabel = document.getElementById('sticky-bar-label');
+  var barMeta = document.getElementById('sticky-bar-meta');
+  var barCta = document.getElementById('sticky-bar-cta');
+
+  function refreshBar(){
+    if (totalEl) barTotal.textContent = totalEl.textContent || '0,00 €';
+    if (labelEl) barLabel.textContent = labelEl.textContent || 'Total amb IVA';
+    var ref = (marcInput && marcInput.value || '').trim();
+    barMeta.textContent = ref ? 'Marc ' + ref : 'Sense marc seleccionat';
+    if (btnSave){
+      var disabled = btnSave.disabled || btnSave.hasAttribute('disabled');
+      barCta.disabled = disabled;
+      barCta.classList.toggle('is-disabled', disabled);
+    }
+  }
+
+  if (totalEl){
+    new MutationObserver(refreshBar).observe(totalEl, {childList:true, characterData:true, subtree:true});
+  }
+  if (labelEl){
+    new MutationObserver(refreshBar).observe(labelEl, {childList:true, characterData:true, subtree:true});
+  }
+  if (marcInput){
+    marcInput.addEventListener('input', refreshBar);
+    marcInput.addEventListener('change', refreshBar);
+  }
+  refreshBar();
+})();
+
+// ── Més accions: close on item click or outside click ────────────────────
+(function(){
+  var details = document.getElementById('more-actions');
+  if (!details) return;
+  details.querySelectorAll('.more-action').forEach(function(btn){
+    btn.addEventListener('click', function(){ details.open = false; });
+  });
+  document.addEventListener('click', function(e){
+    if (details.open && !details.contains(e.target)) details.open = false;
+  });
+})();
+
+// ── Sticky bar icon buttons: mirror disabled state of source buttons ─────
+(function(){
+  function mirror(srcId, dstId){
+    var src = document.getElementById(srcId);
+    var dst = document.getElementById(dstId);
+    if (!src || !dst) return;
+    function sync(){
+      var d = src.disabled || src.hasAttribute('disabled');
+      dst.disabled = d;
+      dst.classList.toggle('is-disabled', d);
+    }
+    new MutationObserver(sync).observe(src, {attributes:true, attributeFilter:['disabled']});
+    sync();
+  }
+  mirror('btn-pdf', 'sb-pdf');
+  mirror('btn-wa-client', 'sb-wa-client');
+  mirror('btn-wa-objectiu', 'sb-wa-rr');
+})();
+
+// ── Mini marc preview + foto-col-main visibility (mirall de #foto-box) ───
+(function(){
+  var src = document.getElementById('foto-box');
+  var dst = document.getElementById('res-mini-marc');
+  var col = document.getElementById('foto-col-main');
+  if (!src) return;
+  function sync(){
+    var img = src.querySelector('img');
+    var hasImg = !!(img && img.src);
+    if (dst){
+      if (hasImg){
+        dst.innerHTML = '<img src="'+img.src+'" alt="">';
+        dst.classList.remove('is-empty');
+      } else {
+        dst.innerHTML = '';
+        dst.classList.add('is-empty');
+      }
+    }
+    if (col) col.style.display = hasImg ? '' : 'none';
+  }
+  new MutationObserver(sync).observe(src, {childList:true, subtree:true, attributes:true, attributeFilter:['src']});
+  sync();
+})();
 
 </script>
 {% include '_private_whatsapp_widget.html' %}
@@ -3203,6 +3761,22 @@ function mrTramsModalAccio(accio){
   // 'mes_tard': només marcar com a vist, sense canviar valors
   fetch('/api/marcs-trams/vist', {method:'POST'}).finally(tancar);
 }
+
+// Permet tancar el modal amb Esc o clicant fora de la caixa blanca, com a
+// "Més tard". Sense això, l'overlay (z-index 9000, inset:0) intercepta tots
+// els clicks de la calculadora i sembla que no responguin els botons.
+(function(){
+  var modal = document.getElementById('mr-trams-modal');
+  if(!modal) return;
+  modal.addEventListener('click', function(e){
+    if(e.target === modal) mrTramsModalAccio('mes_tard');
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && getComputedStyle(modal).display !== 'none'){
+      mrTramsModalAccio('mes_tard');
+    }
+  });
+})();
 </script>
 {% endif %}
 

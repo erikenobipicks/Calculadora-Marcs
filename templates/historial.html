@@ -91,6 +91,7 @@ tr:hover td{background:#FAFAF8}
     <a href="/">Inici</a>
     <a href="/calculadora">Calculadora</a>
     <a href="/cataleg">Cat&agrave;leg</a>
+    <a href="https://reusrevela.cat/area-privada/lienzos" target="_blank" rel="noopener noreferrer">Llen&ccedil;os &#8599;</a>
     <a href="/ajustos">Ajustos</a>
     {% if session.is_admin %}<a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara }}</span></a>{% endif %}
     {% if session.is_admin %}<a href="/admin">Admin</a>{% endif %}
@@ -129,9 +130,24 @@ tr:hover td{background:#FAFAF8}
       Pendents albarà{% if n_pendents_albara %} <strong style="background:var(--amber);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px">{{ n_pendents_albara }}</strong>{% endif %}
     </a>
     {% for u in usuaris_list %}
-    <a href="/historial?user_id={{ u.id }}" class="filter-btn {% if filtre_uid == u.id and not filtre_all and not filtre_albara %}active{% endif %}">{{ u.nom or u.username }}</a>
+    <a href="/historial?user_id={{ u.id }}" class="filter-btn {% if filtre_uid == u.id and not filtre_all and not filtre_albara and not filtre_client %}active{% endif %}">{{ u.nom or u.username }}</a>
     {% endfor %}
+    {% if clients_habituals %}
+    <span style="color:var(--hint);font-size:11px;margin:0 .3rem">|</span>
+    <select onchange="if(this.value) location.href='/historial?client='+this.value; else location.href='/historial';" style="padding:4px 10px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid {% if filtre_client %}var(--green){% else %}var(--border){% endif %};background:{% if filtre_client %}var(--green){% else %}var(--bg){% endif %};color:{% if filtre_client %}#fff{% else %}var(--muted){% endif %};cursor:pointer;font-family:'DM Sans',sans-serif">
+      <option value="">Client habitual…</option>
+      {% for ch in clients_habituals %}
+      <option value="{{ ch.id }}" {% if filtre_client == ch.id %}selected{% endif %}>{{ ch.nom }} [{{ ch.tipus|upper }}]</option>
+      {% endfor %}
+    </select>
+    {% endif %}
   </div>
+  {% if filtre_client %}
+  <div style="margin-bottom:1rem;padding:.65rem 1rem;background:var(--green-l);border:1px solid #B8DCC9;border-radius:var(--r);font-size:13px;display:flex;align-items:center;justify-content:space-between">
+    <span>Mostrant pressupostos de <strong>{{ filtre_client_nom }}</strong></span>
+    <a href="/historial" style="color:var(--green);font-weight:600;text-decoration:none">× Treure filtre</a>
+  </div>
+  {% endif %}
   <div id="barra-seleccio" style="display:none;align-items:center;gap:.75rem;margin-bottom:1rem;padding:.65rem 1rem;background:var(--red-l);border:1px solid #E8B4B4;border-radius:var(--r)">
     <span style="font-size:13px;font-weight:600;color:var(--red)"><span id="sel-count">0</span> seleccionats</span>
     <button id="btn-elim-sel" onclick="eliminarSeleccio()" class="btn-sm btn-del" style="display:none">Eliminar seleccionats</button>
@@ -223,6 +239,9 @@ tr:hover td{background:#FAFAF8}
             </td>
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
+              {% if session.is_admin and op.client_extern_id %}
+              <a href="/pdf/{{ op.id }}?mode=dual" class="btn-sm btn-albara" target="_blank" title="PDF amb preu taller + PVP suggerit">PDF Taller</a>
+              {% endif %}
               {% if session.is_admin %}
               {% if op.fd_albara %}
               <span class="btn-sm btn-albara-ok" title="Albarà: {{ op.fd_albara }}">✓ {{ op.fd_albara }}</span>

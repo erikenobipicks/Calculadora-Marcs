@@ -98,7 +98,8 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <input type="hidden" name="action" value="crear">
       <div class="form-grid">
         <div><label>Nom complet</label><input type="text" name="nom" placeholder="Anna García" required></div>
-        <div><label>Nom d'usuari</label><input type="text" name="username" placeholder="anna" required></div>
+        <div><label>Nom d'usuari (login)</label><input type="text" name="username" placeholder="anna" required></div>
+        <div><label>Email <span style="color:var(--hint);font-size:11px">(per al welcome i suport)</span></label><input type="email" name="email" placeholder="anna@exemple.com"></div>
         <div><label>Contrasenya</label><input type="password" name="password" required></div>
         <div><label>Rol</label>
           <select name="is_admin">
@@ -138,7 +139,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
         <thead>
           <tr>
             <th>Compte</th><th>Perfil</th><th>Accés</th><th>Dades</th>
-            <th>Trams impressió</th><th>Contrasenya</th><th>Eliminar</th>
+            <th>Trams impressió</th><th>Baryta</th><th>Contrasenya</th><th>Eliminar</th>
           </tr>
         </thead>
         <tbody>
@@ -148,6 +149,12 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           <td>
             <div><strong>{{ u.nom }}</strong></div>
             <div class="mono">{{ u.username }}</div>
+            <form method="post" action="/admin/usuari" class="mini-form" style="margin-top:4px">
+              <input type="hidden" name="action" value="actualitzar_email">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <input type="email" name="email" value="{{ u.email or '' }}" placeholder="email@exemple.com" style="margin:0;padding:3px 7px;font-size:11px;width:170px">
+              <button type="submit" class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px">OK</button>
+            </form>
             <div style="margin-top:4px">{% if u.is_admin %}<span class="badge-admin">Admin</span>{% else %}Usuari{% endif %}</div>
           </td>
           <td>
@@ -198,11 +205,28 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
             </form>
           </td>
           <td>
+            <form method="post" action="/admin/usuari" style="display:flex;flex-direction:column;gap:.4rem;align-items:flex-start">
+              <input type="hidden" name="action" value="baryta_toggle">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--text);margin:0;cursor:pointer">
+                <input type="checkbox" name="baryta_actiu" value="1" style="width:auto;margin:0" {% if u.baryta_actiu %}checked{% endif %}>
+                <span>Photo Rag Baryta</span>
+              </label>
+              <button type="submit" class="btn btn-primary btn-sm">Desar</button>
+            </form>
+          </td>
+          <td>
             <form method="post" action="/admin/usuari" class="row-actions">
               <input type="hidden" name="action" value="canviar_pw">
               <input type="hidden" name="uid" value="{{ u.id }}">
               <input type="password" name="password" placeholder="Nova contrasenya" style="margin:0;padding:4px 8px;font-size:12px;width:140px">
               <button type="submit" class="btn btn-primary btn-sm">OK</button>
+            </form>
+            <form method="post" action="/admin/usuari" style="margin-top:.4rem"
+                  onsubmit="return confirm('Enviar mail de benvinguda a {{ u.username }}?\n\nEs generarà una contrasenya NOVA i el mail anirà amb les instruccions bàsiques de la calculadora.');">
+              <input type="hidden" name="action" value="send_welcome">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <button type="submit" class="btn btn-sm" style="font-size:11px;padding:3px 9px;background:#fff;border:1px solid #1A6B45;color:#1A6B45">✉ Welcome</button>
             </form>
           </td>
           <td>

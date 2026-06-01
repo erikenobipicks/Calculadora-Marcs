@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, secrets, os, json, time, unicodedata, math
+import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime, timedelta
@@ -579,6 +579,16 @@ def execute(sql, args=()):
             sql2 = sql2.rstrip().rstrip(';')
             if is_ignore:
                 sql2 += ' ON CONFLICT DO NOTHING'
+            elif is_replace:
+                # SQLite "INSERT OR REPLACE" → Postgres UPSERT. Assumim que la
+                # primera columna del llistat és la PK (cas de config.clau, etc.).
+                m = re.search(r'INSERT\s+INTO\s+\w+\s*\(([^)]+)\)\s*VALUES', sql2, re.IGNORECASE)
+                if m:
+                    cols = [c.strip().strip('"').strip("'") for c in m.group(1).split(',')]
+                    if len(cols) >= 2:
+                        pk = cols[0]
+                        update_set = ', '.join('{c} = EXCLUDED.{c}'.format(c=c) for c in cols[1:])
+                        sql2 += ' ON CONFLICT (' + pk + ') DO UPDATE SET ' + update_set
             # Only add RETURNING id for tables that actually have a SERIAL id
             # column. Tables with TEXT primary key (referencia) — moldures,
             # vidres, passpartout, encolat_pro, impressio — would fail on
@@ -804,6 +814,88 @@ def get_config_value(clau, default=None):
     """Read a single value from the config key-value table."""
     r = query("SELECT valor FROM config WHERE clau=?", [clau], one=True)
     return r['valor'] if r else default
+
+
+# ── Extras (càrrecs configurables) ────────────────────────────────────────
+EXTRAS_DEFAULTS = [
+    {
+        "key": "samarreta_surcharge",
+        "name": "Càrrec samarreta",
+        "description": "Feina addicional per emmarcar samarreta.",
+        "price_pvd": 20.0,
+        "margin_pct": None,
+        "mode": "auto",
+        "piece_types": ["samarreta"],
+        "actiu": True,
+        "ordre": 1,
+    },
+    {
+        "key": "desmuntar_marc",
+        "name": "Desmuntar i netejar un marc existent",
+        "description": "Quan el client porta un marc i vols aprofitar el vidre (o canviar-lo).",
+        "price_pvd": 10.0,
+        "margin_pct": None,
+        "mode": "manual",
+        "piece_types": [],
+        "actiu": True,
+        "ordre": 2,
+    },
+]
+
+
+def _normalize_extra(e):
+    """Coerce types so the JS/template gets predictable values."""
+    pt = e.get('piece_types') or []
+    if isinstance(pt, str):
+        pt = [x.strip() for x in pt.split(',') if x.strip()]
+    mp = e.get('margin_pct')
+    try:
+        mp = float(mp) if mp not in (None, '', 'null') else None
+    except (TypeError, ValueError):
+        mp = None
+    try:
+        price = float(e.get('price_pvd') or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    try:
+        ordre = int(e.get('ordre') or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    mode = (e.get('mode') or 'manual').strip().lower()
+    if mode not in ('manual', 'auto'):
+        mode = 'manual'
+    return {
+        'key': (e.get('key') or '').strip(),
+        'name': (e.get('name') or '').strip(),
+        'description': (e.get('description') or '').strip(),
+        'price_pvd': price,
+        'margin_pct': mp,
+        'mode': mode,
+        'piece_types': pt,
+        'actiu': bool(e.get('actiu', True)),
+        'ordre': ordre,
+    }
+
+
+def get_extras_list():
+    """Return the list of configured extras, seeding defaults on first read."""
+    raw = get_config_value('extras_json')
+    if not raw:
+        save_extras_list(EXTRAS_DEFAULTS)
+        return [dict(e) for e in EXTRAS_DEFAULTS]
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return [dict(e) for e in EXTRAS_DEFAULTS]
+        return [_normalize_extra(e) for e in data]
+    except Exception:
+        return [dict(e) for e in EXTRAS_DEFAULTS]
+
+
+def save_extras_list(extras):
+    """Persist extras as JSON in the config table."""
+    payload = json.dumps([_normalize_extra(e) for e in extras], ensure_ascii=False)
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('extras_json', ?)", [payload])
 
 
 def calcular_pvd(preu_cost, categoria):
@@ -1310,53 +1402,6 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ── Passpartú: càlcul dinàmic de preu ────────────────────────────────────────
-_SHEET_W      = 80       # ample full en cm
-_SHEET_H      = 120      # alt full en cm
-_SHEET_PRICE  = 7.0      # preu full en €
-_COST_CM2     = 0.000729 # cost per cm²
-_MULT_PETITA  = 8.0      # multiplicador fins a _LIMIT_A cm²
-_MULT_MITJANA = 5.0      # multiplicador entre _LIMIT_A i _LIMIT_B cm²
-_MULT_GRAN    = 3.5      # multiplicador per sobre de _LIMIT_B cm²
-_LIMIT_A      = 900      # cm² (~30x30)
-_LIMIT_B      = 4800     # cm² (~60x80)
-_MIN_PRICE    = 5.50     # preu mínim per peça
-
-def _peces_per_full(ew, eh):
-    # Quantes peces caben en un full 80x120, provant les dues orientacions.
-    n1 = math.floor(_SHEET_W / ew) * math.floor(_SHEET_H / eh)
-    n2 = math.floor(_SHEET_W / eh) * math.floor(_SHEET_H / ew)
-    return max(1, n1, n2)
-
-def calcular_precio_passpartu(ew, eh):
-    """Legacy: retorna PVD directament (multiplicadors ja inclouen marge).
-    Mantingut per compatibilitat — nou codi hauria d'usar calcular_cost_passpartu()."""
-    area = ew * eh
-    n = _peces_per_full(ew, eh)
-    coste_cm2  = area * _COST_CM2
-    coste_hoja = _SHEET_PRICE / n
-    coste_base = max(coste_cm2, coste_hoja)
-    if area <= _LIMIT_A:
-        mult = _MULT_PETITA
-        t = (area - _LIMIT_A * 0.92) / (_LIMIT_A * 0.16)
-        if 0 < t < 1:
-            mult = _MULT_PETITA + t * (_MULT_MITJANA - _MULT_PETITA)
-    elif area <= _LIMIT_B:
-        mult = _MULT_MITJANA
-        t = (area - _LIMIT_B * 0.92) / (_LIMIT_B * 0.16)
-        if 0 < t < 1:
-            mult = _MULT_MITJANA + t * (_MULT_GRAN - _MULT_MITJANA)
-    else:
-        mult = _MULT_GRAN
-    return round(max(coste_base * mult, _MIN_PRICE), 2)
-
-
-def _closest_passpartu_taula(amplada, alcada, prefix='1PAS'):
-    """Min-contain lookup on the passpartout table. Returns row dict or None."""
-    rows = [dict(r) for r in query('SELECT * FROM passpartout')]
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
-
-
 def _closest_passpartu_taula_tolerancia(amplada, alcada, prefix='1PAS', tolerancia=2.0):
     """Min-contain amb tolerància sobre la taula passpartout. Filtra per
     prefix de referència (1PAS, DOBPAS…). Considera ambdues orientacions
@@ -1468,13 +1513,6 @@ def _cost_muntatge(amplada, alcada, cost_cm2, temps_base, temps_var_cm2):
     temps = temps_base + (area * temps_var_cm2)
     mo = temps * cost_hora / 60
     return round(mat + mo, 4)
-
-
-def _closest_encolat_taula(amplada, alcada, prefix):
-    """Min-contain on encolat_pro filtered by prefix (ENC or PRO).
-    Returns cheapest row whose dimensions physically cover (amplada, alcada)."""
-    rows = [dict(r) for r in query('SELECT * FROM encolat_pro')]
-    return _find_closest(rows, amplada, alcada, prefix=prefix)
 
 
 def _closest_encolat_taula_tolerancia(amplada, alcada, prefix, tolerancia=2.0):
@@ -1687,26 +1725,44 @@ def calcular_cost_vidre(amplada, alcada):
 
 
 def calcular_cost_doble_vidre(amplada, alcada):
-    """Doble vidre: dos vidres simples + muntatge.
-    1. Min-contain amb tolerància sobre DV-
-    2. Fórmula: (cost_vidre_simple × 2) + cost_muntatge"""
-    marge      = float(get_config_value('marge_admin_vidres_pct', '60'))
-    t_muntat   = float(get_config_value('vidre_dv_muntatge_min', '5'))
-    cost_hora  = float(get_config_value('cost_hora_taller', '25'))
-    tolerancia = float(get_config_value('vidre_tolerancia_cm', '2'))
+    """Doble vidre per FÓRMULA PURA (sense lookup de taula).
 
-    fila = _closest_vidre_taula_tolerancia(amplada, alcada, prefix='DV-', tolerancia=tolerancia)
-    if fila and _row_get(fila, 'preu_cost') is not None:
-        cost = float(fila['preu_cost'])
-        pvd = round(cost * (1 + marge / 100), 4)
-        return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'taula', 'ref': fila['referencia']}
+    El doble vidre és matemàticament determinista i no necessita taula:
+      cost_material  = àrea · cost_cm² · 2     (dues làmines)
+      MO_tall        = (t_base + t_lineal · perim_m) · cost_hora / 60
+                       (es talla un cop: dues làmines tallades alhora)
+      MO_muntatge_dv = vidre_dv_muntatge_eur   (alineació + sellat)
+      cost_total     = material + MO_tall + MO_muntatge
+      PVD            = cost_total · (1 + marge_admin/100)
 
-    # Fallback: 2 × vidre simple + muntatge
-    simple = calcular_cost_vidre(amplada, alcada)
-    mo_muntat = t_muntat * cost_hora / 60
-    cost = round(simple['cost'] * 2 + mo_muntat, 4)
-    pvd = round(cost * (1 + marge / 100), 4)
-    return {'cost': cost, 'pvd': pvd, 'preu': pvd, 'origen': 'formula', 'ref': f'dv-{amplada}x{alcada}'}
+    Substitueix la lògica híbrida prèvia (taula + fallback fórmula) que
+    havia generat saltsd quan la taula DV-* tenia "forats" (cas 80×80
+    → DV-80X120 saltava a un preu inflat ~22%). Manté la coherència
+    amb el patró del vidre simple per fórmula.
+
+    L'estructura del dict retornat manté els camps que els consumidors
+    ja llegeixen ('cost', 'pvd', 'preu', 'origen', 'ref'); 'origen' és
+    sempre 'formula'."""
+    cost_cm2     = float(get_config_value('vidre_cost_cm2', '0.002880'))
+    t_base       = float(get_config_value('vidre_temps_base_min', '3'))
+    t_lineal     = float(get_config_value('vidre_temps_lineal_m', '0.5'))
+    cost_hora    = float(get_config_value('cost_hora_taller', '25'))
+    marge        = float(get_config_value('marge_admin_vidres_pct', '60'))
+    mo_muntatge  = float(get_config_value('vidre_dv_muntatge_eur', '1.30'))
+
+    area = float(amplada) * float(alcada)
+    perimetre_m = 2 * (amplada + alcada) / 100
+
+    cost_material = area * cost_cm2 * 2
+    mo_tall       = (t_base + t_lineal * perimetre_m) * cost_hora / 60
+    cost          = round(cost_material + mo_tall + mo_muntatge, 4)
+    pvd           = round(cost * (1 + marge / 100), 4)
+
+    return {
+        'cost': cost, 'pvd': pvd, 'preu': pvd,
+        'origen': 'formula',
+        'ref': f'dv-{amplada}x{alcada}',
+    }
 
 
 def calcular_cost_mirall(amplada, alcada):
@@ -1878,6 +1934,14 @@ def public_professional_signup():
             'UPDATE usuaris SET nom=?, nom_empresa=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=?, access_status=? WHERE id=?',
             [name, business_name, profile_type, web_url, instagram, fiscal_id, notes, next_status, existing['id']]
         )
+        _notify_signup_email(
+            action='updated',
+            status=next_status,
+            name=name, email=email, phone=phone,
+            business_name=business_name, profile_type=profile_type,
+            web_url=web_url, instagram=instagram, fiscal_id=fiscal_id,
+            subject=subject, message=message,
+        )
         return jsonify({'ok': True, 'action': 'updated', 'status': next_status})
 
     temp_password = secrets.token_urlsafe(12)
@@ -1885,7 +1949,360 @@ def public_professional_signup():
         'INSERT INTO usuaris (username, password, nom, is_admin, nom_empresa, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
         [email, hash_pw(temp_password), name, 0, business_name, 'pending', profile_type, web_url, instagram, fiscal_id, notes]
     )
+    _notify_signup_email(
+        action='created',
+        status='pending',
+        name=name, email=email, phone=phone,
+        business_name=business_name, profile_type=profile_type,
+        web_url=web_url, instagram=instagram, fiscal_id=fiscal_id,
+        subject=subject, message=message,
+    )
+    # Email de confirmació al usuari (acusament de rebuda + què esperar)
+    _send_signup_received_email(name, email)
     return jsonify({'ok': True, 'action': 'created', 'status': 'pending'})
+
+
+def _notify_signup_email(*, action, status, name, email, phone, business_name,
+                        profile_type, web_url, instagram, fiscal_id, subject, message):
+    """Envia un email al admin notificant una nova alta o actualització de
+    perfil pendent. Mai bloqueja: si Gmail no està configurat o la connexió
+    falla, fa print i continua (l'alta ja s'ha desat a la BD).
+
+    Destinatari: config['signup_notify_email'] o, per defecte,
+    config['gmail_user'] (compte que envia). Així reusrevela rep
+    l'avís al mateix correu que té configurat per a SMTP."""
+    try:
+        cfg = {r['clau']: r['valor'] for r in (query('SELECT clau, valor FROM config') or [])}
+        gmail_user = (cfg.get('gmail_user') or '').strip()
+        gmail_pass = (cfg.get('gmail_pass') or '').strip()
+        if not gmail_user or not gmail_pass:
+            print(f"[signup_notify] skip: gmail_user/pass no configurat — alta {email} desada sense email")
+            return
+        dest = (cfg.get('signup_notify_email') or gmail_user).strip()
+
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        action_label = 'Nova sol·licitud d\'alta' if action == 'created' else 'Actualització de perfil'
+        status_label = {
+            'pending': 'Pendent de validar',
+            'active':  'Actiu (ja autoritzat)',
+            'blocked': 'Bloquejat',
+        }.get(status, status)
+
+        rows_html = []
+        def _row(label, value):
+            return f'<tr><td style="padding:6px 10px;color:#6B6860;font-size:13px;border-bottom:1px solid #F3F1EB"><b>{label}</b></td><td style="padding:6px 10px;font-size:13px;border-bottom:1px solid #F3F1EB">{value or "—"}</td></tr>'
+        rows_html.append(_row('Nom', name))
+        rows_html.append(_row('Email', email))
+        rows_html.append(_row('Telèfon', phone))
+        rows_html.append(_row('Empresa / Botiga', business_name))
+        rows_html.append(_row('Tipus de perfil', profile_type))
+        rows_html.append(_row('Web', web_url))
+        rows_html.append(_row('Instagram', instagram))
+        rows_html.append(_row('CIF / NIF', fiscal_id))
+        rows_html.append(_row('Assumpte', subject))
+
+        msg_block = ''
+        if message:
+            safe_msg = (message or '').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+            msg_block = (
+                f'<p style="font-family:sans-serif;font-size:13px;margin-top:18px;color:#6B6860"><b>Missatge:</b></p>'
+                f'<p style="font-family:sans-serif;font-size:13px;line-height:1.5;background:#fcfbf8;border:1px solid #E5E2DB;border-radius:8px;padding:11px 14px;margin-top:6px">{safe_msg}</p>'
+            )
+
+        html = f"""\
+<div style="font-family:sans-serif;max-width:620px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:14px">
+    {action_label}
+  </h2>
+  <p style="font-size:14px;margin-bottom:14px"><b>Estat:</b>
+    <span style="background:#FDF3E8;color:#C8873A;padding:3px 9px;border-radius:999px;font-weight:700;font-size:12px">{status_label}</span>
+  </p>
+  <p style="font-size:14px;margin-bottom:6px">{datetime.now().strftime('%d/%m/%Y · %H:%M')}</p>
+  <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin-top:14px;background:#fff;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden">
+    {''.join(rows_html)}
+  </table>
+  {msg_block}
+  <p style="margin-top:22px">
+    <a href="https://calculadora.reusrevela.cat/admin/usuaris" style="display:inline-block;background:#1A6B45;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:13px">Gestionar a /admin/usuaris →</a>
+  </p>
+  <p style="font-size:11px;color:#9E9B94;margin-top:24px">Aquest correu s'envia automàticament des de la calculadora quan algú envia el formulari d'alta professional a reusrevela.cat.</p>
+</div>
+"""
+        m = MIMEMultipart('alternative')
+        m['Subject'] = f"[Alta professional] {name or email} — {status_label}"
+        m['From'] = gmail_user
+        m['To'] = dest
+        m.attach(MIMEText(html, 'html'))
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
+            s.login(gmail_user, gmail_pass)
+            s.sendmail(gmail_user, [dest], m.as_string())
+        print(f"[signup_notify] OK: enviat a {dest} per a {email} (action={action})")
+    except Exception as e:
+        # No bloquejar mai la resposta del signup: l'usuari s'ha desat,
+        # només es perd la notificació puntual.
+        print(f"[signup_notify] FAIL ({email}): {e}")
+
+
+def _gmail_is_configured():
+    """Retorna True si gmail_user i gmail_pass són presents a config."""
+    gu = (get_config_value('gmail_user', '') or '').strip()
+    gp = (get_config_value('gmail_pass', '') or '').strip()
+    return bool(gu) and bool(gp)
+
+
+def _resend_is_configured():
+    """Retorna True si resend_api_key és present a config."""
+    return bool((get_config_value('resend_api_key', '') or '').strip())
+
+
+def _email_is_configured():
+    """Retorna True si almenys un proveïdor d'email està configurat."""
+    return _resend_is_configured() or _gmail_is_configured()
+
+
+def _send_via_resend(to_addr, subject, html, log_tag='resend_email'):
+    """Envia un mail via API HTTPS de Resend. Retorna True si OK.
+    Resend funciona via HTTPS (no SMTP), per tant és compatible amb hosts
+    que bloquegen el port 465/587 (Railway, Render, etc.)."""
+    try:
+        api_key = (get_config_value('resend_api_key', '') or '').strip()
+        if not api_key:
+            print(f"[{log_tag}] skip: resend_api_key no configurat")
+            return False
+        from_addr = (get_config_value('resend_from', '') or '').strip()
+        if not from_addr:
+            # Fallback: l'adreça d'onboarding de Resend (sense verificació de
+            # domini). Bona per provar; per producció cal configurar un from
+            # propi i verificar el domini al panell de Resend.
+            from_addr = 'onboarding@resend.dev'
+        payload = json.dumps({
+            'from': from_addr,
+            'to': [to_addr],
+            'subject': subject,
+            'html': html,
+        }).encode('utf-8')
+        req = urllib_request.Request(
+            'https://api.resend.com/emails',
+            data=payload,
+            headers={
+                'Authorization': 'Bearer ' + api_key,
+                'Content-Type': 'application/json',
+                # Cloudflare (que protegeix l'API de Resend) bloqueja el User-Agent
+                # per defecte de Python (`Python-urllib/...`) amb error 1010. Posem
+                # un UA descriptiu perquè la petició es vegi com a client legítim.
+                'User-Agent': 'Calculadora-Marcs/1.0 (+https://calculadora.reusrevela.cat)',
+                'Accept': 'application/json',
+            },
+            method='POST',
+        )
+        with urllib_request.urlopen(req, timeout=10) as resp:
+            data = resp.read().decode('utf-8', errors='replace')
+        print(f"[{log_tag}] OK: enviat a {to_addr} via Resend (resp={data[:140]})")
+        return True
+    except urllib_error.HTTPError as e:
+        body = ''
+        try:
+            body = e.read().decode('utf-8', errors='replace')[:240]
+        except Exception:
+            pass
+        print(f"[{log_tag}] FAIL HTTP {e.code} ({to_addr}): {body}")
+        return False
+    except Exception as e:
+        print(f"[{log_tag}] FAIL ({to_addr}): {e}")
+        return False
+
+
+def _generate_temp_password(length=12):
+    """Genera una contrasenya aleatòria llegible (sense 0/O, 1/l/I).
+    Es fa servir per a l'email de benvinguda; l'usuari pot canviar-la
+    immediatament des de /ajustos."""
+    import secrets, string
+    alphabet = ''.join(c for c in (string.ascii_letters + string.digits) if c not in '0Ol1I')
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _send_welcome_email(username, password, nom, to_addr=None):
+    """Envia un mail al professional amb les seves dades d'alta i un mini
+    tutorial de com fer servir la calculadora. Retorna True si s'envia OK."""
+    nom_visible = (nom or '').strip() or 'professional'
+    base_url = 'https://calculadora.reusrevela.cat'
+    html = f"""\
+<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1C1B18;padding:24px;background:#FBFAF7">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:10px;margin:0 0 18px">
+    Et donem la benvinguda
+  </h2>
+  <p style="font-size:14px;line-height:1.6;margin:0 0 14px">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6;margin:0 0 16px">
+    Ja tens el teu compte a la <strong>calculadora de marcs i impressions de Reus Revela</strong>.
+    Aquestes són les teves dades d'accés:
+  </p>
+
+  <table style="width:100%;max-width:480px;margin:0 0 18px;background:#F5F3EC;border-radius:10px;border-collapse:collapse">
+    <tr><td style="padding:10px 14px;color:#6B6860;font-size:13px;width:120px">URL</td>
+        <td style="padding:10px 14px;font-family:Consolas,monospace;font-size:13px"><a href="{base_url}" style="color:#1A6B45;text-decoration:none">{base_url}</a></td></tr>
+    <tr><td style="padding:10px 14px;color:#6B6860;font-size:13px">Usuari</td>
+        <td style="padding:10px 14px;font-family:Consolas,monospace;font-size:14px"><strong>{username}</strong></td></tr>
+    <tr><td style="padding:10px 14px;color:#6B6860;font-size:13px">Contrasenya</td>
+        <td style="padding:10px 14px;font-family:Consolas,monospace;font-size:14px"><strong>{password}</strong></td></tr>
+  </table>
+
+  <p style="font-size:12px;color:#6B6860;margin:0 0 22px">
+    Recomanem que canviïs la contrasenya quan entris per primer cop. Ho pots fer des de <strong>/ajustos</strong>.
+  </p>
+
+  <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Com funciona la calculadora (en cinc passos)</h3>
+  <ol style="line-height:1.7;font-size:14px;padding-left:20px;margin:0 0 18px">
+    <li>Introdueix les <strong>mides de la peça</strong> i el <strong>tipus</strong> (fotografia, samarreta, puzzle…).</li>
+    <li>Tria els <strong>materials</strong>: motllura, vidre o passpartú i muntatge.</li>
+    <li>El <strong>preu es calcula automàticament</strong> i veus el resum a la dreta.</li>
+    <li>Pots <strong>desar diverses opcions</strong> (A, B, C…) per al mateix client.</li>
+    <li>Quan tinguis la versió final, genera el <strong>PDF</strong>, envia per <strong>WhatsApp</strong> al client o passa la comanda al <strong>taller</strong>.</li>
+  </ol>
+
+  <h3 style="color:#1A6B45;margin:24px 0 10px;font-size:15px">Consells útils</h3>
+  <ul style="line-height:1.7;font-size:14px;padding-left:20px;margin:0 0 18px">
+    <li><strong>Botó € (capçalera del Resum)</strong> — alterna entre preu de cost (taller) i PVP final.</li>
+    <li>Caixa <strong>"Extres"</strong> — afegir feines puntuals com desmuntar un marc antic o emmarcar una samarreta.</li>
+    <li><strong>"Més accions"</strong> — generar PDF, enviar per WhatsApp i comanda al taller.</li>
+    <li>A <strong>/ajustos</strong> pots configurar el teu <strong>marge comercial</strong>, les <strong>dades de l'empresa</strong> i les preferències de marca.</li>
+  </ul>
+
+  <p style="margin:24px 0 6px;font-size:13px;color:#6B6860">
+    Si tens qualsevol dubte, escriu-nos a <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a> o truca al 977 316 111.
+  </p>
+  <p style="margin:18px 0 0;font-size:13px;color:#1C1B18">
+    Una salutació cordial,<br><strong>Equip Reus Revela</strong>
+  </p>
+
+  <hr style="border:none;border-top:1px solid #E5E2DB;margin:26px 0 14px">
+  <p style="font-size:11px;color:#9E9B94;line-height:1.6;margin:0">
+    Aquest és un correu automàtic. <strong>No responguis a aquesta adreça</strong>;
+    les respostes no es llegeixen. Si has rebut aquest missatge per error, esborra'l
+    i, si vols, fes-nos-ho saber a <a href="mailto:reusrevela@gmail.com" style="color:#9E9B94">reusrevela@gmail.com</a>.
+  </p>
+</div>
+"""
+    subject = 'Et donem la benvinguda · Calculadora Reus Revela'
+    return _send_user_email_html(to_addr or username, subject, html, log_tag='welcome_email')
+
+
+def _send_user_email_html(to_addr, subject, html, log_tag='user_email'):
+    """Helper compartit per a emails al USUARI final. Tria proveïdor segons
+    config: si resend_api_key està posat, fa servir l'API HTTPS de Resend
+    (compatible amb hosts que bloquegen SMTP); si no, fallback a Gmail
+    SMTP. Try/except: mai bloqueja el flux que el crida."""
+    if _resend_is_configured():
+        return _send_via_resend(to_addr, subject, html, log_tag=log_tag)
+    try:
+        cfg = {r['clau']: r['valor'] for r in (query('SELECT clau, valor FROM config') or [])}
+        gmail_user = (cfg.get('gmail_user') or '').strip()
+        gmail_pass = (cfg.get('gmail_pass') or '').strip()
+        if not gmail_user or not gmail_pass:
+            print(f"[{log_tag}] skip: cap proveïdor configurat (dest={to_addr})")
+            return False
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        m = MIMEMultipart('alternative')
+        m['Subject'] = subject
+        m['From'] = gmail_user
+        m['To'] = to_addr
+        m['Reply-To'] = gmail_user
+        m.attach(MIMEText(html, 'html'))
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
+            s.login(gmail_user, gmail_pass)
+            s.sendmail(gmail_user, [to_addr], m.as_string())
+        print(f"[{log_tag}] OK: enviat a {to_addr}")
+        return True
+    except Exception as e:
+        print(f"[{log_tag}] FAIL ({to_addr}): {e}")
+        return False
+
+
+def _send_signup_received_email(name, email):
+    """Email al usuari confirmant que hem rebut la sol·licitud d'alta.
+    Estableix expectatives perquè no es quedi 'penjat' esperant resposta."""
+    nom_visible = (name or '').strip() or 'professional'
+    html = f"""\
+<div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:18px">
+    Hem rebut la teva sol·licitud
+  </h2>
+  <p style="font-size:14px;line-height:1.6">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6">Gràcies per voler treballar amb <b>Reus Revela</b>. Hem rebut la teva sol·licitud d'alta professional i la revisarem en les <b>pròximes 24-48 hores hàbils</b>.</p>
+  <p style="font-size:14px;line-height:1.6">Quan el teu compte estigui actiu, t'enviarem un correu separat amb:</p>
+  <ul style="font-size:14px;line-height:1.7;padding-left:20px;margin:8px 0 18px">
+    <li>El teu usuari i contrasenya inicial</li>
+    <li>L'enllaç a la calculadora</li>
+    <li>El tutorial per començar a fer pressupostos</li>
+  </ul>
+  <p style="font-size:14px;line-height:1.6">Si tens cap pregunta urgent, pots respondre directament a aquest correu o escriure'ns a <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a>.</p>
+  <p style="font-size:14px;line-height:1.6;margin-top:24px">Una salutació,<br><b>Equip Reus Revela</b></p>
+  <p style="font-size:11px;color:#9E9B94;margin-top:24px;border-top:1px solid #E5E2DB;padding-top:12px">Aquest correu s'envia automàticament en rebre el formulari d'alta professional a reusrevela.cat.</p>
+</div>
+"""
+    return _send_user_email_html(
+        email,
+        'Hem rebut la teva sol·licitud — Reus Revela',
+        html,
+        log_tag='signup_received',
+    )
+
+
+def _send_user_activation_email(name, email, temp_password):
+    """Email al usuari quan l'admin l'activa: usuari + contrasenya inicial +
+    enllaços a la calc i al tutorial. Important: la contrasenya va en clar
+    (és l'única manera). El missatge demana que la canviï al primer login."""
+    nom_visible = (name or '').strip() or 'professional'
+    safe_pass = (temp_password or '').replace('<', '&lt;').replace('>', '&gt;')
+    html = f"""\
+<div style="font-family:sans-serif;max-width:580px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:18px">
+    Ja pots fer servir la calculadora
+  </h2>
+  <p style="font-size:14px;line-height:1.6">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6">El teu compte a <b>Reus Revela</b> ja està actiu. Aquestes són les teves dades d'accés:</p>
+
+  <table style="width:100%;border-collapse:collapse;background:#fcfbf8;border:1px solid #E5E2DB;border-radius:8px;overflow:hidden;margin:14px 0">
+    <tr>
+      <td style="padding:11px 14px;border-bottom:1px solid #F3F1EB;width:130px;color:#6B6860;font-size:13px"><b>Usuari</b></td>
+      <td style="padding:11px 14px;border-bottom:1px solid #F3F1EB;font-family:Consolas,monospace;font-size:14px">{email}</td>
+    </tr>
+    <tr>
+      <td style="padding:11px 14px;color:#6B6860;font-size:13px"><b>Contrasenya inicial</b></td>
+      <td style="padding:11px 14px;font-family:Consolas,monospace;font-size:14px"><b>{safe_pass}</b></td>
+    </tr>
+  </table>
+
+  <p style="font-size:13px;color:#6B6860;line-height:1.5;background:#FDF3E8;border:1px solid #E8C89A;border-radius:8px;padding:11px 14px;margin:14px 0">
+    ⚠ Et recomanem canviar la contrasenya al primer accés. Pots fer-ho des de la secció <b>Ajustos</b> dins la calculadora.
+  </p>
+
+  <p style="font-size:14px;margin:22px 0 14px"><b>Enllaços útils:</b></p>
+  <p style="margin:8px 0">
+    <a href="https://calculadora.reusrevela.cat/calculadora" style="display:inline-block;background:#1A6B45;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;font-size:14px">Anar a la calculadora →</a>
+  </p>
+  <p style="margin:8px 0">
+    <a href="https://reusrevela.cat/tutorial" style="display:inline-block;background:transparent;color:#1A6B45;text-decoration:none;padding:10px 18px;border:1px solid #1A6B45;border-radius:8px;font-weight:600;font-size:14px">📘 Veure el tutorial</a>
+  </p>
+
+  <p style="font-size:14px;line-height:1.6;margin-top:24px">El tutorial t'explica com fer servir la calculadora, com gestionar pressupostos i què fer si tens problemes per entrar (per exemple, si has d'esborrar les cookies).</p>
+
+  <p style="font-size:14px;line-height:1.6">Si tens cap dubte o problema, respon a aquest correu o escriu-nos a <a href="mailto:reusrevela@gmail.com" style="color:#1A6B45">reusrevela@gmail.com</a>.</p>
+
+  <p style="font-size:14px;line-height:1.6;margin-top:24px">Una salutació,<br><b>Equip Reus Revela</b></p>
+  <p style="font-size:11px;color:#9E9B94;margin-top:24px;border-top:1px solid #E5E2DB;padding-top:12px">Aquest correu s'envia automàticament en activar el teu compte professional.</p>
+</div>
+"""
+    return _send_user_email_html(
+        email,
+        'El teu compte ja està actiu — Reus Revela',
+        html,
+        log_tag='user_activation',
+    )
 
 
 @app.route('/api/public/bridge-login', methods=['POST'])
@@ -2005,7 +2422,7 @@ def public_professional_summary():
             'SELECT id, nom, nom_empresa, profile_type, access_status, '
             'marge, marge_pro_pct, marge_impressio, marge_impressio_pro_pct, '
             'imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6, '
-            'margins_json FROM usuaris WHERE lower(username)=?',
+            'margins_json, baryta_actiu FROM usuaris WHERE lower(username)=?',
             [username],
             one=True,
         )
@@ -2047,6 +2464,7 @@ def public_professional_summary():
             'ok': True,
             'name': user['nom'] or '',
             'business_name': user['nom_empresa'] or '',
+            'is_admin': bool(_row_get(user, 'is_admin', False)),
             'profile_type': _clean_profile_type(user['profile_type']),
             'access_status': _user_access_status(user),
             'recent_quotes': recent_quotes,
@@ -2086,6 +2504,8 @@ def public_professional_summary():
                 float(get_config_value('imp_tram5_marge_default', '50')),
                 float(get_config_value('imp_tram6_marge_default', '45')),
             ],
+            # Activacions per usuari (papers premium amb pricing per trams)
+            'baryta_actiu': bool(_row_get(user, 'baryta_actiu', 0)),
         })
     except Exception as exc:
         print(f'professional-summary error: {exc}')
@@ -2180,12 +2600,293 @@ def public_pricing():
             'tipus': tipus,
         })
 
+    # Papers premium amb pricing per trams (cost·multiplicador segons àrea).
+    # Exposem el cost_cm2 i els trams perquè la web pugui replicar el càlcul
+    # sense haver de fer una crida per cada mida sol·licitada.
+    papers_trams = {}
+    for paper_id in ('baryta',):
+        actiu = get_config_value(f'imp_{paper_id}_trams_actius', '0') == '1'
+        if not actiu:
+            continue
+        trams = []
+        for i in range(1, 7):
+            max_str = get_config_value(f'imp_{paper_id}_t{i}_max', None)
+            mult_str = get_config_value(f'imp_{paper_id}_t{i}_mult', None)
+            if mult_str is None:
+                continue
+            try:
+                mult = float(mult_str)
+            except (TypeError, ValueError):
+                continue
+            try:
+                max_area = float(max_str) if max_str not in (None, '') else None
+            except (TypeError, ValueError):
+                max_area = None
+            trams.append({'max_area': max_area, 'mult': mult})
+        try:
+            cost_cm2 = float(get_config_value(f'imp_{paper_id}_cost_cm2', '0'))
+        except (TypeError, ValueError):
+            cost_cm2 = 0.0
+        papers_trams[paper_id] = {'cost_cm2': cost_cm2, 'trams': trams}
+
     return jsonify({
         'ok': True,
         'impressio': impressio,
         'laminate_only': laminate_only,
         'encolat_pro': encolat_pro,
+        'papers_trams': papers_trams,
     })
+
+
+@app.route('/api/public/impressio-price', methods=['GET'])
+def public_impressio_price():
+    """Retorna el preu d'impressió calculat per a unes dimensions exactes,
+    usant la mateixa lògica híbrida (taula + fórmula) que /api/closest.
+    Autenticació: X-Bridge-Token.
+    Params: w, h (cm), paper (lustre|silk|baryta, default lustre).
+    """
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    w = float(request.args.get('w', 0))
+    h = float(request.args.get('h', 0))
+    paper = (request.args.get('paper') or 'lustre').strip().lower()
+    if paper not in ('lustre', 'silk', 'baryta'):
+        paper = 'lustre'
+    if w <= 0 or h <= 0:
+        return jsonify({'ok': False, 'error': 'w and h must be positive'}), 400
+
+    result = _imp_closest(w, h, paper=paper)
+    if not result:
+        return jsonify({'ok': False, 'error': 'no pricing data available'}), 404
+
+    return jsonify({
+        'ok': True,
+        'ref': result.get('ref', ''),
+        'preu': result.get('preu', 0),
+        'origen': result.get('origen', ''),
+        'area': result.get('area', 0),
+    })
+
+
+@app.route('/api/public/clients-habituals', methods=['GET'])
+def public_clients_habituals():
+    """Llista de clients habituals actius per a consum des de reusrevela-web.
+    Autenticació: X-Bridge-Token."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    rows = query("""
+        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+               u.nom_empresa AS empresa
+        FROM clients_externs c
+        LEFT JOIN usuaris u ON c.usuari_id = u.id
+        WHERE c.actiu = TRUE
+        ORDER BY c.nom
+    """) or []
+    return jsonify({
+        'ok': True,
+        'clients': [
+            {
+                'id': _row_get(r, 'id'),
+                'nom': _row_get(r, 'nom') or '',
+                'nif': _row_get(r, 'nif') or '',
+                'tipus': _row_get(r, 'tipus') or 'pvp',
+                'telefon': _row_get(r, 'telefon') or '',
+                'email': _row_get(r, 'email') or '',
+                'empresa': _row_get(r, 'empresa') or '',
+                'dropbox_url': _row_get(r, 'dropbox_url') or '',
+            }
+            for r in rows
+        ],
+    })
+
+
+def _pro_clients_lookup_user_id(username):
+    """Resol username (case-insensitive) → usuaris.id. Retorna None si no
+    existeix o si l'usuari està bloquejat."""
+    if not username:
+        return None
+    row = query(
+        'SELECT id, access_status FROM usuaris WHERE LOWER(username)=?',
+        [str(username).strip().lower()], one=True
+    )
+    if not row:
+        return None
+    status = _user_access_status(row) if row else ''
+    if status == 'blocked':
+        return None
+    return row['id']
+
+
+def _pro_clients_row_to_dict(row):
+    if not row:
+        return None
+    def _g(key, default=None):
+        try:
+            return row[key]
+        except (KeyError, IndexError, TypeError):
+            return default
+    return {
+        'id': _g('id'),
+        'name': _g('nom') or '',
+        'company': _g('empresa') or '',
+        'email': _g('email') or '',
+        'phone': _g('telefon') or '',
+        'city': _g('poblacio') or '',
+        'notes': _g('notes') or '',
+        'source': _g('source') or 'private_area',
+        'last_order_ref': _g('last_order_ref') or '',
+        'order_count': int(_g('order_count') or 0),
+        'updated_at': str(_g('updated_at') or ''),
+        'created_at': str(_g('created_at') or ''),
+    }
+
+
+@app.route('/api/public/pro-clients/save', methods=['POST'])
+def public_pro_clients_save():
+    """Crea o actualitza un client privat d'un distribuïdor (web → calc).
+
+    Auth: X-Bridge-Token.
+    Body JSON: { username, name, company, email, phone, city, notes,
+                 source, last_order_ref, client_id (opcional per update) }
+    Cal almenys un de {name, email, phone} no buit.
+    Retorna: { ok, client: {...} } o { ok: false, error: <code> }."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    user_id = _pro_clients_lookup_user_id(username)
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    if not (name or email or phone):
+        return jsonify({'ok': False, 'error': 'missing_identity'}), 400
+    if not name:
+        name = email or phone
+
+    company = (data.get('company') or '').strip()
+    city = (data.get('city') or '').strip()
+    notes = (data.get('notes') or '').strip()
+    source = (data.get('source') or 'private_area').strip() or 'private_area'
+    last_order_ref = (data.get('last_order_ref') or '').strip()
+    client_id = (data.get('client_id') or '').strip()
+
+    try:
+        if client_id and str(client_id).isdigit():
+            # Update si pertany a l'usuari (mai d'un altre distribuïdor)
+            existing = query(
+                'SELECT id FROM pro_clients WHERE id=? AND pro_user_id=?',
+                [int(client_id), user_id], one=True
+            )
+            if not existing:
+                return jsonify({'ok': False, 'error': 'client_not_found'}), 404
+            execute(
+                'UPDATE pro_clients SET nom=?, empresa=?, email=?, telefon=?, '
+                'poblacio=?, notes=?, source=?, last_order_ref=?, '
+                'updated_at=CURRENT_TIMESTAMP WHERE id=? AND pro_user_id=?',
+                [name, company, email, phone, city, notes, source, last_order_ref,
+                 int(client_id), user_id]
+            )
+            row = query('SELECT * FROM pro_clients WHERE id=?', [int(client_id)], one=True)
+        else:
+            # Dedup soft: si ja existeix un client del mateix usuari amb el
+            # mateix email (no buit), l'actualitzem en comptes de duplicar.
+            existing = None
+            if email:
+                existing = query(
+                    'SELECT id FROM pro_clients WHERE pro_user_id=? AND LOWER(email)=?',
+                    [user_id, email.lower()], one=True
+                )
+            if existing:
+                execute(
+                    'UPDATE pro_clients SET nom=?, empresa=?, email=?, telefon=?, '
+                    'poblacio=?, notes=?, source=?, last_order_ref=?, '
+                    'updated_at=CURRENT_TIMESTAMP WHERE id=? AND pro_user_id=?',
+                    [name, company, email, phone, city, notes, source, last_order_ref,
+                     existing['id'], user_id]
+                )
+                row = query('SELECT * FROM pro_clients WHERE id=?', [existing['id']], one=True)
+            else:
+                execute(
+                    'INSERT INTO pro_clients (pro_user_id, nom, empresa, email, telefon, '
+                    'poblacio, notes, source, last_order_ref) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [user_id, name, company, email, phone, city, notes, source, last_order_ref]
+                )
+                # Recuperem l'últim del mateix usuari (en PG fariem RETURNING,
+                # però mantenim portabilitat amb SQLite).
+                row = query(
+                    'SELECT * FROM pro_clients WHERE pro_user_id=? '
+                    'ORDER BY id DESC LIMIT 1', [user_id], one=True
+                )
+        return jsonify({'ok': True, 'client': _pro_clients_row_to_dict(row)})
+    except Exception as exc:
+        print(f'pro_clients_save error: {exc}')
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+
+@app.route('/api/public/pro-clients', methods=['GET'])
+def public_pro_clients_list():
+    """Llista els clients privats d'un distribuïdor (ordenats per
+    updated_at DESC). Auth: X-Bridge-Token. Query: ?username=&limit=."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    username = (request.args.get('username') or '').strip()
+    user_id = _pro_clients_lookup_user_id(username)
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    try:
+        limit = int(request.args.get('limit') or 50)
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+
+    rows = query(
+        'SELECT * FROM pro_clients WHERE pro_user_id=? '
+        'ORDER BY updated_at DESC, id DESC LIMIT ?',
+        [user_id, limit]
+    ) or []
+    return jsonify({
+        'ok': True,
+        'clients': [_pro_clients_row_to_dict(r) for r in rows],
+    })
+
+
+@app.route('/api/public/pro-clients/<int:client_id>', methods=['GET'])
+def public_pro_clients_get(client_id):
+    """Obté un client privat (només si pertany al distribuïdor).
+    Auth: X-Bridge-Token. Query: ?username=."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    username = (request.args.get('username') or '').strip()
+    user_id = _pro_clients_lookup_user_id(username)
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'user_not_found'}), 404
+
+    row = query(
+        'SELECT * FROM pro_clients WHERE id=? AND pro_user_id=?',
+        [client_id, user_id], one=True
+    )
+    if not row:
+        return jsonify({'ok': False, 'error': 'client_not_found'}), 404
+    return jsonify({'ok': True, 'client': _pro_clients_row_to_dict(row)})
 
 
 @app.route('/api/public/compute', methods=['GET'])
@@ -2375,7 +3076,23 @@ def calculadora():
             return redirect(url_for('setup'))
     except:
         pass
-    user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    try:
+        user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email FROM usuaris WHERE id=?', [session['user_id']], one=True)
+    except Exception as e:
+        # Si la columna 'email' encara no s'ha migrat, ho intentem aplicar i reintenta;
+        # en cas extrem fem fallback sense email perquè la calculadora no caigui.
+        if 'email' in str(e).lower() and ('does not exist' in str(e).lower() or 'no such column' in str(e).lower()):
+            try:
+                execute("ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+            except Exception:
+                pass
+            try:
+                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email FROM usuaris WHERE id=?', [session['user_id']], one=True)
+            except Exception:
+                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        else:
+            raise
+    user_has_email = bool((_row_get(user, 'email', '') or '').strip())
     brand_color = _normalize_hex_color(_row_get(user, 'brand_color', DEFAULT_BRAND_COLOR))
     marge_pro_actiu = get_config_value('marge_pro_actiu', '1') == '1'
     marge_pro = _get_marge_value(user) if marge_pro_actiu else 0.0
@@ -2404,7 +3121,9 @@ def calculadora():
                            marge_impressio_pro=marge_imp_pro,
                            is_admin=1 if session.get('is_admin') else 0,
                            mr_trams=mr_trams,
-                           mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)))
+                           mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)),
+                           extras=get_extras_list(),
+                           user_has_email=user_has_email)
 
 @app.route('/api/lookup')
 @login_required
@@ -2585,6 +3304,138 @@ def admin_preus_cost():
     cfg = {r['clau']: r['valor'] for r in (query("SELECT clau, valor FROM config") or [])}
     return render_template('admin_preus_cost.html', rows=rows, taula=taula,
                            proveidor=proveidor, verificat=verificat, proveidors=proveidors, stats=stats, config=cfg)
+
+
+@app.route('/admin/auditoria-costos')
+@admin_required
+def admin_auditoria_costos():
+    w = float(request.args.get('w', 60))
+    h = float(request.args.get('h', 80))
+    paper = (request.args.get('paper') or 'lustre').strip().lower()
+    if paper not in ('lustre', 'silk', 'baryta'):
+        paper = 'lustre'
+    moldura_ref = (request.args.get('moldura') or '').strip()
+
+    components = []
+
+    # Marc
+    if moldura_ref:
+        mol = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm, descripcio FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_ref], one=True)
+        if mol:
+            marc_res = calcular_preu_marc(w, h, _row_get(mol, 'gruix', 0), _row_get(mol, 'preu_cost'), _row_get(mol, 'merma_pct', 10), _row_get(mol, 'minim_cm', 100))
+            marge_mol = float(get_config_value('marge_admin_moldures_pct', '60'))
+            components.append({
+                'nom': f'Marc ({moldura_ref})',
+                'preu_cost_unitari': _row_get(mol, 'preu_cost'),
+                'unitat': '€/cm lineal',
+                'cost': marc_res['cost'] if marc_res else 0,
+                'pvd': marc_res['pvd'] if marc_res else 0,
+                'origen': 'taula',
+                'marge_pct': marge_mol,
+                'detall': f"Perímetre={2*(w+h):.0f}cm, gruix={_row_get(mol,'gruix',0)}, merma={_row_get(mol,'merma_pct',10)}%, mínim={_row_get(mol,'minim_cm',100)}cm",
+            })
+
+    # Vidre
+    vidre = calcular_cost_vidre(w, h)
+    marge_v = float(get_config_value('marge_admin_vidres_pct', '60'))
+    components.append({
+        'nom': 'Vidre simple',
+        'cost': vidre['cost'], 'pvd': vidre['pvd'], 'origen': vidre['origen'], 'ref': vidre['ref'],
+        'marge_pct': marge_v,
+        'detall': f"cost_cm2={get_config_value('vidre_cost_cm2','0.002880')}, t_base={get_config_value('vidre_temps_base_min','3')}min, t_lineal={get_config_value('vidre_temps_lineal_m','0.5')}min/m, cost_hora={get_config_value('cost_hora_taller','25')}€/h",
+    })
+
+    # Doble vidre
+    dv = calcular_cost_doble_vidre(w, h)
+    components.append({
+        'nom': 'Doble vidre',
+        'cost': dv['cost'], 'pvd': dv['pvd'], 'origen': dv['origen'], 'ref': dv['ref'],
+        'marge_pct': marge_v,
+        'detall': f"vidre×2 + muntatge ({get_config_value('vidre_dv_muntatge_eur','1.30')}€)",
+    })
+
+    # Passpartú simple
+    pas = calcular_cost_passpartu(w, h, tipus='simple')
+    marge_p = float(get_config_value('marge_admin_passpartu_pct', '60'))
+    components.append({
+        'nom': 'Passpartú simple',
+        'cost': pas['cost'], 'pvd': pas['pvd'], 'origen': pas['origen'], 'ref': pas['ref'],
+        'marge_pct': marge_p,
+        'detall': f"cost_cm2={get_config_value('passpartu_cost_cm2','0.001200')}, t_base={get_config_value('passpartu_temps_base_min','5')}min",
+    })
+
+    # Passpartú doble
+    dpas = calcular_cost_passpartu(w, h, tipus='doble')
+    components.append({
+        'nom': 'Passpartú doble',
+        'cost': dpas['cost'], 'pvd': dpas['pvd'], 'origen': dpas['origen'], 'ref': dpas['ref'],
+        'marge_pct': marge_p,
+        'detall': 'simple×2 + finestres extra',
+    })
+
+    # Foam
+    foam = calcular_cost_foam(w, h)
+    marge_e = float(get_config_value('marge_admin_encolat_pct', '60'))
+    components.append({
+        'nom': 'Foam (encolat)',
+        'cost': foam['cost'], 'pvd': foam['pvd'], 'origen': foam['origen'], 'ref': foam['ref'],
+        'marge_pct': marge_e,
+        'detall': f"foam_cost_cm2={get_config_value('foam_cost_cm2','0.001143')}, t_base={get_config_value('foam_temps_base_min','9')}min",
+    })
+
+    # Laminat
+    lam_semi = calcular_cost_laminat(w, h, tipus='semibrillo')
+    components.append({
+        'nom': 'Laminat semibrillo',
+        'cost': lam_semi['cost'], 'pvd': lam_semi['pvd'], 'origen': lam_semi['origen'], 'ref': lam_semi['ref'],
+        'marge_pct': marge_e,
+        'detall': f"laminat_cost_cm2={get_config_value('laminat_cost_cm2','0.001000')}",
+    })
+
+    # Protter
+    prot = calcular_cost_protter(w, h, tipus='semibrillo')
+    components.append({
+        'nom': 'Protter (foam+laminat)',
+        'cost': prot['cost'], 'pvd': prot['pvd'], 'origen': prot['origen'], 'ref': prot['ref'],
+        'marge_pct': marge_e,
+        'detall': 'foam + laminat combinats',
+    })
+
+    # Impressió
+    imp = _imp_closest(w, h, paper=paper)
+    if imp:
+        components.append({
+            'nom': f'Impressió ({paper})',
+            'cost': imp['preu'], 'pvd': imp['preu'], 'origen': imp['origen'], 'ref': imp.get('ref', ''),
+            'marge_pct': 0,
+            'detall': f"cost_cm2={get_config_value(f'imp_{paper}_cost_cm2', get_config_value('imp_lustre_cost_cm2','0.000703'))}, àrea={w*h:.0f}cm²",
+        })
+
+    # Mirall
+    mir = calcular_cost_mirall(w, h)
+    components.append({
+        'nom': 'Mirall',
+        'cost': mir['cost'], 'pvd': mir['pvd'], 'origen': mir['origen'], 'ref': mir['ref'],
+        'marge_pct': marge_v,
+        'detall': 'Mirall tallat a mida',
+    })
+
+    config_params = {
+        'marge_admin_moldures_pct': get_config_value('marge_admin_moldures_pct', '60'),
+        'marge_admin_vidres_pct': get_config_value('marge_admin_vidres_pct', '60'),
+        'marge_admin_passpartu_pct': get_config_value('marge_admin_passpartu_pct', '60'),
+        'marge_admin_encolat_pct': get_config_value('marge_admin_encolat_pct', '60'),
+        'vidre_cost_cm2': get_config_value('vidre_cost_cm2', '0.002880'),
+        'foam_cost_cm2': get_config_value('foam_cost_cm2', '0.001143'),
+        'laminat_cost_cm2': get_config_value('laminat_cost_cm2', '0.001000'),
+        'passpartu_cost_cm2': get_config_value('passpartu_cost_cm2', '0.001200'),
+        'imp_lustre_cost_cm2': get_config_value('imp_lustre_cost_cm2', '0.000703'),
+        'cost_hora_taller': get_config_value('cost_hora_taller', '25'),
+    }
+
+    return render_template('admin_auditoria_costos.html',
+                           w=w, h=h, paper=paper, moldura_ref=moldura_ref,
+                           components=components, config=config_params)
 
 
 @app.route('/admin/preus-cost/update', methods=['POST'])
@@ -2972,6 +3823,7 @@ def desar_marge():
     fi = d.get('fiscal_id', '')
     ea = d.get('empresa_adreca', '')
     et = d.get('empresa_tel', '')
+    em = (d.get('email', '') or '').strip()
     brand_color = _normalize_hex_color(d.get('brand_color', DEFAULT_BRAND_COLOR))
     brand_color_secondary = _normalize_hex_color(
         d.get('brand_color_secondary', DEFAULT_BRAND_SECONDARY_COLOR),
@@ -2987,7 +3839,7 @@ def desar_marge():
         print_margin=mi,
     )
     execute(
-        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, nom_fiscal=?, fiscal_id=?, empresa_adreca=?, empresa_tel=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
+        'UPDATE usuaris SET marge=?, marge_impressio=?, nom_empresa=?, nom_fiscal=?, fiscal_id=?, empresa_adreca=?, empresa_tel=?, email=?, margins_json=?, brand_color=?, brand_color_secondary=?, brand_color_menu=? WHERE id=?',
         [
             margins['frames'],
             margins['prints'],
@@ -2996,6 +3848,7 @@ def desar_marge():
             fi,
             ea,
             et,
+            em,
             json.dumps(margins, ensure_ascii=True),
             brand_color,
             brand_color_secondary,
@@ -3037,6 +3890,12 @@ def guardar():
     cost_unitari = None
 
     # Common field values
+    # client_extern_id: opcional. Si arriba, normalitzem a int o None.
+    try:
+        client_extern_id = int(d.get('client_extern_id') or 0) or None
+    except (TypeError, ValueError):
+        client_extern_id = None
+
     vals_comuns = [
         d.get('client_nom',''), d.get('client_tel',''),
         d.get('pre_marc',''), d.get('marc_principal',''),
@@ -3052,6 +3911,7 @@ def guardar():
         d.get('entrega',0), d.get('pendent',0),
         d.get('observacions',''), d.get('opcio_nom','Opció A'), d.get('lang','ca'),
         cost_unitari, pvd_unitari, marge_pro_snap,
+        client_extern_id,
     ]
 
     if comanda_id:
@@ -3068,7 +3928,8 @@ def guardar():
                 marge=?, descompte=?, quantitat=?,
                 preu_net=?, preu_final=?, cost_produccio=?,
                 entrega=?, pendent=?, observacions=?, opcio_nom=?, lang=?,
-                cost_unitari=?, pvd_unitari=?, marge_pro_snap=?
+                cost_unitari=?, pvd_unitari=?, marge_pro_snap=?,
+                client_extern_id=?
                 WHERE id=? AND user_id=?''',
                 vals_comuns + [comanda_id, session['user_id']])
             return jsonify({'ok': True, 'id': existing['id'],
@@ -3087,11 +3948,11 @@ def guardar():
          marge, descompte, quantitat,
          preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
          sessio_id, opcio_nom, num_pressupost, lang,
-         cost_unitari, pvd_unitari, marge_pro_snap)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+         cost_unitari, pvd_unitari, marge_pro_snap, client_extern_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
         [session['user_id'], datetime.now().strftime('%d/%m/%Y %H:%M')] +
         vals_comuns[:27] + [sessio_id] + [vals_comuns[27]] + [num_pressupost] + [vals_comuns[28]] +
-        vals_comuns[29:32]
+        vals_comuns[29:32] + [vals_comuns[32]]
     )
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
@@ -3254,7 +4115,7 @@ def admin_lab_send(cid):
             encoders.encode_base64(part)
             part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
             msg.attach(part)
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
                 s.login(gmail_user, gmail_pass)
                 s.sendmail(gmail_user, [dest], msg.as_string())
         except Exception as e:
@@ -3305,6 +4166,150 @@ def cataleg():
                            color_filters=MOLDURA_COLOR_FILTERS,
                            gruix_filters=MOLDURA_GRUIX_FILTERS)
 
+@app.route('/admin/ensure-clients-externs')
+@admin_required
+def admin_ensure_clients_externs():
+    """Emergència: crea/posa al dia la taula clients_externs + índexs + FK
+    a comandes. Pensat per quan run-migrations es queda penjat i el panell
+    /admin/clients-externs torna 500.
+
+    Versió defensiva: cada sentència s'executa amb el seu propi commit/
+    rollback explícit, sense lock_timeout (que en alguns casos enverina la
+    connexió quan una ALTER triga més del previst). Si tot peta, retorna
+    igualment HTML amb el traceback per poder diagnosticar."""
+    import traceback
+    resultats = []
+    try:
+        db = get_db()
+    except Exception:
+        return ("<h2>clients_externs</h2><pre>get_db() failed:\n"
+                + traceback.format_exc() + "</pre>"), 500
+
+    sentencies = [
+        """CREATE TABLE IF NOT EXISTS clients_externs (
+            id SERIAL PRIMARY KEY,
+            nom VARCHAR(255) NOT NULL,
+            nif VARCHAR(30),
+            fd_contact_id VARCHAR(100) NOT NULL UNIQUE,
+            actiu BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        # Columnes afegides posteriorment a la taula original. El panell
+        # /admin/clients-externs fa SELECT d'aquestes columnes, així que la
+        # taula creada abans amb només el CREATE TABLE de dalt provoca un
+        # error "column does not exist" (HTTP 500). Aquestes ALTERs són
+        # IF NOT EXISTS, per tant idempotents.
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS tipus VARCHAR(20) DEFAULT 'pvp'",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+        "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
+    ]
+    for sql in sentencies:
+        try:
+            execute(sql)
+            try:
+                db.commit()
+            except Exception:
+                pass
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            # Important: fer rollback per sortir de l'estat "transaction
+            # aborted" que deixa Postgres després d'una sentència fallida.
+            # Sense això, totes les sentències següents també fallarien.
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP: {sql[:80].strip()}… — {type(e).__name__}: {str(e)[:200]}")
+    return "<h2>clients_externs</h2><pre>" + "\n".join(resultats) + "</pre>"
+
+
+@app.route('/admin/clients-externs-debug')
+@admin_required
+def admin_clients_externs_debug():
+    """Diagnòstic: llista columnes actuals i nombre de files de
+    clients_externs. Útil quan /admin/clients-externs encara peta després
+    d'executar /admin/ensure-clients-externs."""
+    import traceback
+    try:
+        if USE_PG:
+            cols = query("""
+                SELECT column_name, data_type, is_nullable, column_default
+                FROM information_schema.columns
+                WHERE table_name = 'clients_externs'
+                ORDER BY ordinal_position
+            """) or []
+        else:
+            cols = query("PRAGMA table_info(clients_externs)") or []
+        try:
+            count_row = query("SELECT COUNT(*) AS n FROM clients_externs", one=True)
+            count = count_row['n'] if count_row else 0
+        except Exception as e:
+            count = f"(no es pot comptar: {e})"
+        lines = [f"Files: {count}", "", "Columnes:"]
+        for c in cols:
+            lines.append(f"  - {dict(c)}")
+        return "<h2>clients_externs (debug)</h2><pre>" + "\n".join(lines) + "</pre>"
+    except Exception:
+        return ("<h2>clients_externs (debug)</h2><pre>ERROR:\n"
+                + traceback.format_exc() + "</pre>"), 500
+
+
+@app.route('/admin/ensure-pro-clients')
+@admin_required
+def admin_ensure_pro_clients():
+    """Emergència: només crea la taula pro_clients + índexs, sense passar
+    pel loop sencer de /admin/run-migrations. Pensat per al moment del
+    rollout de la unificació de clients web↔calc."""
+    resultats = []
+    db = get_db()
+    if USE_PG:
+        try:
+            execute("SET lock_timeout = '3000ms'")
+            db.commit()
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            resultats.append(f"SKIP lock_timeout: {str(e)[:120]}")
+    sentencies = [
+        """CREATE TABLE IF NOT EXISTS pro_clients (
+            id SERIAL PRIMARY KEY,
+            pro_user_id INTEGER NOT NULL,
+            nom VARCHAR(255) NOT NULL,
+            empresa VARCHAR(255),
+            email VARCHAR(255),
+            telefon VARCHAR(50),
+            poblacio VARCHAR(120),
+            notes TEXT,
+            source VARCHAR(50) DEFAULT 'private_area',
+            last_order_ref VARCHAR(120),
+            order_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user ON pro_clients(pro_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_email ON pro_clients(pro_user_id, email)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_updated ON pro_clients(pro_user_id, updated_at DESC)",
+    ]
+    for sql in sentencies:
+        try:
+            execute(sql)
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            try: db.rollback()
+            except Exception: pass
+            resultats.append(f"SKIP: {str(e)[:120]}")
+    return "<h2>pro_clients</h2><pre>" + "\n".join(resultats) + "</pre>"
+
+
 @app.route('/admin/run-migrations')
 @admin_required
 def admin_run_migrations():
@@ -3336,6 +4341,22 @@ def admin_run_migrations():
     resultats = []
     db = get_db()
 
+    # PG: si una ALTER queda esperant un lock (autovacuum, transaccions
+    # llargues, etc.) cau ràpid (3s) en lloc de drenar el statement_timeout
+    # complet. Sense això, 3 ALTERs blocades poden esgotar el budget de
+    # gunicorn i deixar el loop a mig fer (i.e. amb taules noves sense crear).
+    if USE_PG:
+        try:
+            execute("SET lock_timeout = '3000ms'")
+            db.commit()
+            resultats.append("OK: lock_timeout=3s")
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP lock_timeout: {str(e)[:120]}")
+
     # 1) init_db() (CREATE TABLE + ALTER + seeds lleugers)
     try:
         init_db()
@@ -3346,6 +4367,113 @@ def admin_run_migrations():
         except Exception:
             pass
         resultats.append(f"SKIP init_db(): {str(e)[:120]}")
+
+    # Pas A: CREATE TABLE / CREATE INDEX primer. Aquestes operacions són
+    # ràpides (taules buides o ja existents amb IF NOT EXISTS) i no requereixen
+    # un ACCESS EXCLUSIVE lock sobre taules grans existents, per tant no es
+    # queden bloquejades. Les fem ABANS que les ALTERs perquè si una ALTER
+    # esgota el budget de gunicorn, almenys les taules noves ja existeixen.
+    creates_primers = [
+        # Historial de preus de cost
+        """CREATE TABLE IF NOT EXISTS historial_preus_cost (
+            id SERIAL PRIMARY KEY,
+            taula VARCHAR(50) NOT NULL,
+            referencia VARCHAR(50) NOT NULL,
+            preu_cost_antic DECIMAL(8,4) NOT NULL,
+            preu_cost_nou DECIMAL(8,4) NOT NULL,
+            data TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            usuari_id INTEGER NOT NULL,
+            notes TEXT
+        )""",
+        # Historial d'enviaments a laboratori (impressió fotogràfica)
+        """CREATE TABLE IF NOT EXISTS lab_sends (
+            id SERIAL PRIMARY KEY,
+            comanda_id INTEGER NOT NULL,
+            canal VARCHAR(20) NOT NULL,
+            destinacio TEXT,
+            filename TEXT,
+            mida_kb INTEGER,
+            ok INTEGER DEFAULT 0,
+            error TEXT,
+            link TEXT,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER
+        )""",
+        # Audit log (accions d'admin sobre comptes d'usuari)
+        """CREATE TABLE IF NOT EXISTS audit_log (
+            id SERIAL PRIMARY KEY,
+            actor_user_id INTEGER NOT NULL,
+            actor_username VARCHAR(120),
+            target_user_id INTEGER,
+            target_username VARCHAR(120),
+            action VARCHAR(60) NOT NULL,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        # Clients externs (no usuaris de la plataforma) per a albarans ràpids.
+        # fd_contact_id cached perquè saltem la cerca de FD a cada albarà.
+        # tipus: 'taller' (preu taller) o 'pvp' (tarifa PVP).
+        """CREATE TABLE IF NOT EXISTS clients_externs (
+            id SERIAL PRIMARY KEY,
+            nom VARCHAR(255) NOT NULL,
+            nif VARCHAR(30),
+            fd_contact_id VARCHAR(100) UNIQUE,
+            tipus VARCHAR(20) DEFAULT 'pvp',
+            telefon VARCHAR(50),
+            email VARCHAR(255),
+            actiu BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        # ALTER abans dels índexs: la primera vegada que s'executa això sobre
+        # una taula vella (creada amb /admin/ensure-clients-externs), la
+        # columna `tipus` encara no existeix, així que el seu CREATE INDEX
+        # fallaria si anés primer.
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS tipus VARCHAR(20) DEFAULT 'pvp'",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+        "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
+        "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
+        # FK a comandes (nul·lable: les comandes existents queden a NULL).
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
+        # Clients privats dels distribuïdors (els seus clients finals).
+        # Separats de clients_externs, que és la llista del laboratori per a
+        # albarans FD. Cada distribuïdor (pro_user_id) té els seus, no es
+        # comparteixen entre distribuïdors.
+        """CREATE TABLE IF NOT EXISTS pro_clients (
+            id SERIAL PRIMARY KEY,
+            pro_user_id INTEGER NOT NULL,
+            nom VARCHAR(255) NOT NULL,
+            empresa VARCHAR(255),
+            email VARCHAR(255),
+            telefon VARCHAR(50),
+            poblacio VARCHAR(120),
+            notes TEXT,
+            source VARCHAR(50) DEFAULT 'private_area',
+            last_order_ref VARCHAR(120),
+            order_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user ON pro_clients(pro_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_email ON pro_clients(pro_user_id, email)",
+        "CREATE INDEX IF NOT EXISTS idx_pro_clients_user_updated ON pro_clients(pro_user_id, updated_at DESC)",
+    ]
+    for sql in creates_primers:
+        try:
+            execute(sql)
+            resultats.append(f"OK: {sql[:80].strip()}…")
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            resultats.append(f"SKIP: {str(e)[:120]}")
 
     alteracions = [
         # Moldures
@@ -3395,43 +4523,11 @@ def admin_run_migrations():
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram4 REAL",
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram5 REAL",
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS imp_tram6 REAL",
-        # Historial de preus de cost — noms de columna alineats amb el codi
-        # existent (taula, preu_cost_antic, data, notes).
-        """CREATE TABLE IF NOT EXISTS historial_preus_cost (
-            id SERIAL PRIMARY KEY,
-            taula VARCHAR(50) NOT NULL,
-            referencia VARCHAR(50) NOT NULL,
-            preu_cost_antic DECIMAL(8,4) NOT NULL,
-            preu_cost_nou DECIMAL(8,4) NOT NULL,
-            data TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            usuari_id INTEGER NOT NULL,
-            notes TEXT
-        )""",
-        # Historial d'enviaments a laboratori (impressió fotogràfica)
-        """CREATE TABLE IF NOT EXISTS lab_sends (
-            id SERIAL PRIMARY KEY,
-            comanda_id INTEGER NOT NULL,
-            canal VARCHAR(20) NOT NULL,
-            destinacio TEXT,
-            filename TEXT,
-            mida_kb INTEGER,
-            ok INTEGER DEFAULT 0,
-            error TEXT,
-            link TEXT,
-            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            user_id INTEGER
-        )""",
-        # Audit log (accions d'admin sobre comptes d'usuari)
-        """CREATE TABLE IF NOT EXISTS audit_log (
-            id SERIAL PRIMARY KEY,
-            actor_user_id INTEGER NOT NULL,
-            actor_username VARCHAR(120),
-            target_user_id INTEGER,
-            target_username VARCHAR(120),
-            action VARCHAR(60) NOT NULL,
-            details TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""",
+        # NOTA: les CREATE TABLE / CREATE INDEX d'historial_preus_cost, lab_sends,
+        # audit_log, clients_externs i les seves dependències (comandes.client_extern_id)
+        # ara s'executen a `creates_primers` ABANS d'aquest bloc — així no es
+        # bloquegen mai darrere d'ALTERs lentes.
+
         # Migració de l'antic límit del tram 4 (7500 cm² → 6000 cm²).
         # Només actua si el valor és exactament '7500' per no sobreescriure
         # personalitzacions explícites. Idempotent.
@@ -3451,6 +4547,32 @@ def admin_run_migrations():
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_suport', '3')",
         # Mínim de subtotal PVP perquè s'apliqui el descompte combo (€).
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_minim_pvp', '80')",
+        # MO de muntatge del doble vidre en € (substitueix l'antic
+        # vidre_dv_muntatge_min, que queda inutilitzat).
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('vidre_dv_muntatge_eur', '1.30')",
+        # ── Paper Hahnemühle Photo Rag Baryta ────────────────────────
+        # Sistema de marge per trams (en lloc de marge admin fix). El
+        # helper _imp_closest detecta el flag imp_{paper}_trams_actius i,
+        # si està a '1', salta la lògica de taula i aplica el múltiple
+        # del tram corresponent. Cost real del paper (HM8152) + tinta.
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_cost_cm2', '0.005351')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_trams_actius', '1')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t1_max', '300')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t1_mult', '9.5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t2_max', '900')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t2_mult', '6.5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t3_max', '2000')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t3_mult', '4.3')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t4_max', '4000')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t4_mult', '3.5')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t5_max', '8000')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t5_mult', '3.2')",
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('imp_baryta_t6_mult', '3.1')",
+        # Flag per usuari: cada distribuïdor habilita el Baryta manualment.
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS baryta_actiu BOOLEAN DEFAULT FALSE",
+        # Email de contacte (separat de username, que pot ser un alies o email
+        # de login). El welcome email s'envia aquí si està informat.
+        "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''",
     ]
 
     resultats = []
@@ -4613,127 +5735,6 @@ def admin_marcar_descatalogades():
     return '<br>'.join(out)
 
 
-@app.route('/admin/db-status')
-def admin_db_status():
-    """TEMPORAL: diagnòstic complet de l'estat de la BD.
-
-    Accés permès si es compleix qualsevol de les dues condicions:
-      1. Sessió d'admin al cookie (funcionament normal).
-      2. Paràmetre ?token=<valor> que coincideixi amb l'env var DB_STATUS_TOKEN.
-
-    La via 2 existeix per poder usar la ruta quan l'auth o la BD estan
-    trencades. Configura DB_STATUS_TOKEN a Railway i visita-la així:
-        /admin/db-status?token=<valor>
-
-    Si DB_STATUS_TOKEN no està definida, només serveix via admin session.
-    Eliminar aquesta ruta un cop la BD estigui estable."""
-    token_env = (os.environ.get('DB_STATUS_TOKEN') or '').strip()
-    token_req = (request.args.get('token') or '').strip()
-    is_admin  = bool(session.get('is_admin'))
-    token_ok  = bool(token_env) and hmac.compare_digest(token_env, token_req)
-    if not (is_admin or token_ok):
-        return 'No autoritzat', 403
-
-    import traceback
-    try:
-        result = {}
-
-        if USE_PG:
-            taules_sql = (
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema='public' ORDER BY table_name"
-            )
-        else:
-            taules_sql = (
-                "SELECT name AS table_name FROM sqlite_master "
-                "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )
-        taules_rows = query(taules_sql) or []
-        result['taules'] = [r['table_name'] for r in taules_rows]
-
-        # Comptar files per taula (protegit per si alguna fa error)
-        counts = {}
-        for t in result['taules']:
-            try:
-                r = query(f"SELECT COUNT(*) AS n FROM {t}", one=True)
-                counts[t] = r['n'] if r else 0
-            except Exception as e:
-                counts[t] = f'error: {str(e)[:60]}'
-        result['counts'] = counts
-
-        def _cols(taula):
-            if USE_PG:
-                rows = query(
-                    "SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_name=%s ORDER BY ordinal_position",
-                    [taula],
-                ) or []
-                return [{'nom': r['column_name'], 'tipus': r['data_type']} for r in rows]
-            else:
-                rows = query(f'PRAGMA table_info({taula})') or []
-                return [{'nom': r['name'], 'tipus': r['type']} for r in rows]
-
-        result['usuaris_columnes']  = _cols('usuaris')
-        result['moldures_columnes'] = _cols('moldures')
-        result['comandes_columnes'] = _cols('comandes')
-        result['historial_columnes'] = _cols('historial_preus_cost')
-
-        try:
-            result['usuaris_mostra'] = query(
-                'SELECT id, username, nom, is_admin, marge, '
-                'marge_pro_pct, marge_impressio_pro_pct FROM usuaris LIMIT 3'
-            ) or []
-        except Exception as e:
-            result['usuaris_mostra'] = f'error: {str(e)[:120]}'
-
-        try:
-            cfg_rows = query(
-                "SELECT clau, valor FROM config WHERE clau IN ("
-                "'marge_pro_actiu','marge_defecte','migration_v2_done',"
-                "'marge_admin_moldures_pct','cost_hora_taller')"
-            ) or []
-            result['config'] = {r['clau']: r['valor'] for r in cfg_rows}
-        except Exception as e:
-            result['config'] = f'error: {str(e)[:120]}'
-
-        result['use_pg'] = USE_PG
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
-
-
-@app.route('/admin/debug-fotos')
-@admin_required
-def admin_debug_fotos():
-    """Mostra per a cada motllura: referencia, ref2, foto resolta i si existeix el fitxer."""
-    rows = query('SELECT referencia, ref2, foto, proveidor FROM moldures ORDER BY referencia')
-    out = []
-    for r in (rows or []):
-        ref  = _row_get(r, 'referencia', '') or ''
-        ref2 = _row_get(r, 'ref2', '') or ''
-        foto = _row_get(r, 'foto', '') or ''
-        prov = _row_get(r, 'proveidor', '') or ''
-        resolved = _resolve_moldura_photo(ref, foto, ref2=ref2)
-        out.append({'ref': ref, 'ref2': ref2, 'proveidor': prov,
-                    'foto_db': foto, 'foto_resolta': resolved})
-    # Return as plain text table for easy reading
-    lines = ['referencia | ref2 | proveidor | foto_resolta']
-    lines.append('-' * 80)
-    no_foto = []
-    for o in out:
-        if o['foto_resolta']:
-            lines.append(f"OK  {o['ref']:<25} ref2={o['ref2']:<20} -> {o['foto_resolta']}")
-        else:
-            no_foto.append(o)
-    lines.append('')
-    lines.append(f'--- SENSE FOTO ({len(no_foto)}) ---')
-    for o in no_foto:
-        lines.append(f"    {o['ref']:<25} ref2={o['ref2']:<20} prov={o['proveidor']}")
-    lines.append('')
-    lines.append(f'Total: {len(out)} motllures, amb foto: {len(out)-len(no_foto)}, sense: {len(no_foto)}')
-    return '<pre>' + '\n'.join(lines) + '</pre>'
-
-
 @app.route('/admin/cataleg')
 @admin_required
 def admin_cataleg():
@@ -4962,8 +5963,14 @@ def historial():
     filtre_uid = int(filtre_uid_raw) if filtre_uid_raw.isdigit() else None
     filtre_all  = filtre_uid_raw == 'all'
     filtre_albara = request.args.get('albara') == 'pendent'
+    filtre_client_raw = request.args.get('client', '').strip()
+    filtre_client = int(filtre_client_raw) if filtre_client_raw.isdigit() else None
     if session.get('is_admin'):
-        if filtre_albara:
+        if filtre_client:
+            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                               JOIN usuaris u ON c.user_id=u.id
+                               WHERE c.client_extern_id=? ORDER BY c.id DESC''', [filtre_client])
+        elif filtre_albara:
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.observacions LIKE '%[ACCEPTAT]%'
@@ -4978,18 +5985,19 @@ def historial():
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         else:
-            # Per defecte l'admin veu les seves pròpies comandes
             filtre_uid = session['user_id']
             comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         usuaris_list = query('SELECT id, nom, username FROM usuaris WHERE is_admin=0 ORDER BY nom')
+        clients_habituals = query('SELECT id, nom, tipus FROM clients_externs WHERE actiu=TRUE ORDER BY nom') or []
         n_pendents_albara = query('''SELECT COUNT(*) as n FROM comandes
                                     WHERE observacions LIKE '%[ACCEPTAT]%'
                                       AND (fd_albara IS NULL OR fd_albara='')''', one=True)
         n_pendents_albara = n_pendents_albara['n'] if n_pendents_albara else 0
     else:
         usuaris_list = []
+        clients_habituals = []
         comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                            JOIN usuaris u ON c.user_id=u.id
                            WHERE c.user_id=? ORDER BY c.id DESC''', [session['user_id']])
@@ -5006,10 +6014,16 @@ def historial():
     for grp in sessio_list:
         grp[0]['pagat']    = any(op.get('pagat')    for op in grp)
         grp[0]['entregat'] = any(op.get('entregat') for op in grp)
+    filtre_client_nom = ''
+    if filtre_client:
+        _fc = query('SELECT nom FROM clients_externs WHERE id=?', [filtre_client], one=True)
+        filtre_client_nom = _row_get(_fc, 'nom', '') if _fc else ''
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
                            usuaris_list=usuaris_list if session.get('is_admin') else [],
+                           clients_habituals=clients_habituals if session.get('is_admin') else [],
                            filtre_uid=filtre_uid, filtre_all=filtre_all if session.get('is_admin') else False,
                            filtre_albara=filtre_albara if session.get('is_admin') else False,
+                           filtre_client=filtre_client, filtre_client_nom=filtre_client_nom,
                            n_pendents_albara=n_pendents_albara if session.get('is_admin') else 0,
                            web_return_url=_current_web_return_url())
 
@@ -5033,7 +6047,8 @@ def generar_pdf(comanda_id):
     if not c: return 'No trobat', 404
     if not session.get('is_admin') and c['user_id'] != session['user_id']:
         return 'No autoritzat', 403
-    pdf = crear_pdf(dict(c))
+    mode = (request.args.get('mode') or '').strip().lower()
+    pdf = crear_pdf(dict(c), mode=mode)
     return send_file(pdf, mimetype='application/pdf',
                      download_name=f"pressupost_{c['client_nom']}_{comanda_id}.pdf")
 
@@ -5071,12 +6086,29 @@ def admin_usuaris():
     professional i NO arriben a la UI d'admin. Cada pro els gestiona des de
     /ajustos. Els trams d'impressió (imp_tram1..6) sí es mostren aquí per a
     onboarding/suport però queden traçats al audit log si l'admin els toca."""
-    usuaris = query("""
+    # Si la columna 'email' encara no s'ha migrat (cal visitar
+    # /admin/run-migrations després del deploy), provem un ALTER idempotent
+    # i tornem a llegir. Així evitem el 500 i recuperem la pàgina sol.
+    base_sql = """
         SELECT id, username, nom, nom_empresa, profile_type, access_status,
                web_url, instagram, fiscal_id, notes_validacio, is_admin,
-               imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6
+               imp_tram1, imp_tram2, imp_tram3, imp_tram4, imp_tram5, imp_tram6,
+               baryta_actiu, email
         FROM usuaris ORDER BY nom
-    """)
+    """
+    try:
+        usuaris = query(base_sql)
+    except Exception as e:
+        if 'email' in str(e).lower() and ('does not exist' in str(e).lower() or 'no such column' in str(e).lower()):
+            try:
+                execute("ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+                usuaris = query(base_sql)
+                flash("S'ha afegit la columna 'email' automàticament. Si veus altres problemes, executa /admin/run-migrations.", 'ok')
+            except Exception as e2:
+                flash(f"Cal aplicar migracions: visita /admin/run-migrations. Detall: {e2}", 'error')
+                usuaris = query(base_sql.replace(", email", ""))
+        else:
+            raise
     # Defaults globals per als placeholders
     imp_defaults = {
         f'tram{i}': float(get_config_value(f'imp_tram{i}_marge_default', '0'))
@@ -5090,17 +6122,34 @@ def admin_usuaris():
 def admin_usuari():
     action = request.form.get('action')
     if action == 'crear':
-        execute('INSERT INTO usuaris (username, password, nom, is_admin, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                [request.form['username'], hash_pw(request.form['password']),
-                 request.form['nom'], int(request.form.get('is_admin', 0)),
-                 request.form.get('access_status', 'active'),
-                 request.form.get('profile_type', 'professional'),
-                 request.form.get('web_url', '').strip(),
-                 request.form.get('instagram', '').strip(),
-                 request.form.get('fiscal_id', '').strip(),
-                 request.form.get('notes_validacio', '').strip()])
-        _audit_log('user.create', target_username=request.form.get('username', ''),
-                   details=f"nom={request.form.get('nom','')} is_admin={request.form.get('is_admin','0')}")
+        username = (request.form.get('username') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        # Pre-check de duplicat per donar missatge net (en comptes d'esperar al
+        # UniqueViolation de Postgres / IntegrityError de SQLite).
+        if username and query('SELECT 1 FROM usuaris WHERE LOWER(username)=LOWER(?)', [username], one=True):
+            flash(f"Ja existeix un usuari amb username '{username}'. Tria'n un altre o edita l'existent.", 'error')
+            return redirect(url_for('admin_usuaris'))
+        try:
+            execute('INSERT INTO usuaris (username, password, nom, is_admin, access_status, profile_type, web_url, instagram, fiscal_id, notes_validacio, email) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                    [username, hash_pw(request.form['password']),
+                     request.form['nom'], int(request.form.get('is_admin', 0)),
+                     request.form.get('access_status', 'active'),
+                     request.form.get('profile_type', 'professional'),
+                     request.form.get('web_url', '').strip(),
+                     request.form.get('instagram', '').strip(),
+                     request.form.get('fiscal_id', '').strip(),
+                     request.form.get('notes_validacio', '').strip(),
+                     email])
+        except Exception as e:
+            # Race condition o constraint inesperat — convertim en flash net.
+            msg = str(e).lower()
+            if 'unique' in msg or 'duplicate' in msg:
+                flash(f"Ja existeix un usuari amb username '{username}'.", 'error')
+            else:
+                flash(f"No s'ha pogut crear l'usuari: {e}", 'error')
+            return redirect(url_for('admin_usuaris'))
+        _audit_log('user.create', target_username=username,
+                   details=f"nom={request.form.get('nom','')} is_admin={request.form.get('is_admin','0')} email={email}")
         flash(f"Usuari '{request.form['nom']}' creat.", 'ok')
     elif action == 'eliminar':
         uid = request.form['uid']
@@ -5117,11 +6166,86 @@ def admin_usuari():
         _audit_log('user.password_change', target_user_id=int(uid) if str(uid).isdigit() else None,
                    target_username=_row_get(target, 'username', '') if target else '')
         flash('Contrasenya actualitzada.', 'ok')
+    elif action == 'actualitzar_email':
+        uid = request.form['uid']
+        nou_email = (request.form.get('email') or '').strip()
+        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
+        if not target:
+            flash('Usuari no trobat.', 'error')
+        elif nou_email and '@' not in nou_email:
+            flash(f"L'adreça «{nou_email}» no sembla un email vàlid.", 'error')
+        else:
+            execute('UPDATE usuaris SET email=? WHERE id=?', [nou_email, uid])
+            _audit_log('user.email_change',
+                       target_user_id=int(uid) if str(uid).isdigit() else None,
+                       target_username=_row_get(target, 'username', '') if target else '',
+                       details=f"new_email={nou_email or '(buit)'}")
+            if nou_email:
+                flash(f"Email actualitzat a «{nou_email}».", 'ok')
+            else:
+                flash("Email esborrat (el Welcome farà fallback al username si és vàlid).", 'ok')
+    elif action == 'send_welcome':
+        # Genera una contrasenya nova, la desa hashed i envia un mail al
+        # professional amb les dades d'accés + mini tutorial de la calculadora.
+        # IMPORTANT: si Gmail no està configurat, NO toquem la contrasenya
+        # (per no deixar l'usuari sense accés sense rebre el mail).
+        uid = request.form['uid']
+        target = query('SELECT username, nom, email FROM usuaris WHERE id=?', [uid], one=True)
+        if not target:
+            flash('Usuari no trobat.', 'error')
+        else:
+            username = _row_get(target, 'username', '') or ''
+            nom = _row_get(target, 'nom', '') or ''
+            stored_email = (_row_get(target, 'email', '') or '').strip()
+            # Destinatari: el camp email té prioritat; si no, fem servir username
+            # (assumim que és un email vàlid, com a fallback per a usuaris antics).
+            to_addr = stored_email if '@' in stored_email else username
+            if '@' not in to_addr:
+                flash(f"L'usuari «{nom or username}» no té cap email vàlid (ni al camp email ni al username). Edita'l abans d'enviar la benvinguda.", 'error')
+            elif not _email_is_configured():
+                flash("Cap proveïdor d'email està configurat. Posa el resend_api_key (recomanat) o gmail_user/gmail_pass a /admin/config abans de fer servir 'Welcome'. La contrasenya NO s'ha tocat.", 'error')
+            else:
+                new_pw = _generate_temp_password(12)
+                sent = _send_welcome_email(username, new_pw, nom, to_addr=to_addr)
+                if sent:
+                    # Només rotem la contrasenya quan el mail ha sortit OK.
+                    execute('UPDATE usuaris SET password=? WHERE id=?', [hash_pw(new_pw), uid])
+                    _audit_log('user.welcome_email_sent',
+                               target_user_id=int(uid) if str(uid).isdigit() else None,
+                               target_username=username,
+                               details='sent=yes')
+                    flash(f"Mail de benvinguda enviat a {username} amb contrasenya nova.", 'ok')
+                else:
+                    _audit_log('user.welcome_email_sent',
+                               target_user_id=int(uid) if str(uid).isdigit() else None,
+                               target_username=username,
+                               details='sent=no (gmail send failed, password kept)')
+                    flash(f"No s'ha pogut enviar el mail a {username}. La contrasenya antiga es conserva. Comprova els logs i la config Gmail.", 'error')
     elif action == 'actualitzar_estat':
         uid = request.form['uid']
-        target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
+        # Llegim l'estat actual i les dades de l'usuari ABANS de l'UPDATE
+        # per detectar la transició a 'active' i poder enviar email amb la
+        # contrasenya regenerada al usuari.
+        target = query(
+            'SELECT username, nom, access_status FROM usuaris WHERE id=?',
+            [uid], one=True,
+        )
+        old_status = _user_access_status(target) if target else ''
+        new_status = request.form.get('access_status', 'active') or 'active'
+
+        # Si l'estat passa a 'active' venint de no-actiu, regenerem la
+        # contrasenya i la inclourem a l'email d'activació. Si ja era
+        # actiu, no toquem la contrasenya (poden estar editant altres
+        # camps del perfil).
+        notify_activation = (new_status == 'active' and old_status != 'active')
+        new_temp_password = None
+        if notify_activation:
+            new_temp_password = secrets.token_urlsafe(12)
+            execute('UPDATE usuaris SET password=? WHERE id=?',
+                    [hash_pw(new_temp_password), uid])
+
         execute('UPDATE usuaris SET access_status=?, profile_type=?, web_url=?, instagram=?, fiscal_id=?, notes_validacio=? WHERE id=?',
-                [request.form.get('access_status', 'active'),
+                [new_status,
                  request.form.get('profile_type', 'professional'),
                  request.form.get('web_url', '').strip(),
                  request.form.get('instagram', '').strip(),
@@ -5130,8 +6254,16 @@ def admin_usuari():
                  uid])
         _audit_log('user.profile_update', target_user_id=int(uid) if str(uid).isdigit() else None,
                    target_username=_row_get(target, 'username', '') if target else '',
-                   details=f"status={request.form.get('access_status','active')} profile={request.form.get('profile_type','professional')}")
-        flash('Perfil professional actualitzat.', 'ok')
+                   details=f"status={new_status} profile={request.form.get('profile_type','professional')}"
+                           + (' [activation_email]' if notify_activation else ''))
+        if notify_activation:
+            user_email = (_row_get(target, 'username', '') or '').strip()
+            user_name  = (_row_get(target, 'nom', '') or '').strip()
+            if user_email:
+                _send_user_activation_email(user_name, user_email, new_temp_password)
+            flash(f"Perfil actualitzat. Compte activat i email d'accés enviat a {user_email}.", 'ok')
+        else:
+            flash('Perfil professional actualitzat.', 'ok')
     elif action == 'actualitzar_imp_trams':
         uid = request.form['uid']
         target = query('SELECT username FROM usuaris WHERE id=?', [uid], one=True)
@@ -5148,6 +6280,15 @@ def admin_usuari():
                    target_username=_row_get(target, 'username', '') if target else '',
                    details=' '.join(f"t{i+1}={v}" for i, v in enumerate(valors)))
         flash('Trams d\'impressió actualitzats.', 'ok')
+    elif action == 'baryta_toggle':
+        uid = request.form['uid']
+        target = query('SELECT username, baryta_actiu FROM usuaris WHERE id=?', [uid], one=True)
+        nou = 1 if request.form.get('baryta_actiu') in ('1', 'on', 'true') else 0
+        execute('UPDATE usuaris SET baryta_actiu=? WHERE id=?', [nou, uid])
+        _audit_log('user.baryta_toggle', target_user_id=int(uid) if str(uid).isdigit() else None,
+                   target_username=_row_get(target, 'username', '') if target else '',
+                   details=f"baryta_actiu={nou}")
+        flash(f"Paper Baryta {'activat' if nou else 'desactivat'}.", 'ok')
     return redirect(url_for('admin_usuaris'))
 
 
@@ -5294,26 +6435,127 @@ def _tarifa_parse_custom_sizes(text):
     return result
 
 
+# Mapeig producte → (taula catàleg, filtre prefix, columna preu, categoria marge).
+# Categoria marge serveix per derivar PVD = preu_cost · (1 + marge_admin_<cat>/100)
+# als productes on la taula desa preu_cost en lloc del PVD final (com fa
+# impressio.preu, que ja és PVD-equivalent directe).
+# protter_* es deixa fora del floor: és composite (foam + laminat) i no
+# té una sola fila de catàleg per a una mida.
+TARIFA_CATALOG_SPEC = {
+    'impressio':    ('impressio',    None,      'preu',      None),
+    'vidre':        ('vidres',       'NOT_DV_MIR', 'preu_cost', 'vidres'),
+    'doble_vidre':  ('vidres',       'DV-',     'preu_cost', 'vidres'),
+    'mirall':       ('vidres',       'MIR-',    'preu_cost', 'vidres'),
+    'passpartu':    ('passpartout',  '1PAS',    'preu_cost', 'passpartu'),
+    'doble_pas':    ('passpartout',  'DOBPAS',  'preu_cost', 'passpartu'),
+    'foam':         ('encolat_pro',  'ENC',     'preu_cost', 'encolat'),
+    'laminat_semi': ('encolat_pro',  'PRO',     'preu_cost', 'encolat'),
+    'laminat_mate': ('encolat_pro',  'PRO',     'preu_cost', 'encolat'),
+}
+
+
+def _tarifa_catalog_price_map(prod_key):
+    """Per a un producte, retorna {(w, h): pvd_catalog} amb les files exactes
+    del catàleg. pvd_catalog és el PVD que aplicaria el sistema si aquesta
+    mida fos l'exacta del catàleg. Útil com a sòl al floor de tarifa."""
+    spec = TARIFA_CATALOG_SPEC.get(prod_key)
+    if not spec:
+        return {}
+    table, prefix, col, categoria = spec
+    if prefix == 'NOT_DV_MIR':
+        sql = (f"SELECT referencia, {col} FROM {table} "
+               "WHERE UPPER(referencia) NOT LIKE 'DV-%' "
+               "AND UPPER(referencia) NOT LIKE 'MIR-%'")
+    elif prefix:
+        sql = f"SELECT referencia, {col} FROM {table} WHERE UPPER(referencia) LIKE '{prefix}%'"
+    else:
+        sql = f"SELECT referencia, {col} FROM {table}"
+    rows = query(sql) or []
+    result = {}
+    marge = 0.0
+    if categoria:
+        try:
+            marge = float(get_config_value(f'marge_admin_{categoria}_pct', '60'))
+        except (TypeError, ValueError):
+            marge = 60.0
+    for r in rows:
+        rw, rh = _parse_dims(r.get('referencia') or '')
+        if not (rw and rh):
+            continue
+        v = r.get(col)
+        if v is None:
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        # impressio.preu ja és PVD-equivalent; la resta de taules desen
+        # preu_cost i el PVD s'aplica multiplicant pel marge admin.
+        pvd_catalog = v if categoria is None else round(v * (1 + marge / 100), 2)
+        result[(rw, rh)] = pvd_catalog
+    return result
+
+
 def _tarifa_collect_data(products, custom_sizes_per_product, usuari):
-    """Per a cada producte seleccionat, collect [{mida, pvd, pvp, ...}]."""
+    """Per a cada producte seleccionat, collect [{mida, pvd, pvp, ...}].
+
+    Dues garanties addicionals (sobre el càlcul base de _tarifa_compute_one):
+
+    1. Ref única per a mides addicionals. Mides del catàleg conserven la
+       seva ref original. Mides custom reben IMP{W}x{H} a impressió per
+       evitar col·lisions amb el catàleg (bug reportat: 9×13 i 10×15
+       acabaven amb la mateixa ref `IMP10x15`).
+
+    2. Floor "no baixar mai del catàleg actual": si una mida coincideix
+       exactament amb una fila del catàleg, el PVD final ha de ser ≥
+       PVD_catàleg × tarifa_floor_factor (default 1.03). Red de
+       seguretat tècnica per la directriu comercial 'la tarifa nova
+       mai és per sota de l'actual'. S'aplica a tots els productes amb
+       catàleg directe (no a protter, que és composite).
+    """
+    try:
+        floor_factor = float(get_config_value('tarifa_floor_factor', '1.03'))
+    except (TypeError, ValueError):
+        floor_factor = 1.03
+
     result = []
     for prod_key, label, _short in TARIFA_PRODUCTS:
         if prod_key not in products:
             continue
-        sizes = _tarifa_default_sizes(prod_key)
-        # Afegir custom (sense duplicar)
-        seen = set(sizes)
+        catalog_sizes = _tarifa_default_sizes(prod_key)
+        catalog_set = set(catalog_sizes)
+        sizes = list(catalog_sizes)
+        seen = set(catalog_set)
         for wh in custom_sizes_per_product.get(prod_key, []):
             if wh not in seen:
                 sizes.append(wh)
                 seen.add(wh)
         sizes.sort(key=lambda wh: wh[0] * wh[1])
 
+        catalog_pvd_map = _tarifa_catalog_price_map(prod_key)
+
         rows = []
         for w, h in sizes:
             r = _tarifa_compute_one(prod_key, w, h, usuari)
-            if r:
-                rows.append(r)
+            if not r:
+                continue
+            if prod_key == 'impressio' and (w, h) not in catalog_set:
+                r['ref'] = f'IMP{int(w)}x{int(h)}'
+            # Floor: si la mida està al catàleg, no baixar del PVD del
+            # catàleg × factor. Recalculem PVP a partir del PVD ajustat.
+            catalog_pvd = catalog_pvd_map.get((w, h))
+            if catalog_pvd is not None and floor_factor > 0:
+                floor_pvd = round(catalog_pvd * floor_factor, 2)
+                if (r.get('pvd') or 0) < floor_pvd:
+                    r['pvd'] = floor_pvd
+                    if prod_key == 'impressio':
+                        tram = get_marge_impressio_tram(w * h, usuari) or {}
+                        marge_pvp = float(tram.get('marge') or 0)
+                    else:
+                        marge_pvp = _get_marge_value(usuari) if usuari else 0.0
+                    r['pvp'] = round(floor_pvd * (1 + marge_pvp / 100), 2)
+                    r['origen'] = 'floor'
+            rows.append(r)
         result.append({'key': prod_key, 'label': label, 'rows': rows})
     return result
 
@@ -5556,13 +6798,23 @@ def admin_config():
                     "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
                     [clau, str(val).strip()],
                 )
-        if request.form.get('save_gmail'):
-            gu = request.form.get('gmail_user','').strip()
-            gp = request.form.get('gmail_pass','').strip().replace(' ','')
-            if gu:
-                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_user", ?)', [gu])
-            if gp:
-                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES ("gmail_pass", ?)', [gp])
+        # Gmail SMTP: desem si l'admin omple els camps. El password és type=password
+        # i mai s'echo-eja al GET, així que enviar-lo buit (cas normal) NO esborra
+        # el valor anterior — només es desa quan el camp porta contingut.
+        gu = (request.form.get('gmail_user') or '').strip()
+        gp = (request.form.get('gmail_pass') or '').strip().replace(' ', '')
+        if gu:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_user', ?)", [gu])
+        if gp:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('gmail_pass', ?)", [gp])
+        # Resend (HTTPS API). El from es desa sempre que estigui informat;
+        # l'api_key només si l'admin n'ha posat un de nou (mateix patró que Gmail).
+        rk = (request.form.get('resend_api_key') or '').strip()
+        rf = (request.form.get('resend_from') or '').strip()
+        if rk:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_api_key', ?)", [rk])
+        if rf:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_from', ?)", [rf])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)
@@ -5577,6 +6829,51 @@ def admin_config():
         config=config,
         admin_marges=ADMIN_MARGE_CATEGORIES,
     )
+
+
+@app.route('/admin/extras', methods=['GET', 'POST'])
+@admin_required
+def admin_extras():
+    if request.method == 'POST':
+        # Form sends N parallel arrays (one entry per extra row). We
+        # reconstruct the list zipping them together. The `delete` checkbox
+        # marks rows to drop; rows without a name are also dropped.
+        keys         = request.form.getlist('extra_key[]')
+        names        = request.form.getlist('extra_name[]')
+        descs        = request.form.getlist('extra_description[]')
+        prices       = request.form.getlist('extra_price_pvd[]')
+        margins      = request.form.getlist('extra_margin_pct[]')
+        modes        = request.form.getlist('extra_mode[]')
+        piece_types  = request.form.getlist('extra_piece_types[]')
+        actius       = request.form.getlist('extra_actiu[]')   # checkbox per row → indices of checked rows
+        deletes      = request.form.getlist('extra_delete[]')  # idem
+        actius_set   = set(actius)
+        deletes_set  = set(deletes)
+        updated = []
+        for i, name in enumerate(names):
+            idx = str(i)
+            if idx in deletes_set:
+                continue
+            name = (name or '').strip()
+            if not name:
+                continue
+            key = (keys[i] if i < len(keys) else '').strip() or 'extra_' + str(int(time.time())) + '_' + str(i)
+            updated.append({
+                'key': key,
+                'name': name,
+                'description': descs[i] if i < len(descs) else '',
+                'price_pvd': prices[i] if i < len(prices) else '0',
+                'margin_pct': margins[i] if i < len(margins) else '',
+                'mode': modes[i] if i < len(modes) else 'manual',
+                'piece_types': piece_types[i] if i < len(piece_types) else '',
+                'actiu': idx in actius_set,
+                'ordre': i + 1,
+            })
+        save_extras_list(updated)
+        flash('Extres desats.', 'ok')
+        return redirect(url_for('admin_extras'))
+
+    return render_template('admin_extras.html', extras=get_extras_list())
 
 # ── Factura Directa ───────────────────────────────────────────────────────
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
@@ -5670,6 +6967,255 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if notes:
         main['notes'] = notes
     return _fd_post('deliveryNotes', {'content': {'type': 'deliveryNote', 'main': main}})
+
+
+def _fd_extract_contacts_list(r):
+    """FD pot retornar la llista en diverses claus. Aquesta funció és
+    una variant de _fd_extract_contact_id però per a llistes."""
+    if not r:
+        return []
+    if isinstance(r, list):
+        return r
+    for key in ('items', 'contacts', 'data', 'content', 'results'):
+        v = r.get(key) if isinstance(r, dict) else None
+        if isinstance(v, list):
+            return v
+    return []
+
+
+# ── Clients externs (clients freqüents que no són usuaris de la calc) ─────
+@app.route('/admin/fd/contacts')
+@admin_required
+def admin_fd_contacts_search():
+    """Cerca contactes a FacturaDirecta per importar-los com a clients
+    externs locals. Mínim 2 caràcters per evitar carregar tota la llista."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify({'ok': True, 'results': []})
+    try:
+        r = _fd_get(f'contacts?search={urllib_quote(q)}')
+        if isinstance(r, dict) and '_error' in r:
+            return jsonify({'ok': False, 'error': f"FD {r.get('_error')}: {r.get('_msg','')}"}), 502
+        contacts = _fd_extract_contacts_list(r)
+        results = []
+        for c in contacts:
+            cid = _fd_extract_contact_id(c) or c.get('id') or c.get('uuid')
+            if not cid:
+                continue
+            main = (c.get('content') or {}).get('main') or {}
+            nom = c.get('name') or main.get('name') or ''
+            nom_comercial = main.get('commercialName') or main.get('tradeName') or main.get('company') or c.get('commercialName') or ''
+            nif = c.get('fiscalId') or main.get('fiscalId') or ''
+            email = main.get('email') or c.get('email') or ''
+            telefon = main.get('phone') or main.get('mobile') or c.get('phone') or ''
+            poblacio = main.get('city') or main.get('town') or ''
+            results.append({
+                'fd_id': str(cid), 'nom': nom, 'nom_comercial': nom_comercial, 'nif': nif,
+                'email': email, 'telefon': telefon, 'poblacio': poblacio,
+            })
+        return jsonify({'ok': True, 'results': results})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/admin/clients-externs')
+@admin_required
+def admin_clients_externs():
+    """Llistat de clients habituals (taller + pvp)."""
+    filtre = (request.args.get('tipus') or '').strip().lower()
+    if filtre in ('taller', 'pvp'):
+        clients = query("""
+            SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
+                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, u.username AS usuari_username, u.nom AS usuari_nom
+            FROM clients_externs c
+            LEFT JOIN usuaris u ON c.usuari_id = u.id
+            WHERE c.tipus = ? ORDER BY c.actiu DESC, c.nom
+        """, [filtre]) or []
+    else:
+        filtre = ''
+        clients = query("""
+            SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
+                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, u.username AS usuari_username, u.nom AS usuari_nom
+            FROM clients_externs c
+            LEFT JOIN usuaris u ON c.usuari_id = u.id
+            ORDER BY c.actiu DESC, c.nom
+        """) or []
+    usuaris = query('SELECT id, username, nom, nom_empresa FROM usuaris ORDER BY nom') or []
+    return render_template('admin_clients_externs.html', clients=clients, filtre=filtre, usuaris=usuaris)
+
+
+@app.route('/admin/clients-externs/import-fd', methods=['POST'])
+@admin_required
+def admin_clients_externs_import_fd():
+    """Importa un contacte de FD com a client habitual (només referència local)."""
+    payload = request.get_json(silent=True) or request.form
+    fd_id = (payload.get('fd_contact_id') or '').strip()
+    nom   = (payload.get('nom') or '').strip()
+    nif   = (payload.get('nif') or '').strip()
+    tipus = (payload.get('tipus') or 'pvp').strip().lower()
+    if tipus not in ('taller', 'pvp'):
+        tipus = 'pvp'
+
+    if not fd_id or not nom:
+        return jsonify({'ok': False, 'error': 'missing_data'}), 400
+
+    existing = query(
+        'SELECT id FROM clients_externs WHERE fd_contact_id = ?',
+        [fd_id], one=True,
+    )
+    if existing:
+        return jsonify({'ok': False, 'error': 'already_exists',
+                        'id': _row_get(existing, 'id')}), 409
+
+    telefon = (payload.get('telefon') or '').strip() or None
+    email = (payload.get('email') or '').strip() or None
+    new_id = execute(
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [nom, nif or None, fd_id, tipus, telefon, email, True],
+    )
+    print(f"[clients_externs] import: id={new_id} fd_id={fd_id} nom={nom} tipus={tipus}")
+    return jsonify({'ok': True, 'id': new_id})
+
+
+@app.route('/admin/clients-externs/<int:client_id>/toggle', methods=['POST'])
+@admin_required
+def admin_clients_externs_toggle(client_id):
+    """Toggle actiu/desactiu d'un client extern."""
+    row = query('SELECT actiu FROM clients_externs WHERE id=?', [client_id], one=True)
+    if not row:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    actual = bool(_row_get(row, 'actiu', True))
+    nou = not actual
+    execute('UPDATE clients_externs SET actiu=? WHERE id=?', [nou, client_id])
+    print(f"[clients_externs] toggle: id={client_id} actiu={nou}")
+    return jsonify({'ok': True, 'actiu': nou})
+
+
+@app.route('/admin/clients-externs/crear', methods=['POST'])
+@admin_required
+def admin_clients_externs_crear():
+    """Crea un client habitual manualment (sense FD)."""
+    payload = request.get_json(silent=True) or request.form
+    nom = (payload.get('nom') or '').strip()
+    if not nom:
+        return jsonify({'ok': False, 'error': 'El nom és obligatori'}), 400
+    nif = (payload.get('nif') or '').strip() or None
+    tipus = (payload.get('tipus') or 'pvp').strip().lower()
+    if tipus not in ('taller', 'pvp'):
+        tipus = 'pvp'
+    telefon = (payload.get('telefon') or '').strip() or None
+    email = (payload.get('email') or '').strip() or None
+    fd_id = (payload.get('fd_contact_id') or '').strip() or None
+
+    usuari_id = payload.get('usuari_id')
+    if usuari_id:
+        try: usuari_id = int(usuari_id)
+        except (TypeError, ValueError): usuari_id = None
+    else:
+        usuari_id = None
+    dropbox_url = (payload.get('dropbox_url') or '').strip() or None
+    new_id = execute(
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [nom, nif, fd_id, tipus, telefon, email, usuari_id, dropbox_url, True],
+    )
+    print(f"[clients_externs] crear: id={new_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
+    return jsonify({'ok': True, 'id': new_id})
+
+
+@app.route('/admin/clients-externs/<int:client_id>/editar', methods=['POST'])
+@admin_required
+def admin_clients_externs_editar(client_id):
+    """Edita un client habitual existent."""
+    row = query('SELECT id FROM clients_externs WHERE id=?', [client_id], one=True)
+    if not row:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    payload = request.get_json(silent=True) or request.form
+    nom = (payload.get('nom') or '').strip()
+    if not nom:
+        return jsonify({'ok': False, 'error': 'El nom és obligatori'}), 400
+    nif = (payload.get('nif') or '').strip() or None
+    tipus = (payload.get('tipus') or 'pvp').strip().lower()
+    if tipus not in ('taller', 'pvp'):
+        tipus = 'pvp'
+    telefon = (payload.get('telefon') or '').strip() or None
+    email = (payload.get('email') or '').strip() or None
+    usuari_id = payload.get('usuari_id')
+    if usuari_id:
+        try: usuari_id = int(usuari_id)
+        except (TypeError, ValueError): usuari_id = None
+    else:
+        usuari_id = None
+    dropbox_url = (payload.get('dropbox_url') or '').strip() or None
+    execute(
+        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=? WHERE id=?",
+        [nom, nif, tipus, telefon, email, usuari_id, dropbox_url, client_id],
+    )
+    print(f"[clients_externs] editar: id={client_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
+    return jsonify({'ok': True})
+
+
+@app.route('/admin/clients-externs/<int:client_id>/eliminar', methods=['POST'])
+@admin_required
+def admin_clients_externs_eliminar(client_id):
+    """Elimina un client habitual (si no té comandes vinculades)."""
+    linked = query('SELECT id FROM comandes WHERE client_extern_id=? LIMIT 1', [client_id], one=True)
+    if linked:
+        return jsonify({'ok': False, 'error': 'Aquest client té comandes vinculades. Desactiva\'l en lloc d\'eliminar-lo.'}), 409
+    execute('DELETE FROM clients_externs WHERE id=?', [client_id])
+    print(f"[clients_externs] eliminar: id={client_id}")
+    return jsonify({'ok': True})
+
+
+@app.route('/api/clients-externs')
+@login_required
+def api_clients_externs():
+    """Llista de clients externs actius — alimenta el selector del pressupost."""
+    rows = query("""
+        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+               u.nom_empresa AS empresa
+        FROM clients_externs c
+        LEFT JOIN usuaris u ON c.usuari_id = u.id
+        WHERE c.actiu = TRUE
+        ORDER BY c.nom
+    """) or []
+    return jsonify({
+        'ok': True,
+        'clients': [
+            {
+                'id': _row_get(r, 'id'),
+                'nom': _row_get(r, 'nom') or '',
+                'nif': _row_get(r, 'nif') or '',
+                'tipus': _row_get(r, 'tipus') or 'pvp',
+                'telefon': _row_get(r, 'telefon') or '',
+                'email': _row_get(r, 'email') or '',
+                'usuari_id': _row_get(r, 'usuari_id'),
+                'empresa': _row_get(r, 'empresa') or '',
+            }
+            for r in rows
+        ],
+    })
+
+
+def _resolve_client_extern_fd_id(client_extern_id):
+    """Si client_extern_id apunta a un client actiu amb fd_contact_id,
+    retorna (contact_id, nom). Si està desactivat o no existeix, retorna
+    (None, None) — el caller fa fallback al flux antic."""
+    if not client_extern_id:
+        return None, None
+    row = query(
+        'SELECT nom, nif, fd_contact_id, actiu FROM clients_externs WHERE id=?',
+        [client_extern_id], one=True,
+    )
+    if not row:
+        return None, None
+    if not _row_get(row, 'actiu', False):
+        print(f"[clients_externs] WARN: client_extern_id={client_extern_id} desactivat — fallback al flux antic")
+        return None, None
+    return _row_get(row, 'fd_contact_id') or None, _row_get(row, 'nom') or None
 
 @app.route('/api/crear-albara', methods=['POST'])
 @login_required
@@ -5775,29 +7321,39 @@ def api_albara_de_comanda():
 
     c0 = comandes[0]
 
-    # The FD contact is the professional client (the user who owns the session)
-    # Use their nom_fiscal > nom_empresa > nom
-    nom_fiscal   = (_row_get(c0, 'nom_fiscal', '') or '').strip()
-    nom_empresa  = (_row_get(c0, 'nom_empresa', '') or '').strip()
-    usuari_nom   = (_row_get(c0, 'usuari_nom', '') or '').strip()
-    fiscal_id    = (_row_get(c0, 'fiscal_id', '') or '').strip()
-    empresa_tel  = (_row_get(c0, 'empresa_tel', '') or '').strip()
+    # ── Client extern (cached fd_contact_id) ───────────────────────────
+    # Si la comanda (qualsevol fila de la sessió) té client_extern_id,
+    # saltem la cerca/creació de FD i fem servir el contact_id cached.
+    client_extern_id = _row_get(c0, 'client_extern_id')
+    cached_fd_id, cached_nom = _resolve_client_extern_fd_id(client_extern_id)
+    contact_id = cached_fd_id
+    nom_fd = cached_nom or ''
+    is_client_extern = bool(contact_id)
 
-    nom_fd = nom_fiscal or nom_empresa or usuari_nom
-    if not nom_fd:
-        return jsonify({'ok': False, 'error': 'El client no té nom fiscal ni nom d\'empresa configurat.'}), 400
-
-    # Lookup by NIF only (exact), never by name
-    contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
-    if not contacte:
-        contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=empresa_tel or None)
-    if '_error' in (contacte or {}):
-        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
-
-    contact_id = _fd_extract_contact_id(contacte)
     if not contact_id:
-        print(f'FD contacte sense ID (api_albara_de_comanda): {json.dumps(contacte, ensure_ascii=False)}')
-        return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+        # Fallback al flux antic: contacte FD = professional propietari de la sessió.
+        nom_fiscal   = (_row_get(c0, 'nom_fiscal', '') or '').strip()
+        nom_empresa  = (_row_get(c0, 'nom_empresa', '') or '').strip()
+        usuari_nom   = (_row_get(c0, 'usuari_nom', '') or '').strip()
+        fiscal_id    = (_row_get(c0, 'fiscal_id', '') or '').strip()
+        empresa_tel  = (_row_get(c0, 'empresa_tel', '') or '').strip()
+
+        nom_fd = nom_fiscal or nom_empresa or usuari_nom
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'El client no té nom fiscal ni nom d\'empresa configurat.'}), 400
+
+        contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
+        if not contacte:
+            contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=empresa_tel or None)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            print(f'FD contacte sense ID (api_albara_de_comanda): {json.dumps(contacte, ensure_ascii=False)}')
+            return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+    else:
+        print(f"[albara_de_comanda] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
 
     # Build albaran lines — one per comanda row
     linies = []
@@ -5881,34 +7437,48 @@ def api_albara_individual():
     if not com:
         return jsonify({'ok': False, 'error': 'Comanda no trobada'}), 404
 
-    # Determine FD contact: if admin's own order, use client_nom; if professional's order, use nom_fiscal/nom_empresa
-    owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
-    if owner_is_admin:
-        # Admin's own order → the FD contact is the end client
-        nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
-        fiscal_id = ''
-        telefon   = (_row_get(com, 'client_tel', '') or '').strip()
+    # ── Client extern (cached fd_contact_id) ───────────────────────────
+    # Si la comanda té client_extern_id apuntant a un client actiu,
+    # saltem la cerca de FD i forcem mode_preu=cost (PVD) per disseny.
+    client_extern_id = _row_get(com, 'client_extern_id')
+    cached_fd_id, cached_nom = _resolve_client_extern_fd_id(client_extern_id)
+    is_client_extern = bool(cached_fd_id)
+    if is_client_extern:
+        contact_id = cached_fd_id
+        nom_fd = cached_nom or ''
+        # Per a client extern sempre fem PVD (preu taller), no PVP.
+        mode_preu = 'cost'
+        print(f"[albara_individual] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
+        owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
     else:
-        # Professional's order → the FD contact is the professional
-        nom_fiscal  = (_row_get(com, 'nom_fiscal', '') or '').strip()
-        nom_empresa = (_row_get(com, 'nom_empresa', '') or '').strip()
-        usuari_nom  = (_row_get(com, 'usuari_nom', '') or '').strip()
-        nom_fd      = nom_fiscal or nom_empresa or usuari_nom
-        fiscal_id   = (_row_get(com, 'fiscal_id', '') or '').strip()
-        telefon     = (_row_get(com, 'empresa_tel', '') or '').strip()
+        # Determine FD contact: if admin's own order, use client_nom; if professional's order, use nom_fiscal/nom_empresa
+        owner_is_admin = bool(_row_get(com, 'owner_is_admin', 0))
+        if owner_is_admin:
+            # Admin's own order → the FD contact is the end client
+            nom_fd    = (_row_get(com, 'client_nom', '') or '').strip()
+            fiscal_id = ''
+            telefon   = (_row_get(com, 'client_tel', '') or '').strip()
+        else:
+            # Professional's order → the FD contact is the professional
+            nom_fiscal  = (_row_get(com, 'nom_fiscal', '') or '').strip()
+            nom_empresa = (_row_get(com, 'nom_empresa', '') or '').strip()
+            usuari_nom  = (_row_get(com, 'usuari_nom', '') or '').strip()
+            nom_fd      = nom_fiscal or nom_empresa or usuari_nom
+            fiscal_id   = (_row_get(com, 'fiscal_id', '') or '').strip()
+            telefon     = (_row_get(com, 'empresa_tel', '') or '').strip()
 
-    if not nom_fd:
-        return jsonify({'ok': False, 'error': 'Cal un nom de contacte per crear l\'albarà.'}), 400
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'Cal un nom de contacte per crear l\'albarà.'}), 400
 
-    contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
-    if not contacte:
-        contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=telefon or None)
-    if '_error' in (contacte or {}):
-        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+        contacte = _fd_cerca_contacte(nif=fiscal_id) if fiscal_id else None
+        if not contacte:
+            contacte = _fd_crear_contacte(nom_fd, nif=fiscal_id or None, telefon=telefon or None)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
 
-    contact_id = _fd_extract_contact_id(contacte)
-    if not contact_id:
-        return jsonify({'ok': False, 'error': f'Contacte FD sense ID.'}), 500
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            return jsonify({'ok': False, 'error': f'Contacte FD sense ID.'}), 500
 
     # Build line item
     marc        = (_row_get(com, 'marc_principal', '') or '').strip()
@@ -6562,7 +8132,7 @@ PDF_T = {
     }
 }
 
-def crear_pdf(c):
+def crear_pdf(c, mode=''):
     import os as _os
     from reportlab.platypus import Image as RLImage
     buf = io.BytesIO()
@@ -6811,6 +8381,65 @@ def crear_pdf(c):
         ('LINEABOVE',(0,pend_idx), (-1,pend_idx), 1.5,colors.HexColor("#B84040")),
     ]))
     story.append(t3)
+
+    # ── Secció dual taller (només si mode='dual' i client de taller) ──────
+    if mode == 'dual':
+        client_extern_id = _row_get(c, 'client_extern_id')
+        taller_client = None
+        taller_marge = 60.0
+        if client_extern_id:
+            taller_client = query('SELECT tipus, usuari_id FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+        if taller_client and _row_get(taller_client, 'tipus') == 'taller':
+            usuari_id = _row_get(taller_client, 'usuari_id')
+            if usuari_id:
+                u_taller = query('SELECT marge FROM usuaris WHERE id=?', [usuari_id], one=True)
+                if u_taller and _row_get(u_taller, 'marge') is not None:
+                    taller_marge = float(_row_get(u_taller, 'marge'))
+            cost_prod = float(c.get('cost_produccio') or 0)
+            qty = int(c.get('quantitat') or 1)
+            pvd_unit = cost_prod / qty if qty > 0 else cost_prod
+            pvp_suggerit_unit = round(pvd_unit * (1 + taller_marge / 100), 2)
+            pvp_suggerit_total = round(pvp_suggerit_unit * qty, 2)
+            pvp_suggerit_iva = round(pvp_suggerit_total * 1.21, 2)
+
+            story.append(Spacer(1, 5*mm))
+            dual_header = Table([[
+                p('Preus per al teu client final', bold=True, size=11, color=WHITE),
+            ]], colWidths=[W])
+            dual_header.setStyle(TableStyle([
+                ('BACKGROUND',(0,0),(-1,-1), AMBER),
+                ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
+                ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+            ]))
+            story.append(dual_header)
+
+            dual_data = [
+                [p('Preu taller (el que pagues)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+                 p(f'{cost_prod:.2f} €', size=10, align='RIGHT')],
+                [p(f'PVP suggerit (marge {taller_marge:.0f}%)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+                 p(f'{pvp_suggerit_total:.2f} €', size=10, align='RIGHT')],
+                [p('PVP suggerit amb IVA 21%', bold=True, size=11, color=AMBER),
+                 p(f'{pvp_suggerit_iva:.2f} €', bold=True, size=14, color=AMBER, align='RIGHT')],
+            ]
+            if qty > 1:
+                dual_data.insert(1, [
+                    p(f'PVP suggerit per unitat', bold=True, size=9, color=colors.HexColor("#6B6860")),
+                    p(f'{pvp_suggerit_unit:.2f} € × {qty}', size=10, align='RIGHT'),
+                ])
+
+            t_dual = Table(dual_data, colWidths=[W*0.6, W*0.4])
+            pvp_idx = len(dual_data) - 1
+            t_dual.setStyle(TableStyle([
+                ('BACKGROUND',(0,pvp_idx),(-1,pvp_idx), colors.HexColor("#FDF3E8")),
+                ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, colors.white]),
+                ('BOX',(0,0),(-1,-1),0.5,BRD),
+                ('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+                ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+                ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+                ('LINEABOVE',(0,pvp_idx),(-1,pvp_idx),1.5,AMBER),
+            ]))
+            story.append(t_dual)
+
     story.append(Spacer(1, 6*mm))
     story.append(HRFlowable(width=W, thickness=0.5, color=BRD))
     story.append(Spacer(1, 2*mm))
@@ -6826,11 +8455,26 @@ def crear_pdf(c):
 @app.route('/ajustos')
 @login_required
 def ajustos():
-    u = query(
-        'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
-        [session['user_id']],
-        one=True,
-    )
+    # Si 'email' encara no s'ha migrat, aplica-ho de forma idempotent i reintenta.
+    try:
+        u = query(
+            'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, email, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+            [session['user_id']],
+            one=True,
+        )
+    except Exception as e:
+        if 'email' in str(e).lower() and ('does not exist' in str(e).lower() or 'no such column' in str(e).lower()):
+            try:
+                execute("ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+            except Exception:
+                pass
+            u = query(
+                'SELECT marge, marge_impressio, nom_empresa, nom_fiscal, fiscal_id, empresa_adreca, empresa_tel, email, margins_json, brand_color, brand_color_secondary, brand_color_menu FROM usuaris WHERE id=?',
+                [session['user_id']],
+                one=True,
+            )
+        else:
+            raise
     marge_actual = float(u['marge']) if u and u['marge'] is not None else 60
     marge_imp = float(u['marge_impressio']) if u and u['marge_impressio'] is not None else 0
     if float(marge_actual).is_integer():
@@ -6864,6 +8508,7 @@ def ajustos():
         nom_emp = cfg.get('empresa_nom', '')
     user_adreca  = _row_get(u, 'empresa_adreca', '') or ''
     user_tel     = _row_get(u, 'empresa_tel', '') or ''
+    user_email   = _row_get(u, 'email', '') or ''
     nom_fiscal   = _row_get(u, 'nom_fiscal', '') or ''
     fiscal_id    = _row_get(u, 'fiscal_id', '') or ''
 
@@ -6906,6 +8551,7 @@ def ajustos():
                            brand_color_menu=brand_color_menu,
                            empresa_adreca=user_adreca if user_adreca else cfg.get('empresa_adreca',''),
                            empresa_tel=user_tel if user_tel else cfg.get('empresa_tel',''),
+                           user_email=user_email,
                            imp_trams=imp_trams)
 
 
@@ -7180,29 +8826,67 @@ def _imp_closest(fw, fh, paper='lustre'):
     area_sol = max(1.0, float(fw) * float(fh))
     ratio_max = float(get_config_value('encolat_ratio_max', '1.40'))
 
-    # 1) Min-contain
+    # 0) Sistema de trams per paper (override del càlcul híbrid)
+    #    Si imp_{paper}_trams_actius == '1' s'aplica cost·multiplicador segons àrea.
+    if get_config_value(f'imp_{paper}_trams_actius', '0') == '1':
+        cost_cm2_t = float(get_config_value(f'imp_{paper}_cost_cm2',
+                                            get_config_value('imp_lustre_cost_cm2', '0.000703')))
+        cost_real_t = area_sol * cost_cm2_t
+        mult_aplicat = None
+        for i in range(1, 7):
+            max_str = get_config_value(f'imp_{paper}_t{i}_max', None)
+            mult_str = get_config_value(f'imp_{paper}_t{i}_mult', None)
+            if mult_str is None:
+                continue
+            try:
+                mult = float(mult_str)
+            except (TypeError, ValueError):
+                continue
+            if max_str is None or str(max_str).strip() == '':
+                mult_aplicat = mult
+                break
+            try:
+                max_area = float(max_str)
+            except (TypeError, ValueError):
+                continue
+            if area_sol <= max_area:
+                mult_aplicat = mult
+                break
+        if mult_aplicat is None:
+            mult_aplicat = float(get_config_value(f'imp_{paper}_t6_mult', '3.1'))
+        preu_tram = round(cost_real_t * mult_aplicat, 2)
+        return {
+            'ref': f'imp-{paper}-{int(fw)}x{int(fh)}',
+            'preu': preu_tram,
+            'origen': 'tram',
+            'area': round(area_sol, 2),
+        }
+
+    # 1) Min-contain (només per a la ref de referència al resultat)
     fila = _find_min_contain(rows, fw, fh)
 
-    # 2) Si la fila és prou ajustada, usar taula
-    if fila:
-        rw, rh = _parse_dims(fila['referencia'])
-        if rw and rh:
-            ratio = (rw * rh) / area_sol
-            if ratio <= ratio_max:
-                return {
-                    'ref': fila['referencia'],
-                    'preu': float(fila.get('preu') or 0),
-                    'origen': 'taula',
-                    'area': round(area_sol, 2),
-                }
+    # 2) Impressió s'imprimeix de BOBINA (43, 60, 111 cm) — el cost és
+    #    proporcional a l'àrea real, no a mides de full fix. Per tant
+    #    SEMPRE usem fórmula per calcular el preu. Les refs del catàleg
+    #    serveixen com a punts de calibració, no com a preus finals.
+    #    (Altres productes com vidre o passpartú sí usen el threshold
+    #    perquè es tallen de planchas fixes.)
 
-    # 3) Fórmula
+    # 3) Fórmula amb DOBLE calibració (Option B): per a una mida
+    # sol·licitada agafem la ref de catàleg més propera per SOTA i la
+    # més propera per SOBRE en àrea. Calculem el preu a partir de
+    # cadascuna escalant linealment per cm² i tornem el MAX de les
+    # dues. Per què: la calibració amb ref menor sola subestima el
+    # preu de mides intermèdies (el €/cm² creix amb àrea per malbarat
+    # de paper i feina). La ref major dóna un sostre raonable. El max
+    # garanteix que el preu MAI baixa per sota de la pendent del
+    # catàleg en cap dels dos extrems.
     cost_cm2 = float(get_config_value(f'imp_{paper}_cost_cm2',
                                       get_config_value('imp_lustre_cost_cm2', '0.000703')))
     cost_real = area_sol * cost_cm2
 
-    # Calibració del factor: fila amb àrea més propera per sota
-    calib = None
+    calib_low = None    # max àrea entre les ≤ area_sol
+    calib_high = None   # min àrea entre les ≥ area_sol
     smallest = None
     for r in rows:
         try:
@@ -7217,21 +8901,40 @@ def _imp_closest(fw, fh, paper='lustre'):
         a = rw * rh
         if smallest is None or a < smallest[1]:
             smallest = (r, a, preu_r)
-        if a <= area_sol:
-            if calib is None or a > calib[1]:
-                calib = (r, a, preu_r)
+        if a <= area_sol and (calib_low is None or a > calib_low[1]):
+            calib_low = (r, a, preu_r)
+        if a >= area_sol and (calib_high is None or a < calib_high[1]):
+            calib_high = (r, a, preu_r)
 
-    if calib is None:
-        calib = smallest
-    if calib is None:
+    if calib_low is None and calib_high is None:
+        calib_low = smallest
+    if calib_low is None and calib_high is None:
         return None  # no hi ha cap fila utilitzable per calibrar
 
-    _r, calib_area, calib_preu = calib
-    factor = calib_preu / (calib_area * cost_cm2) if calib_area > 0 and cost_cm2 > 0 else 1.0
-    preu_formula = round(cost_real * factor, 2)
+    def _preu_from_calib(calib):
+        if calib is None:
+            return None
+        _r, ca, cp = calib
+        f = cp / (ca * cost_cm2) if ca > 0 and cost_cm2 > 0 else 1.0
+        return round(cost_real * f, 2)
+
+    candidates = [p for p in (_preu_from_calib(calib_low), _preu_from_calib(calib_high))
+                  if p is not None]
+    preu_formula = max(candidates) if candidates else 0.0
+
+    # Si existeix una ref exacta al catàleg per aquesta mida, la usem
+    # com a etiqueta (millor per a facturació); si no, generem imp-WxH.
+    if fila:
+        rw, rh = _parse_dims(fila['referencia'])
+        if rw and rh and rw * rh == area_sol:
+            ref_label = fila['referencia']
+        else:
+            ref_label = f'IMP{int(fw)}x{int(fh)}'
+    else:
+        ref_label = f'IMP{int(fw)}x{int(fh)}'
 
     return {
-        'ref': f'imp-{int(fw)}x{int(fh)}',
+        'ref': ref_label,
         'preu': preu_formula,
         'origen': 'formula',
         'area': round(area_sol, 2),
@@ -7255,13 +8958,18 @@ def api_closest():
     foto_w = float(request.args.get('foto_w', w))
     foto_h = float(request.args.get('foto_h', h))
     tipus_laminat = request.args.get('laminat', 'semibrillo')  # 'semibrillo' | 'mate'
+    # Paper d'impressió fotogràfica: 'lustre' (default) o 'baryta' (premium).
+    # Si el client envia un altre valor, ho ignorem i caem a 'lustre'.
+    paper = (request.args.get('paper') or 'lustre').strip().lower()
+    if paper not in ('lustre', 'silk', 'baryta'):
+        paper = 'lustre'
     if w <= 0 or h <= 0:
         return jsonify({})
 
     def _build_result(r, preu_col='preu'):
-        """Build a result dict with preu_cost if available."""
+        """Build a result dict with preu_cost only for admins."""
         res = {'ref': r['referencia'], 'preu': r.get(preu_col, 0)}
-        if r.get('preu_cost') is not None:
+        if session.get('is_admin') and r.get('preu_cost') is not None:
             res['preu_cost'] = float(r['preu_cost'])
         return res
 
@@ -7305,7 +9013,10 @@ def api_closest():
 
     def _fn_result(r):
         """Format foam/laminat/passpartu result for closest API."""
-        return {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'preu_cost': r['cost'], 'origen': r['origen']}
+        res = {'ref': r['ref'], 'preu': r['pvd'], 'pvd': r['pvd'], 'origen': r['origen']}
+        if session.get('is_admin'):
+            res['preu_cost'] = r['cost']
+        return res
 
     # Foam (encolat simple). ProEco: àlies de compatibilitat històrica.
     foam = _fn_result(calcular_cost_foam(w, h))
@@ -7332,7 +9043,8 @@ def api_closest():
         'mirall':       _fn_result(calcular_cost_mirall(w, h)),
         'passpartu':    _fn_result(calcular_cost_passpartu(w, h, tipus='simple')),
         'doble_pas':    _fn_result(calcular_cost_passpartu(w, h, tipus='doble')),
-        'impressio':    _imp_closest(foto_w, foto_h),
+        'impressio':    _imp_closest(foto_w, foto_h, paper=paper),
+        'paper':        paper,
     }
 
     # Enriquir la impressió amb el marge de tram aplicat (PVD→PVP).
@@ -7348,6 +9060,8 @@ def api_closest():
         imp_res['tram'] = tram_info['tram']
         imp_res['area'] = round(foto_w * foto_h, 2)
         imp_res['pvp'] = round(preu_pvd * (1 + marge_aplicat / 100), 4)
+        if session.get('is_admin'):
+            imp_res['preu_cost'] = preu_pvd
 
     return jsonify(result)
 
@@ -7587,7 +9301,7 @@ def enviar_email():
         msg['From'] = gmail_user
         msg['To'] = dest
         msg.attach(MIMEText(html, 'html'))
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
             s.login(gmail_user, gmail_pass)
             s.sendmail(gmail_user, dest, msg.as_string())
         return jsonify({'ok': True})
@@ -7624,7 +9338,8 @@ def init_db():
                     web_url TEXT DEFAULT '',
                     instagram TEXT DEFAULT '',
                     fiscal_id TEXT DEFAULT '',
-                    notes_validacio TEXT DEFAULT ''
+                    notes_validacio TEXT DEFAULT '',
+                    email TEXT DEFAULT ''
                 )""",
                 """CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL)""",
@@ -7741,6 +9456,8 @@ def init_db():
                 ('usuaris','mr_tram2_pct','REAL'),
                 ('usuaris','mr_tram3_pct','REAL'),
                 ('usuaris','mr_trams_vist','INTEGER DEFAULT 0'),
+                # Paper Hahnemühle Photo Rag Baryta — activació per usuari
+                ('usuaris','baryta_actiu','INTEGER DEFAULT 0'),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -7801,6 +9518,18 @@ def init_db():
                 )""")
             except Exception as e:
                 print("audit_log table skip:", e)
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS clients_externs (
+                    id SERIAL PRIMARY KEY,
+                    nom VARCHAR(255) NOT NULL,
+                    nif VARCHAR(30),
+                    fd_contact_id VARCHAR(100) NOT NULL UNIQUE,
+                    actiu BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )""")
+                ddl_cur.execute("ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER")
+            except Exception as e:
+                print("clients_externs table skip:", e)
             ddl_cur.close()
             ddl_conn.close()
             print("DDL done, checking admin...")
@@ -7836,6 +9565,7 @@ def init_db():
                          ('vidre_temps_base_min','3'),
                          ('vidre_temps_lineal_m','0.5'),
                          ('vidre_dv_muntatge_min','5'),
+                         ('vidre_dv_muntatge_eur','1.30'),
                          ('mirall_cost_cm2','0.003153'),
                          ('mirall_multiplo_dm2','6'),
                          ('vidre_tolerancia_cm','2'),
@@ -7845,6 +9575,19 @@ def init_db():
                          ('imp_lustre_cost_cm2','0.000703'),
                          ('imp_silk_cost_cm2','0.000756'),
                          ('imp_matte_cost_cm2','0.000447'),
+                         ('imp_baryta_cost_cm2','0.005351'),
+                         ('imp_baryta_trams_actius','1'),
+                         ('imp_baryta_t1_max','300'),
+                         ('imp_baryta_t1_mult','9.5'),
+                         ('imp_baryta_t2_max','900'),
+                         ('imp_baryta_t2_mult','6.5'),
+                         ('imp_baryta_t3_max','2000'),
+                         ('imp_baryta_t3_mult','4.3'),
+                         ('imp_baryta_t4_max','4000'),
+                         ('imp_baryta_t4_mult','3.5'),
+                         ('imp_baryta_t5_max','8000'),
+                         ('imp_baryta_t5_mult','3.2'),
+                         ('imp_baryta_t6_mult','3.1'),
                          ('combo_desc_marc_imp_protter','6'),
                          ('combo_desc_marc_imp_foam','5'),
                          ('combo_desc_marc_imp','3'),
@@ -7898,7 +9641,8 @@ def init_db():
                     web_url TEXT DEFAULT '',
                     instagram TEXT DEFAULT '',
                     fiscal_id TEXT DEFAULT '',
-                    notes_validacio TEXT DEFAULT ''
+                    notes_validacio TEXT DEFAULT '',
+                    email TEXT DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS impressio (
                     referencia TEXT PRIMARY KEY, descripcio TEXT, preu REAL
@@ -8013,6 +9757,8 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN mr_tram2_pct REAL",
                 "ALTER TABLE usuaris ADD COLUMN mr_tram3_pct REAL",
                 "ALTER TABLE usuaris ADD COLUMN mr_trams_vist INTEGER DEFAULT 0",
+                # Paper Hahnemühle Photo Rag Baryta — activació per usuari
+                "ALTER TABLE usuaris ADD COLUMN baryta_actiu INTEGER DEFAULT 0",
             ]:
                 try:
                     db.execute(sql)
@@ -8062,6 +9808,20 @@ def init_db():
                 details TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS clients_externs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                nif TEXT,
+                fd_contact_id TEXT NOT NULL UNIQUE,
+                actiu INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )""")
+            # client_extern_id a comandes — un try/except per si la taula
+            # encara no té la columna (cas update progressiu).
+            try:
+                db.execute("ALTER TABLE comandes ADD COLUMN client_extern_id INTEGER")
+            except Exception:
+                pass
             db.commit()
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('marge_defecte','60')")
             db.execute("INSERT OR IGNORE INTO config (clau,valor) VALUES ('empresa_nom','Reus Revela')")
@@ -8089,6 +9849,7 @@ def init_db():
                          ('vidre_temps_base_min','3'),
                          ('vidre_temps_lineal_m','0.5'),
                          ('vidre_dv_muntatge_min','5'),
+                         ('vidre_dv_muntatge_eur','1.30'),
                          ('mirall_cost_cm2','0.003153'),
                          ('mirall_multiplo_dm2','6'),
                          ('vidre_tolerancia_cm','2'),
@@ -8098,6 +9859,19 @@ def init_db():
                          ('imp_lustre_cost_cm2','0.000703'),
                          ('imp_silk_cost_cm2','0.000756'),
                          ('imp_matte_cost_cm2','0.000447'),
+                         ('imp_baryta_cost_cm2','0.005351'),
+                         ('imp_baryta_trams_actius','1'),
+                         ('imp_baryta_t1_max','300'),
+                         ('imp_baryta_t1_mult','9.5'),
+                         ('imp_baryta_t2_max','900'),
+                         ('imp_baryta_t2_mult','6.5'),
+                         ('imp_baryta_t3_max','2000'),
+                         ('imp_baryta_t3_mult','4.3'),
+                         ('imp_baryta_t4_max','4000'),
+                         ('imp_baryta_t4_mult','3.5'),
+                         ('imp_baryta_t5_max','8000'),
+                         ('imp_baryta_t5_mult','3.2'),
+                         ('imp_baryta_t6_mult','3.1'),
                          ('combo_desc_marc_imp_protter','6'),
                          ('combo_desc_marc_imp_foam','5'),
                          ('combo_desc_marc_imp','3'),

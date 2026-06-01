@@ -69,6 +69,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
     <a href="/calculadora">Calculadora</a>
     <a href="/historial">Pressupostos</a>
     <a href="/cataleg">Cat&agrave;leg</a>
+    <a href="https://reusrevela.cat/area-privada/lienzos" target="_blank" rel="noopener noreferrer">Llen&ccedil;os &#8599;</a>
     {% if not session.is_admin %}
     <a href="/">Inici</a>
     {% endif %}
@@ -98,6 +99,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       <div class="f"><label>NIF / CIF</label><input type="text" id="fiscal-id" value="{{ fiscal_id }}" placeholder="Ex: B12345678" style="text-transform:uppercase"></div>
       <div class="f"><label>Adreça</label><input type="text" id="empresa-adreca" value="{{ empresa_adreca }}" placeholder="C/ Mare Molas, 26 - Reus"></div>
       <div class="f"><label>Telèfon</label><input type="text" id="empresa-tel" value="{{ empresa_tel }}" placeholder="977 316 111"></div>
+      <div class="f"><label>Email de contacte <span style="color:var(--hint);font-size:11px;font-weight:400">(per a suport i comunicacions)</span></label><input type="email" id="user-email" value="{{ user_email }}" placeholder="anna@exemple.com"></div>
       <div class="color-grid">
         <div class="f"><label>Color principal</label><input type="color" id="brand-color" value="{{ brand_color }}" oninput="updateColorPreview()"></div>
         <div class="f"><label>Color secundari</label><input type="color" id="brand-color-secondary" value="{{ brand_color_secondary }}" oninput="updateColorPreview()"></div>
@@ -270,19 +272,20 @@ function desarTot(){
   var fi=(document.getElementById('fiscal-id').value||'').toUpperCase();
   var ea=document.getElementById('empresa-adreca').value||'';
   var et=document.getElementById('empresa-tel').value||'';
+  var em=(document.getElementById('user-email')||{}).value||'';
   var bc=document.getElementById('brand-color').value||'#1A6B45';
   var bcs=document.getElementById('brand-color-secondary').value||'#C8873A';
   var bcm=document.getElementById('brand-color-menu').value||bc;
   {% if session.get('is_admin') %}
   Promise.all([
-    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,nom_fiscal:nf,fiscal_id:fi,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})}).then(function(r){return r.json();}),
+    fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,nom_fiscal:nf,fiscal_id:fi,email:em,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})}).then(function(r){return r.json();}),
     fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();})
   ]).then(function(res){
     if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
     else showAlert('Error en desar.','err');
   });
   {% else %}
-  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,nom_fiscal:nf,fiscal_id:fi,empresa_adreca:ea,empresa_tel:et,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})})
+  fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,nom_fiscal:nf,fiscal_id:fi,empresa_adreca:ea,empresa_tel:et,email:em,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok) showAlert('Canvis desats correctament.','ok');
