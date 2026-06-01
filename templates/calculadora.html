@@ -523,6 +523,18 @@ body.has-sticky-bar{padding-bottom:78px}
         <div class="grup">
           <div class="grup-label">Muntatge</div>
           <div class="grup-opcions">
+            <!-- Presets exclusius de puzzle: sempre cal base de foam (cobrada al 50%)
+                 + acabat (cristal o laminat). Amagats fora de puzzle. -->
+            <label class="opt-btn" id="opt-puzzle_foam_cristal" style="display:none" title="Foam (base, 50%) + cristal">
+              <input type="radio" name="muntatge" value="puzzle_foam_cristal" onchange="onGrupChange('muntatge')">
+              <span class="opt-text">Foam + Cristal</span>
+              <span class="opt-preu" id="preu-puzzle_foam_cristal">—</span>
+            </label>
+            <label class="opt-btn" id="opt-puzzle_foam_laminat" style="display:none" title="Foam (base, 50%) + laminat">
+              <input type="radio" name="muntatge" value="puzzle_foam_laminat" onchange="onGrupChange('muntatge')">
+              <span class="opt-text">Foam + Laminat</span>
+              <span class="opt-preu" id="preu-puzzle_foam_laminat">—</span>
+            </label>
             <label class="opt-btn" id="opt-encolat">
               <input type="radio" name="muntatge" value="encolat" onchange="onGrupChange('muntatge')">
               <span class="opt-text">Encolat</span>
@@ -556,7 +568,7 @@ body.has-sticky-bar{padding-bottom:78px}
         </div>
 
         <!-- GRUP 2: Vidre / Mirall -->
-        <div class="grup">
+        <div class="grup" id="grup-proteccio">
           <div class="grup-label">Protecció <span id="vidre-obligatori" style="display:none;color:var(--amber);font-size:10px;font-weight:600"> · obligatori amb passpartú</span></div>
           <div class="grup-opcions">
             <label class="opt-btn" id="opt-vidre">
@@ -587,7 +599,7 @@ body.has-sticky-bar{padding-bottom:78px}
         </div>
 
         <!-- GRUP 3: Passpartú / ProEco -->
-        <div class="grup">
+        <div class="grup" id="grup-interior">
           <div class="grup-label">Interior</div>
           <div class="grup-opcions">
             <label class="opt-btn" id="opt-passpartu">
@@ -1092,7 +1104,7 @@ var valToId = {
   passpartu:'passpartu', doble_pas:'doble_pas'
 };
 var allKeys = {
-  muntatge:  ['encolat','protter','laminat','muntatge-cap'],
+  muntatge:  ['puzzle_foam_cristal','puzzle_foam_laminat','encolat','protter','laminat','muntatge-cap'],
   proteccio: ['vidre','doble_vidre','mirall','conservar-vidre','proteccio-cap'],
   interior:  ['passpartu','doble_pas','interior-cap']
 };
@@ -1636,6 +1648,11 @@ function updateBtnPreus(){
     if(CLOSEST[k] && CLOSEST[k].preu) el.textContent = preuDisplay(CLOSEST[k].preu, false);
     else el.textContent = '—';
   });
+  ['puzzle_foam_cristal','puzzle_foam_laminat'].forEach(function(v){
+    var el = document.getElementById('preu-'+v); if(!el) return;
+    var c = puzzlePresetCost(v);
+    el.textContent = c>0 ? preuDisplay(c, false) : '—';
+  });
   var elImp = document.getElementById('preu-impressio');
   if(elImp){
     if(CLOSEST.impressio && CLOSEST.impressio.preu)
@@ -1855,10 +1872,57 @@ function fetchClosest(){
           }
         }
       });
+      // Si hi ha un preset de puzzle actiu, recalcula el seu preu amb la mida nova.
+      var mSel=(document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+      if(isPuzzlePreset(mSel)) applyPuzzlePreset(mSel);
       if(document.getElementById('chk-impressio').checked) updateImpressioPreu();
       updateReversPeu();
       calcular();
     });
+}
+
+// ── Presets de puzzle ───────────────────────────────────────────────────────
+// Un puzzle arriba sense base: sempre cal afegir-li foam com a suport. Per a
+// aquest tipus de peça només oferim dues combinacions (foam + cristal i
+// foam + laminat) i el foam es cobra al 50% del seu preu (material més econòmic
+// en aquest cas). El descompte del 50% s'aplica NOMÉS al component foam i NOMÉS
+// en puzzle; cristal i laminat mantenen el seu preu normal.
+var PUZZLE_FOAM_FACTOR = 0.5;
+function isPuzzlePreset(v){ return v==='puzzle_foam_cristal' || v==='puzzle_foam_laminat'; }
+function puzzlePresetCost(v){
+  if(!CLOSEST) return 0;
+  var foam = (CLOSEST.encolat && CLOSEST.encolat.preu) || 0;
+  var half = foam * PUZZLE_FOAM_FACTOR;
+  if(v==='puzzle_foam_cristal'){
+    var vidre = (CLOSEST.vidre && CLOSEST.vidre.preu) || 0;
+    return half + vidre;
+  }
+  if(v==='puzzle_foam_laminat'){
+    var lam = (CLOSEST.laminat_semi && CLOSEST.laminat_semi.preu)
+            || (CLOSEST.laminat && CLOSEST.laminat.preu) || 0;
+    return half + lam;
+  }
+  return 0;
+}
+// Aplica el preset al model de preus i fixa les referències per al pressupost/PDF.
+// foam+cristal → muntatge=encolat (foam) + protecció=vidre.
+// foam+laminat → muntatge=protter (ref foam+laminat, etiquetada com a foam+laminat
+//   al PDF); el preu real ja porta el foam al 50%, la ref només és per a l'etiqueta.
+function applyPuzzlePreset(v){
+  var refM = '', refP = '';
+  if(v==='puzzle_foam_cristal'){
+    refM = (CLOSEST.encolat && CLOSEST.encolat.ref) || '';
+    refP = (CLOSEST.vidre   && CLOSEST.vidre.ref)   || '';
+  } else if(v==='puzzle_foam_laminat'){
+    refM = (CLOSEST.protter_semi && CLOSEST.protter_semi.ref)
+         || (CLOSEST.protter && CLOSEST.protter.ref) || '';
+    refP = '';
+  }
+  var hidM=document.getElementById('ref-muntatge'); if(hidM) hidM.value=refM;
+  var hidP=document.getElementById('ref-proteccio'); if(hidP) hidP.value=refP;
+  PREUS.muntatge  = puzzlePresetCost(v);
+  PREUS.proteccio = 0;
+  PREUS.interior  = 0;
 }
 
 // ── Materials ─────────────────────────────────────────────────────────────
@@ -2009,6 +2073,43 @@ function applyIncompatibilities(){
 
   updatePieceContextVisibility();
 
+  // Puzzle: el grup Muntatge canvia segons si la peça ja va sobre base.
+  //  · Sense base  → dos presets de foam (foam+cristal / foam+laminat, foam al 50%).
+  //  · Sobre base  → només laminat sol (sense foam, preu normal); ja va encolat.
+  // En tots dos casos s'amaguen les opcions soltes restants i els grups
+  // Protecció/Interior (l'acabat ja queda definit). Fora de puzzle, tot normal.
+  var isPuzzle    = pieceType === 'puzzle';
+  var puzzleOnBase = isPuzzle && puzzleSupport === 'sobre_base';
+  var puzzleNoBase = isPuzzle && !puzzleOnBase;
+  ['opt-encolat','opt-protter','opt-muntatge-cap'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.style.display = isPuzzle ? 'none' : '';
+  });
+  // Laminat sol: amagat per a puzzle sense base; visible per a sobre base i resta de tipus.
+  var elLam=document.getElementById('opt-laminat'); if(elLam) elLam.style.display = puzzleNoBase ? 'none' : '';
+  // Presets de foam: només puzzle sense base.
+  ['opt-puzzle_foam_cristal','opt-puzzle_foam_laminat'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.style.display = puzzleNoBase ? '' : 'none';
+  });
+  var gProt=document.getElementById('grup-proteccio'); if(gProt) gProt.style.display = isPuzzle ? 'none' : '';
+  var gInt =document.getElementById('grup-interior');  if(gInt)  gInt.style.display  = isPuzzle ? 'none' : '';
+  // Neteja seleccions incoherents en canviar de tipus/suport.
+  var muntatgeVal = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  if(puzzleNoBase){
+    // Només els presets de foam són vàlids.
+    if(!isPuzzlePreset(muntatgeVal) && muntatgeVal!=='') setGroupValue('muntatge','');
+  } else if(puzzleOnBase){
+    // Només laminat sol és vàlid.
+    if(muntatgeVal!=='laminat' && muntatgeVal!=='') setGroupValue('muntatge','');
+  } else if(isPuzzlePreset(muntatgeVal)){
+    // Hem sortit de puzzle amb un preset actiu.
+    setGroupValue('muntatge','');
+  }
+  if(isPuzzle){
+    // Protecció i Interior queden coberts pel muntatge → forçar "Cap".
+    if((document.querySelector('input[name="proteccio"]:checked')||{}).value) setGroupValue('proteccio','');
+    if((document.querySelector('input[name="interior"]:checked')||{}).value)  setGroupValue('interior','');
+  }
+
   var rules = {
     encolat:           hasProeco||hasPasspartu||hasVidre,
     protter:           hasProeco||hasPasspartu||hasVidre,
@@ -2031,35 +2132,26 @@ function applyIncompatibilities(){
     note = 'Per a làmina treballem sense impressió i sense Protter.';
   }
   if(pieceType === 'puzzle'){
+    // Muntatge propi de puzzle (presets de foam o laminat sol); protecció i
+    // interior queden coberts i es desactiven.
+    rules.encolat = true;
     rules.protter = true;
-    rules.passpartu = true;
-    rules.doble_pas = true;
+    rules.vidre = true;
     rules.doble_vidre = true;
     rules.mirall = true;
     rules['conservar-vidre'] = true;
+    rules.passpartu = true;
+    rules.doble_pas = true;
     if(puzzleSupport === 'sobre_base'){
-      rules.encolat = true;
-      rules.proeco = true;
+      // Ja va encolat sobre base: no cal foam, només laminat (preu normal).
       rules.laminat = false;
-      forcedSelections.proteccio = 'vidre';
-      note = 'Si el puzzle ja ve sobre base, pots treballar-lo amb marc i vidre o bé amb laminat sol sense foam.';
+      note = 'El puzzle ja va encolat sobre base: només cal laminar-lo (sense foam).';
     } else {
-      // Sense base: cal una base sòlida + protecció. Marquem
-      // automàticament Protter (foam + laminat) com a muntatge, que ja és
-      // exactament aquesta combinació. Desactivem encolat/laminat/proeco
-      // sols perquè no doblin el foam, i traiem vidre/proteccions perquè
-      // Protter ja fa de protecció superficial.
-      rules.protter = false;
-      rules.encolat = true;
-      rules.proeco = true;
+      // Sense base: s'afegeix foam (50%) via els presets; laminat sol no s'ofereix.
+      // (Substitueix l'auto-selecció de Protter que feia main: ara el foam es
+      // cobra al 50% i s'ofereix foam+cristal o foam+laminat.)
       rules.laminat = true;
-      rules.vidre = true;
-      rules['interior-cap'] = false;
-      rules['proteccio-cap'] = false;
-      forcedSelections.muntatge = 'protter';
-      forcedSelections.interior = '';
-      forcedSelections.proteccio = '';
-      note = 'Si el puzzle no porta base, marquem foam + laminat (Protter) automàticament com a base i protecció.';
+      note = 'El puzzle arriba sense base: s’hi afegeix foam (50%) i s’acaba amb cristal o laminat.';
     }
   }
   if(pieceType === 'pintura_sense_bastidor'){
@@ -2257,7 +2349,8 @@ function onGrupChange(grup){
   // doble vidre — recalculem sempre que es toca un d'aquests dos grups.
   if(grup==='interior' || grup==='proteccio') recalcMides();
   enforceMaterialLimits(true);
-  updateGrupPreu(grup,val);
+  if(grup==='muntatge' && isPuzzlePreset(val)) applyPuzzlePreset(val);
+  else updateGrupPreu(grup,val);
   calcular();
 }
 
@@ -2537,7 +2630,7 @@ function calcular(){
   var muntatgeSel   = (document.querySelector('input[name="muntatge"]:checked')||{}).value || '';
   var interiorSel2  = (document.querySelector('input[name="interior"]:checked')||{}).value || '';
   var teProtter     = muntatgeSel === 'protter';
-  var teFoam        = (muntatgeSel === 'encolat' || interiorSel2 === 'proeco') && !teProtter;
+  var teFoam        = (muntatgeSel === 'encolat' || interiorSel2 === 'proeco' || isPuzzlePreset(muntatgeSel)) && !teProtter;
   var comboPct = 0, comboLbl = '';
   if(teMarc && teImpressio && teProtter){
     comboPct = COMBO_DESC.marc_imp_protter;
@@ -2801,14 +2894,27 @@ function guardarTotes(){
       proteccio: {vidre:'vidre',doble_vidre:'doble_vidre',mirall:'mirall'},
       interior:  {passpartu:'passpartu',doble_pas:'doble_pas',proeco:'proeco'}
     };
-    ['muntatge','proteccio','interior'].forEach(function(g){
-      var val = e[g]||'';
-      var k   = tipusMap[g]&&tipusMap[g][val];
-      var ref = (k&&closest[k]) ? closest[k].ref : (val||'-');
-      if(g==='muntatge') d.encolat     = ref||'-';
-      if(g==='proteccio')d.vidre       = ref||'-';
-      if(g==='interior') d.passpartout = ref||'-';
-    });
+    if(isPuzzlePreset(e.muntatge||'')){
+      // Presets de puzzle: mateixes refs que applyPuzzlePreset (per a etiquetes PDF).
+      if(e.muntatge==='puzzle_foam_cristal'){
+        d.encolat = (closest.encolat && closest.encolat.ref) || '-';
+        d.vidre   = (closest.vidre   && closest.vidre.ref)   || '-';
+      } else {
+        d.encolat = (closest.protter_semi && closest.protter_semi.ref)
+                  || (closest.protter && closest.protter.ref) || '-';
+        d.vidre   = '-';
+      }
+      d.passpartout = '-';
+    } else {
+      ['muntatge','proteccio','interior'].forEach(function(g){
+        var val = e[g]||'';
+        var k   = tipusMap[g]&&tipusMap[g][val];
+        var ref = (k&&closest[k]) ? closest[k].ref : (val||'-');
+        if(g==='muntatge') d.encolat     = ref||'-';
+        if(g==='proteccio')d.vidre       = ref||'-';
+        if(g==='interior') d.passpartout = ref||'-';
+      });
+    }
     d.impressio = (e.impressio && closest.impressio) ? (closest.impressio.ref||'-') : '-';
 
     fetch('/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
@@ -3303,7 +3409,7 @@ function buildWAtext(){
   var proteccio = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
   var muntatge  = (document.querySelector('input[name="muntatge"]:checked') ||{}).value||'';
   var chkImp    = document.getElementById('chk-impressio').checked;
-  var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
+  var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat',puzzle_foam_cristal:'Foam + Cristal',puzzle_foam_laminat:'Foam + Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var ppRef        = (document.getElementById('ref-passpartu-color')||{}).value||'';
@@ -3381,7 +3487,7 @@ function buildWAtext_intern(){
   var chkRevers = document.getElementById('chk-revers-peu')?.checked || false;
   var fotoUrl   = document.querySelector('#foto-box img')?.src || '';
   var nomComercial = empresa_nom || 'Reus Revela';
-  var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat'}[muntatge]||'';
+  var nomMuntatge  = {encolat:'Encolat',protter:'Protter',laminat:'Laminat',puzzle_foam_cristal:'Foam + Cristal',puzzle_foam_laminat:'Foam + Laminat'}[muntatge]||'';
   var nomProteccio = {vidre:'Vidre',doble_vidre:'Doble vidre',mirall:'Mirall',conservar:'Conservar vidre'}[proteccio]||'';
   var nomInterior  = {passpartu:'Passpartu',doble_pas:'Doble passpartu',proeco:'ProEco'}[interior]||'';
   var ppRef        = (document.getElementById('ref-passpartu-color')||{}).value||'';
