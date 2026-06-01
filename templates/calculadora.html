@@ -1842,27 +1842,39 @@ function applyIncompatibilities(){
 
   updatePieceContextVisibility();
 
-  // Puzzle: el grup Muntatge mostra només els dos presets (foam+cristal i
-  // foam+laminat); s'amaguen les opcions soltes i els grups Protecció/Interior,
-  // perquè els presets ja inclouen l'acabat. Fora de puzzle, tot torna a la normalitat.
-  var isPuzzle = pieceType === 'puzzle';
-  ['opt-encolat','opt-protter','opt-laminat','opt-muntatge-cap'].forEach(function(id){
+  // Puzzle: el grup Muntatge canvia segons si la peça ja va sobre base.
+  //  · Sense base  → dos presets de foam (foam+cristal / foam+laminat, foam al 50%).
+  //  · Sobre base  → només laminat sol (sense foam, preu normal); ja va encolat.
+  // En tots dos casos s'amaguen les opcions soltes restants i els grups
+  // Protecció/Interior (l'acabat ja queda definit). Fora de puzzle, tot normal.
+  var isPuzzle    = pieceType === 'puzzle';
+  var puzzleOnBase = isPuzzle && puzzleSupport === 'sobre_base';
+  var puzzleNoBase = isPuzzle && !puzzleOnBase;
+  ['opt-encolat','opt-protter','opt-muntatge-cap'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.style.display = isPuzzle ? 'none' : '';
   });
+  // Laminat sol: amagat per a puzzle sense base; visible per a sobre base i resta de tipus.
+  var elLam=document.getElementById('opt-laminat'); if(elLam) elLam.style.display = puzzleNoBase ? 'none' : '';
+  // Presets de foam: només puzzle sense base.
   ['opt-puzzle_foam_cristal','opt-puzzle_foam_laminat'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.style.display = isPuzzle ? '' : 'none';
+    var el=document.getElementById(id); if(el) el.style.display = puzzleNoBase ? '' : 'none';
   });
   var gProt=document.getElementById('grup-proteccio'); if(gProt) gProt.style.display = isPuzzle ? 'none' : '';
   var gInt =document.getElementById('grup-interior');  if(gInt)  gInt.style.display  = isPuzzle ? 'none' : '';
-  // Neteja seleccions incoherents en canviar de/cap a puzzle.
+  // Neteja seleccions incoherents en canviar de tipus/suport.
   var muntatgeVal = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
-  if(isPuzzle && !isPuzzlePreset(muntatgeVal) && muntatgeVal!==''){
-    setGroupValue('muntatge','');
-  } else if(!isPuzzle && isPuzzlePreset(muntatgeVal)){
+  if(puzzleNoBase){
+    // Només els presets de foam són vàlids.
+    if(!isPuzzlePreset(muntatgeVal) && muntatgeVal!=='') setGroupValue('muntatge','');
+  } else if(puzzleOnBase){
+    // Només laminat sol és vàlid.
+    if(muntatgeVal!=='laminat' && muntatgeVal!=='') setGroupValue('muntatge','');
+  } else if(isPuzzlePreset(muntatgeVal)){
+    // Hem sortit de puzzle amb un preset actiu.
     setGroupValue('muntatge','');
   }
   if(isPuzzle){
-    // Protecció i Interior queden coberts pel preset → forçar "Cap".
+    // Protecció i Interior queden coberts pel muntatge → forçar "Cap".
     if((document.querySelector('input[name="proteccio"]:checked')||{}).value) setGroupValue('proteccio','');
     if((document.querySelector('input[name="interior"]:checked')||{}).value)  setGroupValue('interior','');
   }
@@ -1889,21 +1901,25 @@ function applyIncompatibilities(){
     note = 'Per a làmina treballem sense impressió i sense Protter.';
   }
   if(pieceType === 'puzzle'){
-    // El puzzle s'emmarca sempre afegint-li una base de foam (cobrada al 50%).
-    // Només oferim dos presets (foam+cristal / foam+laminat) al grup Muntatge;
-    // la resta d'opcions de muntatge, protecció i interior queden desactivades.
+    // Muntatge propi de puzzle (presets de foam o laminat sol); protecció i
+    // interior queden coberts i es desactiven.
     rules.encolat = true;
     rules.protter = true;
-    rules.laminat = true;
     rules.vidre = true;
     rules.doble_vidre = true;
     rules.mirall = true;
     rules['conservar-vidre'] = true;
     rules.passpartu = true;
     rules.doble_pas = true;
-    note = puzzleSupport === 'sobre_base'
-      ? 'El puzzle s’emmarca amb base de foam (50%) i acabat de cristal o laminat.'
-      : 'El puzzle arriba sense base: s’hi afegeix foam (50%) i s’acaba amb cristal o laminat.';
+    if(puzzleSupport === 'sobre_base'){
+      // Ja va encolat sobre base: no cal foam, només laminat (preu normal).
+      rules.laminat = false;
+      note = 'El puzzle ja va encolat sobre base: només cal laminar-lo (sense foam).';
+    } else {
+      // Sense base: s'afegeix foam (50%) via els presets; laminat sol no s'ofereix.
+      rules.laminat = true;
+      note = 'El puzzle arriba sense base: s’hi afegeix foam (50%) i s’acaba amb cristal o laminat.';
+    }
   }
   if(pieceType === 'pintura_sense_bastidor'){
     rules.encolat = false;
