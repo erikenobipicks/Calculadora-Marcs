@@ -1884,24 +1884,27 @@ function fetchClosest(){
 // ── Presets de puzzle ───────────────────────────────────────────────────────
 // Un puzzle arriba sense base: sempre cal afegir-li foam com a suport. Per a
 // aquest tipus de peça només oferim dues combinacions (foam + cristal i
-// foam + laminat) i el foam es cobra al 50% del seu preu (material més econòmic
-// en aquest cas). El descompte del 50% s'aplica NOMÉS al component foam i NOMÉS
-// en puzzle; cristal i laminat mantenen el seu preu normal.
+// foam + laminat). En totes dues el foam es cobra al 50% del seu preu (material
+// més econòmic en aquest cas); el 50% s'aplica NOMÉS al foam i NOMÉS en puzzle.
+//
+// Igualació de preus: les dues opcions han de quedar a un preu semblant,
+// ancorat al cristal (el més car). Per això el preset foam+laminat es cobra
+// com el cristal menys un percentatge fix (PUZZLE_LAM_VS_CRISTAL_DESC) en
+// comptes del cost real del laminat. Així el laminat queda lleugerament per
+// sota del cristal a totes les mides (la diferència escala sola amb la mida).
 var PUZZLE_FOAM_FACTOR = 0.5;
+// Quant per sota del cristal queda el laminat (0.10 = un 10% més barat que el
+// cristal). Puja'l per allunyar els dos preus, baixa'l per igualar-los més.
+var PUZZLE_LAM_VS_CRISTAL_DESC = 0.10;
 function isPuzzlePreset(v){ return v==='puzzle_foam_cristal' || v==='puzzle_foam_laminat'; }
 function puzzlePresetCost(v){
   if(!CLOSEST) return 0;
-  var foam = (CLOSEST.encolat && CLOSEST.encolat.preu) || 0;
-  var half = foam * PUZZLE_FOAM_FACTOR;
-  if(v==='puzzle_foam_cristal'){
-    var vidre = (CLOSEST.vidre && CLOSEST.vidre.preu) || 0;
-    return half + vidre;
-  }
-  if(v==='puzzle_foam_laminat'){
-    var lam = (CLOSEST.laminat_semi && CLOSEST.laminat_semi.preu)
-            || (CLOSEST.laminat && CLOSEST.laminat.preu) || 0;
-    return half + lam;
-  }
+  var foam  = (CLOSEST.encolat && CLOSEST.encolat.preu) || 0;
+  var vidre = (CLOSEST.vidre   && CLOSEST.vidre.preu)   || 0;
+  var half  = foam * PUZZLE_FOAM_FACTOR;
+  if(v==='puzzle_foam_cristal') return half + vidre;
+  // foam+laminat: acabat cobrat com el cristal − descompte fix (igualació).
+  if(v==='puzzle_foam_laminat') return half + vidre * (1 - PUZZLE_LAM_VS_CRISTAL_DESC);
   return 0;
 }
 // Aplica el preset al model de preus i fixa les referències per al pressupost/PDF.
