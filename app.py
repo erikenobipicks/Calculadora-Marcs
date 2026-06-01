@@ -3701,6 +3701,12 @@ def get_marge():
             'marc_suport':      float(get_config_value('combo_desc_marc_suport', '3')),
             'minim_pvp':        float(get_config_value('combo_desc_minim_pvp', '80')),
         },
+        # Factor del foam (base) en el preset de puzzle "foam + laminat". El
+        # preset "foam + cristal" sempre cobra el foam al 50%; el de laminat
+        # puja la part del foam (default 0.8) perquè el preu total quedi a prop
+        # del de foam + cristal (el laminat és més barat que el cristal a mides
+        # grans). Vegeu puzzlePresetCost() a calculadora.html.
+        'puzzle_foam_laminat_factor': float(get_config_value('puzzle_foam_laminat_factor', '0.8')),
     })
 
 
@@ -4547,6 +4553,8 @@ def admin_run_migrations():
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_marc_suport', '3')",
         # Mínim de subtotal PVP perquè s'apliqui el descompte combo (€).
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('combo_desc_minim_pvp', '80')",
+        # Factor del foam al preset puzzle "foam + laminat" (0.8 = 80%).
+        "INSERT OR IGNORE INTO config (clau, valor) VALUES ('puzzle_foam_laminat_factor', '0.8')",
         # MO de muntatge del doble vidre en € (substitueix l'antic
         # vidre_dv_muntatge_min, que queda inutilitzat).
         "INSERT OR IGNORE INTO config (clau, valor) VALUES ('vidre_dv_muntatge_eur', '1.30')",
@@ -6791,7 +6799,7 @@ def admin_config():
         # Descomptes combo per combinació de productes + mínim de subtotal.
         for clau in ('combo_desc_marc_imp_protter', 'combo_desc_marc_imp_foam',
                      'combo_desc_marc_imp', 'combo_desc_marc_suport',
-                     'combo_desc_minim_pvp'):
+                     'combo_desc_minim_pvp', 'puzzle_foam_laminat_factor'):
             val = request.form.get(clau)
             if val is not None and val != '':
                 execute(
@@ -9593,6 +9601,7 @@ def init_db():
                          ('combo_desc_marc_imp','3'),
                          ('combo_desc_marc_suport','3'),
                          ('combo_desc_minim_pvp','80'),
+                         ('puzzle_foam_laminat_factor','0.8'),
                          # Trams àrea per al marge d'impressions (cm²)
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
@@ -9877,6 +9886,7 @@ def init_db():
                          ('combo_desc_marc_imp','3'),
                          ('combo_desc_marc_suport','3'),
                          ('combo_desc_minim_pvp','80'),
+                         ('puzzle_foam_laminat_factor','0.8'),
                          ('imp_tram1_area','900'),
                          ('imp_tram2_area','2000'),
                          ('imp_tram3_area','4200'),

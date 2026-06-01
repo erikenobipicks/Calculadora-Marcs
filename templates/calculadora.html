@@ -1443,6 +1443,11 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
     COMBO_DESC.marc_suport      = Number(d.combo_desc.marc_suport)||0;
     if(d.combo_desc.minim_pvp != null) COMBO_DESC.minim_pvp = Number(d.combo_desc.minim_pvp)||0;
   }
+  // Factor del foam al preset puzzle "foam + laminat" (configurable des d'admin).
+  if(d.puzzle_foam_laminat_factor != null){
+    var pflf = Number(d.puzzle_foam_laminat_factor);
+    if(!isNaN(pflf) && pflf > 0) PUZZLE_FOAM_LAMINAT_FACTOR = pflf;
+  }
   applyCommercialMarginOverrides();
   document.getElementById('marge_val').value = marge;
   calcular();
@@ -1884,30 +1889,39 @@ function fetchClosest(){
 // ── Presets de puzzle ───────────────────────────────────────────────────────
 // Un puzzle arriba sense base: sempre cal afegir-li foam com a suport. Per a
 // aquest tipus de peça només oferim dues combinacions (foam + cristal i
-// foam + laminat) i el foam es cobra al 50% del seu preu (material més econòmic
-// en aquest cas). El descompte del 50% s'aplica NOMÉS al component foam i NOMÉS
-// en puzzle; cristal i laminat mantenen el seu preu normal.
+// foam + laminat) i el foam es cobra a un percentatge del seu preu (material
+// més econòmic en aquest cas). El descompte s'aplica NOMÉS al component foam i
+// NOMÉS en puzzle; cristal i laminat mantenen el seu preu normal.
+//
+// foam + cristal usa PUZZLE_FOAM_FACTOR (50%).
+// foam + laminat usa un factor de foam més alt (PUZZLE_FOAM_LAMINAT_FACTOR, per
+// defecte 80%, configurable des d'admin) perquè el preu total quedi a prop del
+// de foam + cristal: el laminat és més barat que el cristal a mides grans, i
+// pujar la part del foam compensa el desnivell. Un únic factor no iguala els dos
+// presets a totes les mides; 0.8 quadra a la franja típica de puzzle (1000
+// peces, ~48×68 / 50×70).
 var PUZZLE_FOAM_FACTOR = 0.5;
+var PUZZLE_FOAM_LAMINAT_FACTOR = 0.8;
 function isPuzzlePreset(v){ return v==='puzzle_foam_cristal' || v==='puzzle_foam_laminat'; }
 function puzzlePresetCost(v){
   if(!CLOSEST) return 0;
   var foam = (CLOSEST.encolat && CLOSEST.encolat.preu) || 0;
-  var half = foam * PUZZLE_FOAM_FACTOR;
   if(v==='puzzle_foam_cristal'){
     var vidre = (CLOSEST.vidre && CLOSEST.vidre.preu) || 0;
-    return half + vidre;
+    return foam * PUZZLE_FOAM_FACTOR + vidre;
   }
   if(v==='puzzle_foam_laminat'){
     var lam = (CLOSEST.laminat_semi && CLOSEST.laminat_semi.preu)
             || (CLOSEST.laminat && CLOSEST.laminat.preu) || 0;
-    return half + lam;
+    return foam * PUZZLE_FOAM_LAMINAT_FACTOR + lam;
   }
   return 0;
 }
 // Aplica el preset al model de preus i fixa les referències per al pressupost/PDF.
 // foam+cristal → muntatge=encolat (foam) + protecció=vidre.
 // foam+laminat → muntatge=protter (ref foam+laminat, etiquetada com a foam+laminat
-//   al PDF); el preu real ja porta el foam al 50%, la ref només és per a l'etiqueta.
+//   al PDF); el preu real ja porta el foam al factor PUZZLE_FOAM_LAMINAT_FACTOR,
+//   la ref només és per a l'etiqueta.
 function applyPuzzlePreset(v){
   var refM = '', refP = '';
   if(v==='puzzle_foam_cristal'){
