@@ -520,7 +520,7 @@ body.has-sticky-bar{padding-bottom:78px}
         <div class="card-t">Materials <span id="mida-hint" style="font-weight:400;color:var(--hint);font-size:10px;margin-left:4px"></span></div>
 
         <!-- GRUP 1: Encolat / Protter -->
-        <div class="grup">
+        <div class="grup" id="grup-muntatge">
           <div class="grup-label">Muntatge</div>
           <div class="grup-opcions">
             <!-- Presets exclusius de puzzle: sempre cal base de foam (cobrada al 50%)
@@ -2040,6 +2040,41 @@ function updateGrupPreu(grup,val){
   PREUS[grup]=cost;
 }
 
+// ── Visibilitat d'opcions per tipus de peça ─────────────────────────────────
+// Per a cada tipus de peça, amaguem (no només agrisem) les opcions que aquella
+// peça NO admet mai. Coincideix amb les regles rules.X=true incondicionals de
+// cada bloc de peça més avall. Els conflictes DINÀMICS entre opcions (passpartú
+// ↔ protecció, ProEco ↔ vidre…) segueixen agrisant-se, no s'amaguen. El puzzle
+// es gestiona a part (presets de foam).
+var PIECE_HIDDEN_OPTIONS = {
+  lamina:                 ['protter','laminat'],
+  pintura_sense_bastidor: ['protter','laminat','muntatge-cap','doble_vidre','mirall','conservar-vidre','passpartu','doble_pas'],
+  pintura_amb_bastidor:   ['encolat','protter','laminat','doble_vidre','mirall','conservar-vidre','passpartu','doble_pas'],
+  punt_de_creu:           ['protter','laminat','muntatge-cap','doble_vidre','mirall','proteccio-cap'],
+  samarreta:              ['encolat','protter','laminat','mirall','conservar-vidre','proteccio-cap','doble_pas'],
+  // fotografia: cap incompatibilitat fixa efectiva → no s'amaga res.
+};
+var TOGGLEABLE_OPTS = ['encolat','protter','laminat','muntatge-cap','vidre','doble_vidre','mirall','conservar-vidre','proteccio-cap','passpartu','doble_pas','interior-cap'];
+// Opcions "reals" (no-Cap) de cada grup. Si totes queden amagades, amaguem el
+// grup sencer per no deixar un grup amb només "Cap".
+var GROUP_NONCAP = {
+  'grup-muntatge':  ['encolat','protter','laminat'],
+  'grup-proteccio': ['vidre','doble_vidre','mirall','conservar-vidre'],
+  'grup-interior':  ['passpartu','doble_pas'],
+};
+function applyPieceOptionVisibility(pieceType){
+  var hide = PIECE_HIDDEN_OPTIONS[pieceType] || [];
+  TOGGLEABLE_OPTS.forEach(function(k){
+    var el=document.getElementById('opt-'+k);
+    if(el) el.style.display = (hide.indexOf(k) >= 0) ? 'none' : '';
+  });
+  Object.keys(GROUP_NONCAP).forEach(function(gid){
+    var allHidden = GROUP_NONCAP[gid].every(function(k){ return hide.indexOf(k) >= 0; });
+    var g=document.getElementById(gid);
+    if(g) g.style.display = allHidden ? 'none' : '';
+  });
+}
+
 // ── Incompatibilitats ─────────────────────────────────────────────────────
 function setProtterDisabled(dis){
   var el=document.getElementById('opt-protter'); if(!el) return;
@@ -2108,6 +2143,15 @@ function applyIncompatibilities(){
     // Protecció i Interior queden coberts pel muntatge → forçar "Cap".
     if((document.querySelector('input[name="proteccio"]:checked')||{}).value) setGroupValue('proteccio','');
     if((document.querySelector('input[name="interior"]:checked')||{}).value)  setGroupValue('interior','');
+  }
+
+  // Visibilitat d'opcions segons el tipus de peça (amaga el que la peça no
+  // admet mai). El puzzle ja s'ha gestionat amunt amb els seus presets; aquí
+  // només cal assegurar que el seu grup Muntatge quedi visible.
+  if(isPuzzle){
+    var gMun=document.getElementById('grup-muntatge'); if(gMun) gMun.style.display='';
+  } else {
+    applyPieceOptionVisibility(pieceType);
   }
 
   var rules = {
