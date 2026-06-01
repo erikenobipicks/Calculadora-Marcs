@@ -7044,6 +7044,10 @@ def _display_muntatge(c, t):
     ref = (c.get('encolat') or '').strip().upper()
     if not ref or ref == '-':
         return ''
+    # Puzzle: el muntatge sempre porta base de foam. El preset "foam + laminat"
+    # es desa amb ref de protter (foam+laminat), però l'etiquetem com a foam+laminat.
+    if (c.get('tipus_peca') or '') == 'puzzle' and ref.startswith('PRO'):
+        return f"{t['encolat_label']} + {t['laminat_label']}"
     if ref.startswith('LAM'):
         return t['laminat_label']
     if ref.startswith('PRO'):
