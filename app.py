@@ -7072,6 +7072,26 @@ def _fd_product_row(p):
     }
 
 
+def _fd_write(path, data, method='PUT', max_bytes=200_000, timeout=8):
+    """Escriptura a FD (PUT/PATCH/POST) amb lectura acotada de la resposta.
+    Mai propaga: retorna dict amb status/http_error/head/exc."""
+    url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
+    out = {'status': None, 'http_error': None, 'head': '', 'exc': None}
+    try:
+        body = json.dumps(data).encode()
+        req = urllib_request.Request(url, data=body, headers=_fd_headers(), method=method)
+        try:
+            with urllib_request.urlopen(req, timeout=timeout) as resp:
+                out['status'] = getattr(resp, 'status', None)
+                out['head'] = resp.read(max_bytes).decode('utf-8', 'replace')
+        except urllib_error.HTTPError as e:
+            out['http_error'] = e.code
+            out['head'] = e.read(2000).decode('utf-8', 'replace')
+    except Exception as e:
+        out['exc'] = str(e)[:300]
+    return out
+
+
 @app.route('/admin/fd/products')
 @admin_required
 def admin_fd_products_list():
@@ -7142,6 +7162,42 @@ def admin_fd_products_list():
     return jsonify({'ok': True, 'total_fd': total, 'fetched': len(all_rows),
                     'returned': len(rows), 'prefix': prefix,
                     'pagination_first_page': pagination, 'products': rows})
+
+
+@app.route('/admin/fd/product-write-test')
+@admin_required
+def admin_fd_product_write_test():
+    """PROVA (no-op) per descobrir com s'actualitza un producte a FD. Llegeix el
+    producte i el re-escriu IDÈNTIC (mateix contingut → no canvia res), provant
+    el mètode indicat. Serveix per confirmar endpoint/mètode abans de cap push.
+      ?id=pro_...   (per defecte A1313)   ?method=PUT|PATCH|POST  (per defecte PUT)
+    Retorna l'estat de l'escriptura (status/http_error/resposta)."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
+    pid = (request.args.get('id') or 'pro_0fb33689-ca29-409a-bf7b-324ecdb9ab5b').strip()  # A1313
+    method = (request.args.get('method') or 'PUT').strip().upper()
+    if method not in ('PUT', 'PATCH', 'POST'):
+        method = 'PUT'
+    # 1) Llegim el producte sencer.
+    g = _fd_get_bounded(f'products/{pid}')
+    if g['http_error'] is not None:
+        return jsonify({'ok': False, 'step': 'get', 'http_status': g['http_error'],
+                        'head': g['head'], 'pid': pid}), 200
+    if g['parsed'] is None:
+        return jsonify({'ok': False, 'step': 'get', 'reason': 'no_json',
+                        'head': g['head'], 'pid': pid}), 200
+    obj = g['parsed']
+    content = obj.get('content') if isinstance(obj, dict) else None
+    if not content:
+        return jsonify({'ok': False, 'step': 'get', 'reason': 'no_content',
+                        'keys': list(obj.keys()) if isinstance(obj, dict) else None}), 200
+    price_before = ((content.get('main') or {}).get('sales') or {}).get('price')
+    # 2) Re-escrivim EXACTAMENT el mateix contingut (no-op) amb el mètode provat.
+    w = _fd_write(f'products/{pid}', {'content': content}, method=method)
+    return jsonify({'ok': (w['http_error'] is None and w['exc'] is None),
+                    'pid': pid, 'method': method, 'price_before': price_before,
+                    'write_status': w['status'], 'write_http_error': w['http_error'],
+                    'write_exc': w['exc'], 'write_head': (w['head'] or '')[:800]})
 
 
 @app.route('/admin/clients-externs')
