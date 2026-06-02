@@ -7027,71 +7027,100 @@ def admin_fd_contacts_search():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
-@app.route('/admin/fd/products')
-@admin_required
-def admin_fd_products_list():
-    """Inspecció (només lectura) del catàleg de productes de FacturaDirecta.
-    Serveix per veure l'esquema real (id, referència, nom, IVA, preu) i poder
-    mapejar després els productes de la web/calculadora amb els de FD.
-    NO modifica res. Paràmetre opcional ?q= per filtrar per text.
-    `sample_raw` mostra l'estructura crua del primer element (per saber els
-    noms de camp reals que retorna FD)."""
-    if not _FD_TOKEN or not _FD_COMPANY:
-        return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
-    # CLAU: llegim com a MÀXIM 1 MB de la resposta de FD. Si el catàleg és gran,
-    # carregar-lo sencer a memòria fa OOM amb 1 worker i el sistema mata el
-    # procés (SIGKILL → 502), cosa que cap try/except pot capturar. Amb lectura
-    # acotada això no pot passar: sempre tornem JSON (dades o diagnòstic).
-    MAX = 1_000_000
-    q = (request.args.get('q') or '').strip()
-    path = f'products?search={urllib_quote(q)}' if q else 'products'
+def _fd_get_bounded(path, max_bytes=1_000_000, timeout=6):
+    """GET a FD llegint com a MÀXIM max_bytes (evita OOM → 502 amb 1 worker).
+    Retorna un dict amb l'estat i el JSON parsejat (o el cap del cos si falla)."""
     url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
+    out = {'status': None, 'ctype': '', 'truncated': False, 'parsed': None,
+           'parse_err': None, 'http_error': None, 'head': '', 'exc': None}
     try:
         req = urllib_request.Request(url, headers=_fd_headers())
         try:
-            with urllib_request.urlopen(req, timeout=8) as resp:
-                status = getattr(resp, 'status', 200)
-                ctype = resp.headers.get('Content-Type', '')
-                raw = resp.read(MAX + 1)
+            with urllib_request.urlopen(req, timeout=timeout) as resp:
+                out['status'] = getattr(resp, 'status', 200)
+                out['ctype'] = resp.headers.get('Content-Type', '')
+                raw = resp.read(max_bytes + 1)
         except urllib_error.HTTPError as e:
-            head = e.read(2000).decode('utf-8', 'replace')
-            return jsonify({'ok': False, 'reason': 'http_error', 'http_status': e.code,
-                            'head': head, 'path': path}), 200
-        truncated = len(raw) > MAX
-        raw = raw[:MAX]
+            out['http_error'] = e.code
+            out['head'] = e.read(2000).decode('utf-8', 'replace')
+            return out
+        out['truncated'] = len(raw) > max_bytes
+        raw = raw[:max_bytes]
         text = raw.decode('utf-8', 'replace')
-        parsed = None
-        parse_err = None
-        if not truncated:
+        out['head'] = text[:1500]
+        if not out['truncated']:
             try:
-                parsed = json.loads(text)
+                out['parsed'] = json.loads(text)
             except Exception as e:
-                parse_err = str(e)[:200]
-        if parsed is not None:
-            items = _fd_extract_contacts_list(parsed)
-            products = []
-            for p in items[:100]:
-                if not isinstance(p, dict):
-                    continue
-                content = p.get('content') or {}
-                main = content.get('main') or {}
-                products.append({
-                    'id':        p.get('id') or p.get('uuid') or content.get('uuid') or main.get('id') or '',
-                    'reference': main.get('reference') or main.get('code') or p.get('reference') or '',
-                    'name':      main.get('name') or p.get('name') or '',
-                    'price':     main.get('price', main.get('unitPrice', '')),
-                    'tax':       main.get('tax', ''),
-                })
-            return jsonify({'ok': True, 'http_status': status, 'content_type': ctype,
-                            'total': len(items), 'count': len(products),
-                            'products': products, 'sample_raw': items[0] if items else None})
-        # Massa gran per parsejar o no és JSON: tornem diagnòstic segur (cap del cos).
-        return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
-                        'http_status': status, 'content_type': ctype,
-                        'bytes_read': len(raw), 'truncated': truncated,
-                        'parse_error': parse_err, 'head': text[:1500], 'path': path}), 200
+                out['parse_err'] = str(e)[:200]
     except Exception as e:
-        return jsonify({'ok': False, 'reason': 'exception', 'error': str(e)[:300], 'path': path}), 200
+        out['exc'] = str(e)[:300]
+    return out
+
+def _fd_product_row(p):
+    """Normalitza un producte de FD als camps que ens interessen per mapejar."""
+    content = p.get('content') or {}
+    main = content.get('main') or {}
+    sales = main.get('sales') or {}
+    return {
+        'id':      p.get('uuid') or content.get('uuid') or main.get('uuid') or main.get('id') or '',
+        'sku':     main.get('sku') or main.get('reference') or '',
+        'name':    main.get('name') or main.get('title') or p.get('name') or '',
+        'price':   sales.get('price', main.get('price', '')),
+        'tax':     sales.get('tax', main.get('tax', '')),
+        'account': sales.get('account', ''),
+    }
+
+
+@app.route('/admin/fd/products')
+@admin_required
+def admin_fd_products_list():
+    """Inspecció (només lectura) del catàleg COMPLET de productes de FD, paginant.
+    Extreu id/sku/nom/preu/IVA/compte. NO modifica res. ?q= filtra per text.
+    Lectura acotada per pàgina (mai OOM). meta_first_page mostra l'estructura
+    de paginació real de FD per si cal afinar el paràmetre de pàgina."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
+    q = (request.args.get('q') or '').strip()
+    qsearch = f'search={urllib_quote(q)}&' if q else ''
+    seen = set()
+    rows = []
+    meta = None
+    pages = 0
+    MAX_PAGES = 20  # seguretat (20 × ~25 = 500 productes); evita bucles llargs
+    for page in range(1, MAX_PAGES + 1):
+        res = _fd_get_bounded(f'products?{qsearch}page={page}')
+        if res['http_error'] is not None:
+            return jsonify({'ok': False, 'reason': 'http_error',
+                            'http_status': res['http_error'], 'head': res['head']}), 200
+        if res['exc'] is not None:
+            return jsonify({'ok': False, 'reason': 'exception', 'error': res['exc']}), 200
+        parsed = res['parsed']
+        if parsed is None:
+            return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
+                            'truncated': res['truncated'], 'parse_error': res['parse_err'],
+                            'http_status': res['status'], 'head': res['head']}), 200
+        if meta is None and isinstance(parsed, dict):
+            meta = {k: (f'[list:{len(v)}]' if isinstance(v, list) else v)
+                    for k, v in parsed.items()}
+        items = _fd_extract_contacts_list(parsed)
+        pages += 1
+        new = 0
+        for p in items:
+            if not isinstance(p, dict):
+                continue
+            row = _fd_product_row(p)
+            key = row['id'] or row['sku'] or row['name']
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+            new += 1
+        # Si no hi ha res nou (última pàgina, o FD ignora ?page=), parem.
+        if new == 0 or not items:
+            break
+    return jsonify({'ok': True, 'pages_fetched': pages, 'reached_cap': pages >= MAX_PAGES,
+                    'total': len(rows), 'meta_first_page': meta, 'products': rows})
 
 
 @app.route('/admin/clients-externs')
