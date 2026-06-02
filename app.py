@@ -7075,52 +7075,39 @@ def _fd_product_row(p):
 @app.route('/admin/fd/products')
 @admin_required
 def admin_fd_products_list():
-    """Inspecció (només lectura) del catàleg COMPLET de productes de FD, paginant.
-    Extreu id/sku/nom/preu/IVA/compte. NO modifica res. ?q= filtra per text.
-    Lectura acotada per pàgina (mai OOM). meta_first_page mostra l'estructura
-    de paginació real de FD per si cal afinar el paràmetre de pàgina."""
+    """Inspecció (només lectura) de productes de FD. NO modifica res.
+    FD valida els params de forma estricta (no accepta 'page'), així que fem
+    UNA crida i retornem `meta_first_page` = claus de nivell superior de la
+    resposta, per descobrir com pagina realment. Params:
+      ?q=text → afegeix search=text · ?qs=... → passthrough cru (ex: ?qs=offset=25)
+    Extreu id/sku/nom/preu/IVA/compte. Lectura acotada (mai OOM)."""
     if not _FD_TOKEN or not _FD_COMPANY:
         return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
-    q = (request.args.get('q') or '').strip()
-    qsearch = f'search={urllib_quote(q)}&' if q else ''
-    seen = set()
-    rows = []
+    q  = (request.args.get('q')  or '').strip()
+    qs = (request.args.get('qs') or '').strip()  # passthrough cru a la query de FD
+    parts = []
+    if q:  parts.append('search=' + urllib_quote(q))
+    if qs: parts.append(qs)
+    path = 'products' + (('?' + '&'.join(parts)) if parts else '')
+    res = _fd_get_bounded(path)
+    if res['http_error'] is not None:
+        return jsonify({'ok': False, 'reason': 'http_error',
+                        'http_status': res['http_error'], 'head': res['head'], 'path': path}), 200
+    if res['exc'] is not None:
+        return jsonify({'ok': False, 'reason': 'exception', 'error': res['exc'], 'path': path}), 200
+    parsed = res['parsed']
+    if parsed is None:
+        return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
+                        'truncated': res['truncated'], 'parse_error': res['parse_err'],
+                        'http_status': res['status'], 'head': res['head'], 'path': path}), 200
     meta = None
-    pages = 0
-    MAX_PAGES = 20  # seguretat (20 × ~25 = 500 productes); evita bucles llargs
-    for page in range(1, MAX_PAGES + 1):
-        res = _fd_get_bounded(f'products?{qsearch}page={page}')
-        if res['http_error'] is not None:
-            return jsonify({'ok': False, 'reason': 'http_error',
-                            'http_status': res['http_error'], 'head': res['head']}), 200
-        if res['exc'] is not None:
-            return jsonify({'ok': False, 'reason': 'exception', 'error': res['exc']}), 200
-        parsed = res['parsed']
-        if parsed is None:
-            return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
-                            'truncated': res['truncated'], 'parse_error': res['parse_err'],
-                            'http_status': res['status'], 'head': res['head']}), 200
-        if meta is None and isinstance(parsed, dict):
-            meta = {k: (f'[list:{len(v)}]' if isinstance(v, list) else v)
-                    for k, v in parsed.items()}
-        items = _fd_extract_contacts_list(parsed)
-        pages += 1
-        new = 0
-        for p in items:
-            if not isinstance(p, dict):
-                continue
-            row = _fd_product_row(p)
-            key = row['id'] or row['sku'] or row['name']
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            rows.append(row)
-            new += 1
-        # Si no hi ha res nou (última pàgina, o FD ignora ?page=), parem.
-        if new == 0 or not items:
-            break
-    return jsonify({'ok': True, 'pages_fetched': pages, 'reached_cap': pages >= MAX_PAGES,
-                    'total': len(rows), 'meta_first_page': meta, 'products': rows})
+    if isinstance(parsed, dict):
+        meta = {k: (f'[list:{len(v)}]' if isinstance(v, list) else v) for k, v in parsed.items()}
+    items = _fd_extract_contacts_list(parsed)
+    products = [_fd_product_row(p) for p in items if isinstance(p, dict)]
+    return jsonify({'ok': True, 'http_status': res['status'], 'path': path,
+                    'count': len(products), 'meta_first_page': meta,
+                    'products': products, 'sample_raw': items[0] if items else None})
 
 
 @app.route('/admin/clients-externs')
