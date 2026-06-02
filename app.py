@@ -6887,24 +6887,31 @@ def _fd_headers():
         'Accept': 'application/json',
     }
 
-def _fd_get(path):
+def _fd_get(path, timeout=10):
     url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
     req = urllib_request.Request(url, headers=_fd_headers())
     try:
-        with urllib_request.urlopen(req, timeout=10) as r:
+        with urllib_request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
     except urllib_error.HTTPError as e:
-        return {'_error': e.code, '_msg': e.read().decode()}
+        return {'_error': e.code, '_msg': e.read().decode()[:500]}
+    except Exception as e:
+        # Xarxa/timeout/SSL/JSON: mai propaguem. Amb 1 worker de gunicorn, una
+        # excepció no controlada o un cuelgue pot deixar tota l'app sense
+        # respondre (502). Retornem un error net perquè el caller el gestioni.
+        return {'_error': 'net', '_msg': str(e)[:300]}
 
-def _fd_post(path, data):
+def _fd_post(path, data, timeout=10):
     url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
     body = json.dumps(data).encode()
     req = urllib_request.Request(url, data=body, headers=_fd_headers(), method='POST')
     try:
-        with urllib_request.urlopen(req, timeout=10) as r:
+        with urllib_request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
     except urllib_error.HTTPError as e:
-        return {'_error': e.code, '_msg': e.read().decode()}
+        return {'_error': e.code, '_msg': e.read().decode()[:500]}
+    except Exception as e:
+        return {'_error': 'net', '_msg': str(e)[:300]}
 
 def _fd_cerca_contacte(nom=None, nif=None):
     """Cerca un contacte a FD per NIF o per nom."""
@@ -7031,31 +7038,39 @@ def admin_fd_products_list():
     noms de camp reals que retorna FD)."""
     if not _FD_TOKEN or not _FD_COMPANY:
         return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
-    q = (request.args.get('q') or '').strip()
-    path = f'products?search={urllib_quote(q)}' if q else 'products'
-    r = _fd_get(path)
-    if isinstance(r, dict) and '_error' in r:
-        return jsonify({'ok': False, 'error': f"FD {r.get('_error')}: {r.get('_msg','')}", 'path': path}), 502
-    items = _fd_extract_contacts_list(r)
-    products = []
-    for p in items:
-        if not isinstance(p, dict):
-            continue
-        content = p.get('content') or {}
-        main = content.get('main') or {}
-        products.append({
-            'id':        p.get('id') or p.get('uuid') or content.get('uuid') or main.get('id') or '',
-            'reference': main.get('reference') or main.get('code') or p.get('reference') or '',
-            'name':      main.get('name') or p.get('name') or '',
-            'price':     main.get('price', main.get('unitPrice', '')),
-            'tax':       main.get('tax', ''),
+    try:
+        q = (request.args.get('q') or '').strip()
+        path = f'products?search={urllib_quote(q)}' if q else 'products'
+        r = _fd_get(path, timeout=12)
+        if isinstance(r, dict) and '_error' in r:
+            return jsonify({'ok': False, 'error': f"FD {r.get('_error')}: {r.get('_msg','')}", 'path': path}), 502
+        items = _fd_extract_contacts_list(r)
+        total = len(items)
+        products = []
+        for p in items[:200]:  # límit per no retornar respostes enormes (1 worker)
+            if not isinstance(p, dict):
+                continue
+            content = p.get('content') or {}
+            main = content.get('main') or {}
+            products.append({
+                'id':        p.get('id') or p.get('uuid') or content.get('uuid') or main.get('id') or '',
+                'reference': main.get('reference') or main.get('code') or p.get('reference') or '',
+                'name':      main.get('name') or p.get('name') or '',
+                'price':     main.get('price', main.get('unitPrice', '')),
+                'tax':       main.get('tax', ''),
+            })
+        return jsonify({
+            'ok': True,
+            'total': total,
+            'count': len(products),
+            'truncated': total > len(products),
+            'products': products,
+            'sample_raw': items[0] if items else None,
         })
-    return jsonify({
-        'ok': True,
-        'count': len(products),
-        'products': products,
-        'sample_raw': items[0] if items else None,
-    })
+    except Exception as e:
+        # Mai propaguem: amb 1 worker una excepció no controlada pot deixar
+        # l'app sense respondre. Retornem l'error perquè el puguem llegir.
+        return jsonify({'ok': False, 'error': f'exception: {str(e)[:300]}'}), 500
 
 
 @app.route('/admin/clients-externs')
