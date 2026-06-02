@@ -7399,29 +7399,39 @@ def _sync_family_source(family):
                 continue
         return rows, None
     if family in ('cristal', 'mirall'):
+        # IMPORTANT: el preu viu del calc NO és la columna vidres.preu, sinó el
+        # que retorna calcular_cost_vidre/mirall (cost × marge_admin_vidres_pct,
+        # amb fórmula). Calculem el preu real per cada mida de la tarifa.
         try:
-            allrows = query('SELECT referencia, preu FROM vidres') or []
+            allrows = query('SELECT referencia FROM vidres') or []
         except Exception as e:
             return None, f"taula vidres: {str(e)[:150]}"
         rows = []
         for r in allrows:
             ref = (_row_get(r, 'referencia') or '').strip()
-            preu = _row_get(r, 'preu')
-            if not ref or preu is None:
+            if not ref:
                 continue
             up = ref.upper()
             if family == 'cristal':
                 if up.startswith('DV-') or up.startswith('MIR-'):
                     continue
+                w, h = _parse_dims(ref)
+                if not w or not h:
+                    continue
+                d = calcular_cost_vidre(w, h) or {}
                 sku = 'VID' + ref
-            else:  # mirall: 'MIR-30x40' → 'MIR30x40'
+            else:  # mirall
                 if not up.startswith('MIR-'):
                     continue
+                w, h = _parse_dims(ref)
+                if not w or not h:
+                    continue
+                d = calcular_cost_mirall(w, h) or {}
                 sku = 'MIR' + ref[4:]
-            try:
-                rows.append({'label': ref, 'sku': sku, 'price': round(float(preu), 2)})
-            except Exception:
+            preu = d.get('preu')
+            if preu is None:
                 continue
+            rows.append({'label': ref, 'sku': sku, 'price': round(float(preu), 2)})
         return rows, None
     return None, f"família desconeguda: {family}"
 
