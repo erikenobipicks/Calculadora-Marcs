@@ -7200,6 +7200,179 @@ def admin_fd_product_write_test():
                     'write_exc': w['exc'], 'write_head': (w['head'] or '')[:800]})
 
 
+# ── Sincronització de preus de fulla d'àlbum: web → FacturaDirecta ──────────
+def _fetch_web_album_prices(timeout=8):
+    """Llegeix els preus de fulla d'àlbum de la web (font de veritat)."""
+    url = _main_site_url() + '/api/album-prices'
+    try:
+        req = urllib_request.Request(url, headers={
+            'User-Agent': 'calculadora-marcs-bridge/1.0 (+https://calculadora.reusrevela.cat)'})
+        with urllib_request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read(500_000).decode('utf-8', 'replace'))
+    except Exception as e:
+        return {'_error': str(e)[:200]}
+
+def _album_size_to_sku(size_id):
+    """'30x40' → 'A3040' (2 dígits per costat). None si no és WxH."""
+    try:
+        w, h = str(size_id).lower().replace(' ', '').split('x')
+        if not (w.isdigit() and h.isdigit()):
+            return None
+        return 'A' + w.zfill(2) + h.zfill(2)
+    except Exception:
+        return None
+
+def _fd_products_by_prefix(prefix, limit=200, max_pages=20):
+    """dict {sku_upper: row} dels productes FD amb sku que comença per prefix."""
+    out = {}
+    offset = 0
+    for _ in range(max_pages):
+        res = _fd_get_bounded(f'products?limit={limit}&offset={offset}')
+        if res['http_error'] is not None:
+            return out, f"FD {res['http_error']}: {(res['head'] or '')[:200]}"
+        if res['parsed'] is None:
+            return out, 'resposta FD no JSON'
+        items = _fd_extract_contacts_list(res['parsed'])
+        if not items:
+            break
+        for p in items:
+            if not isinstance(p, dict):
+                continue
+            row = _fd_product_row(p)
+            sku = str(row.get('sku') or '')
+            if sku.upper().startswith(prefix.upper()):
+                out[sku.upper()] = row
+        total = (res['parsed'].get('pagination') or {}).get('total') if isinstance(res['parsed'], dict) else None
+        offset += len(items)
+        if total is not None and offset >= total:
+            break
+        if len(items) < limit:
+            break
+    return out, None
+
+def _album_sync_compare():
+    """Compara preus de fulla d'àlbum (web) amb els productes A#### de FD.
+    Retorna (rows, error). Cada row: size, label, sku, web_price, fd_price, fd_id, status."""
+    web = _fetch_web_album_prices()
+    if not isinstance(web, dict) or web.get('_error') or not web.get('sizes'):
+        msg = web.get('_error') if isinstance(web, dict) else 'resposta inesperada'
+        return None, f"No s'han pogut llegir els preus de la web: {msg}"
+    fd_map, err = _fd_products_by_prefix('A')
+    if err:
+        return None, f"No s'han pogut llegir productes de FD: {err}"
+    rows = []
+    for s in web['sizes']:
+        sku = _album_size_to_sku(s.get('id'))
+        try:
+            web_price = round(float(s.get('sheet_price')), 2)
+        except Exception:
+            continue
+        fd = fd_map.get((sku or '').upper()) if sku else None
+        if not sku:
+            status, fd_price, fd_id = 'skip', None, None
+        elif not fd:
+            status, fd_price, fd_id = 'missing', None, None
+        else:
+            fd_id = fd.get('id')
+            try:
+                fd_price = round(float(fd.get('price')), 2)
+            except Exception:
+                fd_price = None
+            status = 'ok' if fd_price == web_price else 'diff'
+        rows.append({'size': s.get('id'), 'label': s.get('label'), 'sku': sku,
+                     'web_price': web_price, 'fd_price': fd_price, 'fd_id': fd_id, 'status': status})
+    return rows, None
+
+def _album_sync_apply(rows):
+    """Aplica a FD: PUT preu web a les diferències, POST crea els que falten.
+    Només toca SKUs A#### derivats de les mides de la web (allow-list implícita)."""
+    results = []
+    for r in rows:
+        if r['status'] == 'diff' and r.get('fd_id'):
+            g = _fd_get_bounded(f"products/{r['fd_id']}")
+            if not isinstance(g.get('parsed'), dict):
+                results.append({**r, 'result': f"error_get {g.get('http_error') or g.get('exc') or '?'}"})
+                continue
+            content = g['parsed'].get('content') or {}
+            main = content.get('main') or {}
+            sales = main.get('sales') or {}
+            sales['price'] = r['web_price']
+            main['sales'] = sales
+            content['main'] = main
+            w = _fd_write(f"products/{r['fd_id']}", {'content': content}, method='PUT')
+            ok = w['http_error'] is None and w['exc'] is None
+            results.append({**r, 'result': 'updated' if ok else f"error_put {w['http_error'] or w['exc']}"})
+        elif r['status'] == 'missing' and r.get('sku'):
+            main = {'sku': r['sku'], 'name': r['sku'], 'title': r['sku'], 'currency': 'EUR',
+                    'sales': {'account': '700000', 'price': r['web_price'],
+                              'tax': ['S_IVA_21'], 'description': f"Fulla àlbum {r['size']}"}}
+            w = _fd_write('products', {'content': {'type': 'product', 'main': main}}, method='POST')
+            ok = w['http_error'] is None and w['exc'] is None
+            results.append({**r, 'result': 'created' if ok else f"error_post {w['http_error'] or w['exc']}"})
+    return results
+
+def _album_sync_html(rows, results=None):
+    color = {'ok': '#1A6B45', 'diff': '#C8873A', 'missing': '#B84040', 'skip': '#9E9B94'}
+    trs = []
+    for r in rows:
+        fd = '—' if r['fd_price'] is None else f"{r['fd_price']:.2f} €"
+        res_cell = ''
+        if results is not None:
+            match = next((x for x in results if x.get('sku') == r['sku']), None)
+            res_cell = f"<td><strong>{match['result']}</strong></td>" if match else '<td>—</td>'
+        trs.append(
+            f"<tr><td>{r['size']}</td><td><code>{r['sku'] or '—'}</code></td>"
+            f"<td style='text-align:right'>{r['web_price']:.2f} €</td>"
+            f"<td style='text-align:right'>{fd}</td>"
+            f"<td style='color:{color.get(r['status'],'#000')};font-weight:700'>{r['status']}</td>{res_cell}</tr>")
+    n_diff = sum(1 for r in rows if r['status'] == 'diff')
+    n_missing = sum(1 for r in rows if r['status'] == 'missing')
+    res_head = '<th>Resultat</th>' if results is not None else ''
+    btn = ''
+    if results is None and (n_diff or n_missing):
+        btn = (f"<form method='post' action='/admin/fd/album-sync/apply' "
+               f"onsubmit=\"return confirm('Aplicar a FacturaDirecta: {n_diff} preus a actualitzar i {n_missing} productes a crear?');\">"
+               f"<button type='submit' style='margin-top:1rem;padding:10px 18px;background:#1A6B45;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer'>"
+               f"Sincronitzar a FacturaDirecta ({n_diff} canvis · {n_missing} nous)</button></form>")
+    elif results is None:
+        btn = "<p style='color:#1A6B45;font-weight:700;margin-top:1rem'>✔ Tot quadra, res a sincronitzar.</p>"
+    title = 'Resultat de la sincronització' if results is not None else 'Sincronització fulles d\'àlbum · web → FacturaDirecta'
+    return (
+        "<!doctype html><meta charset='utf-8'><title>Album sync FD</title>"
+        "<div style='font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem'>"
+        f"<h2>{title}</h2>"
+        f"<p style='color:#6B6860'>Diferències: <strong>{n_diff}</strong> · Falten a FD: <strong>{n_missing}</strong>. "
+        "El preu de la web mana; el botó actualitza FD perquè coincideixi.</p>"
+        "<table style='border-collapse:collapse;width:100%' border='1' cellpadding='7'>"
+        f"<tr style='background:#F5F4F1'><th>Mida</th><th>SKU FD</th><th>Web</th><th>FD</th><th>Estat</th>{res_head}</tr>"
+        + ''.join(trs) + "</table>" + btn + "</div>")
+
+
+@app.route('/admin/fd/album-sync')
+@admin_required
+def admin_fd_album_sync():
+    """Informe comparatiu de preus de fulla d'àlbum web ↔ FD (només lectura)."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return 'FacturaDirecta no configurat (variables d\'entorn)', 503
+    rows, err = _album_sync_compare()
+    if err:
+        return f"<div style='font-family:sans-serif;margin:2rem'><h2>Album sync</h2><p style='color:#B84040'>{err}</p></div>", 200
+    return _album_sync_html(rows)
+
+
+@app.route('/admin/fd/album-sync/apply', methods=['POST'])
+@admin_required
+def admin_fd_album_sync_apply():
+    """Aplica la sincronització: PUT preus diferents, POST crea els que falten."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return 'FacturaDirecta no configurat', 503
+    rows, err = _album_sync_compare()
+    if err:
+        return f"<div style='font-family:sans-serif;margin:2rem'><p style='color:#B84040'>{err}</p></div>", 200
+    results = _album_sync_apply(rows)
+    return _album_sync_html(rows, results=results)
+
+
 @app.route('/admin/clients-externs')
 @admin_required
 def admin_clients_externs():
