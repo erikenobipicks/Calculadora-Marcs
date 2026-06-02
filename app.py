@@ -7403,7 +7403,7 @@ def _sync_family_source(family):
         # que retorna calcular_cost_vidre/mirall (cost × marge_admin_vidres_pct,
         # amb fórmula). Calculem el preu real per cada mida de la tarifa.
         try:
-            allrows = query('SELECT referencia FROM vidres') or []
+            allrows = query('SELECT referencia, preu_cost FROM vidres') or []
         except Exception as e:
             return None, f"taula vidres: {str(e)[:150]}"
         rows = []
@@ -7412,6 +7412,7 @@ def _sync_family_source(family):
             if not ref:
                 continue
             up = ref.upper()
+            cost_col = _row_get(r, 'preu_cost')
             if family == 'cristal':
                 if up.startswith('DV-') or up.startswith('MIR-'):
                     continue
@@ -7420,7 +7421,7 @@ def _sync_family_source(family):
                     continue
                 d = calcular_cost_vidre(w, h) or {}
                 sku = 'VID' + ref
-            else:  # mirall
+            else:  # mirall (preu per fórmula, sense cost editable per mida)
                 if not up.startswith('MIR-'):
                     continue
                 w, h = _parse_dims(ref)
@@ -7431,7 +7432,13 @@ def _sync_family_source(family):
             preu = d.get('preu')
             if preu is None:
                 continue
-            rows.append({'label': ref, 'sku': sku, 'price': round(float(preu), 2)})
+            row = {'label': ref, 'ref': ref, 'sku': sku, 'price': round(float(preu), 2)}
+            if family == 'cristal':
+                try:
+                    row['cost'] = round(float(cost_col), 4) if cost_col is not None else None
+                except Exception:
+                    row['cost'] = None
+            rows.append(row)
         return rows, None
     return None, f"família desconeguda: {family}"
 
@@ -7488,9 +7495,17 @@ def _sync_apply(family, rows):
             results.append({**r, 'result': 'created' if ok else f"error_post {w['http_error'] or w['exc']}"})
     return results
 
+def _fmt_cost(c):
+    if c is None:
+        return ''
+    s = f"{c:.4f}".rstrip('0').rstrip('.')
+    return s or '0'
+
 def _sync_html(family, rows, results=None):
     cfg = _SYNC_FAMILIES.get(family, {})
     color = {'ok': '#1A6B45', 'diff': '#C8873A', 'missing': '#B84040'}
+    is_cristal = (family == 'cristal')
+    editable = is_cristal and results is None  # editor de cost només a cristal (vista, no resultats)
     nav = ' · '.join(
         (f"<strong>{c['titol']}</strong>" if k == family
          else f"<a href='/admin/fd/sync?family={k}'>{c['titol']}</a>")
@@ -7502,34 +7517,57 @@ def _sync_html(family, rows, results=None):
         if results is not None:
             m = next((x for x in results if x.get('sku') == r['sku']), None)
             rescell = f"<td><strong>{m['result']}</strong></td>" if m else "<td>—</td>"
+        costcell = ''
+        if is_cristal:
+            cv = _fmt_cost(r.get('cost'))
+            if editable:
+                costcell = (f"<td><input type='number' step='0.0001' min='0' "
+                            f"name='cost_{r.get('ref', '')}' value='{cv}' style='width:88px'> €</td>")
+            else:
+                costcell = f"<td style='text-align:right'>{(cv + ' €') if cv else '—'}</td>"
         trs.append(
-            f"<tr><td>{r['label']}</td><td><code>{r['sku']}</code></td>"
+            f"<tr><td>{r['label']}</td><td><code>{r['sku']}</code></td>{costcell}"
             f"<td style='text-align:right'>{r['price']:.2f} €</td>"
             f"<td style='text-align:right'>{fd}</td>"
             f"<td style='color:{color.get(r['status'], '#000')};font-weight:700'>{r['status']}</td>{rescell}</tr>")
     n_diff = sum(1 for r in rows if r['status'] == 'diff')
     n_missing = sum(1 for r in rows if r['status'] == 'missing')
     reshead = '<th>Resultat</th>' if results is not None else ''
-    btn = ''
-    if results is None and (n_diff or n_missing):
-        btn = (f"<form method='post' action='/admin/fd/sync/apply?family={family}' "
-               f"onsubmit=\"return confirm('Aplicar a FacturaDirecta ({cfg.get('titol','')}): "
-               f"{n_diff} preus a actualitzar i {n_missing} productes a crear?');\">"
-               f"<button type='submit' style='margin-top:1rem;padding:10px 18px;background:#1A6B45;"
-               f"color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer'>"
-               f"Sincronitzar {cfg.get('titol','')} ({n_diff} canvis · {n_missing} nous)</button></form>")
-    elif results is None:
-        btn = "<p style='color:#1A6B45;font-weight:700;margin-top:1rem'>✔ Tot quadra, res a sincronitzar.</p>"
+    costhead = '<th>Cost</th>' if is_cristal else ''
+    btnstyle = ("margin-top:1rem;padding:10px 18px;background:#1A6B45;color:#fff;"
+                "border:none;border-radius:8px;font-weight:700;cursor:pointer")
+    table_html = (
+        "<table style='border-collapse:collapse;width:100%' border='1' cellpadding='7'>"
+        f"<tr style='background:#F5F4F1'><th>Mida</th><th>SKU FD</th>{costhead}"
+        f"<th>Preu</th><th>FD</th><th>Estat</th>{reshead}</tr>"
+        + ''.join(trs) + "</table>")
+    if editable:
+        intro = ("Edita el <strong>cost</strong> de cada mida; el preu = cost × marge i es desa "
+                 "(amb historial) i es sincronitza a FacturaDirecta.")
+        body = (f"<form method='post' action='/admin/fd/sync/save-cost?family=cristal' "
+                f"onsubmit=\"return confirm('Desar els costos editats i sincronitzar a FacturaDirecta?');\">"
+                + table_html
+                + f"<button type='submit' style='{btnstyle}'>Desar costos i sincronitzar "
+                f"({n_diff} dif · {n_missing} nous)</button></form>")
+    else:
+        intro = "El preu del calculador/web mana; el botó actualitza FD perquè coincideixi."
+        btn = ''
+        if results is None and (n_diff or n_missing):
+            btn = (f"<form method='post' action='/admin/fd/sync/apply?family={family}' "
+                   f"onsubmit=\"return confirm('Aplicar a FacturaDirecta ({cfg.get('titol','')}): "
+                   f"{n_diff} preus a actualitzar i {n_missing} productes a crear?');\">"
+                   f"<button type='submit' style='{btnstyle}'>"
+                   f"Sincronitzar {cfg.get('titol','')} ({n_diff} canvis · {n_missing} nous)</button></form>")
+        elif results is None:
+            btn = "<p style='color:#1A6B45;font-weight:700;margin-top:1rem'>✔ Tot quadra, res a sincronitzar.</p>"
+        body = table_html + btn
     return (
         "<!doctype html><meta charset='utf-8'><title>Sync preus FD</title>"
-        "<div style='font-family:system-ui,sans-serif;max-width:840px;margin:2rem auto;padding:0 1rem'>"
+        "<div style='font-family:system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem'>"
         "<h2>Sincronització de preus → FacturaDirecta</h2>"
         f"<p style='font-size:15px'>{nav}</p><h3>{cfg.get('titol', family)}</h3>"
-        f"<p style='color:#6B6860'>Diferències: <strong>{n_diff}</strong> · Falten a FD: <strong>{n_missing}</strong>. "
-        "El preu del calculador/web mana; el botó actualitza FD perquè coincideixi.</p>"
-        "<table style='border-collapse:collapse;width:100%' border='1' cellpadding='7'>"
-        f"<tr style='background:#F5F4F1'><th>Mida</th><th>SKU FD</th><th>Preu origen</th><th>FD</th><th>Estat</th>{reshead}</tr>"
-        + ''.join(trs) + "</table>" + btn + "</div>")
+        f"<p style='color:#6B6860'>Diferències: <strong>{n_diff}</strong> · Falten a FD: <strong>{n_missing}</strong>. {intro}</p>"
+        + body + "</div>")
 
 
 @app.route('/admin/fd/sync')
@@ -7561,6 +7599,72 @@ def admin_fd_sync_apply():
         return f"<div style='font-family:sans-serif;margin:2rem'><p style='color:#B84040'>{err}</p></div>", 200
     results = _sync_apply(family, rows)
     return _sync_html(family, rows, results=results)
+
+
+def _update_vidre_cost(ref, new_cost, notes='Editat des de sync FD'):
+    """Actualitza el preu_cost d'una fila de vidres (amb historial), com fa
+    /admin/preus-cost/update. Recalcula també la columna preu (cost × marge)."""
+    row = query('SELECT preu_cost FROM vidres WHERE referencia=?', [ref], one=True)
+    if not row:
+        return False
+    ant = _row_get(row, 'preu_cost')
+    avui = datetime.now().strftime('%Y-%m-%d')
+    execute('''UPDATE vidres SET preu_cost_ant=?, preu_cost=?, data_cost=?,
+               usuari_cost_id=?, cost_verificat=1, notes_cost=? WHERE referencia=?''',
+            [ant, new_cost, avui, session.get('user_id'), notes, ref])
+    pvd = calcular_pvd(new_cost, 'vidres')
+    execute('UPDATE vidres SET preu=? WHERE referencia=?', [pvd, ref])
+    execute('''INSERT INTO historial_preus_cost
+               (taula, referencia, preu_cost_antic, preu_cost_nou, usuari_id, data, notes)
+               VALUES (?,?,?,?,?,?,?)''',
+            ['vidres', ref, ant, new_cost, session.get('user_id'), avui, notes])
+    return True
+
+
+@app.route('/admin/fd/sync/save-cost', methods=['POST'])
+@admin_required
+def admin_fd_sync_save_cost():
+    """Editor de cost de vidre: desa els preu_cost editats (amb historial) i
+    després sincronitza els preus calculats a FD. Només per a la família cristal."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return 'FacturaDirecta no configurat', 503
+    family = (request.args.get('family') or '').strip().lower()
+    if family != 'cristal':
+        return 'Editor de cost només disponible per a vidres', 400
+    try:
+        refs = query("SELECT referencia, preu_cost FROM vidres "
+                     "WHERE UPPER(referencia) NOT LIKE 'DV-%' "
+                     "AND UPPER(referencia) NOT LIKE 'MIR-%'") or []
+    except Exception as e:
+        return f"<p style='color:#B84040'>Error vidres: {str(e)[:150]}</p>", 500
+    canvis = 0
+    for r in refs:
+        ref = (_row_get(r, 'referencia') or '').strip()
+        if not ref:
+            continue
+        raw = request.form.get('cost_' + ref)
+        if raw is None or str(raw).strip() == '':
+            continue
+        try:
+            nou = round(float(str(raw).replace(',', '.')), 4)
+        except Exception:
+            continue
+        if nou < 0:
+            continue
+        ant = _row_get(r, 'preu_cost')
+        try:
+            antf = round(float(ant), 4) if ant is not None else None
+        except Exception:
+            antf = None
+        if antf is not None and abs(antf - nou) < 0.00005:
+            continue  # sense canvi
+        if _update_vidre_cost(ref, nou):
+            canvis += 1
+    rows, err = _sync_compare('cristal')
+    if err:
+        return f"<div style='font-family:sans-serif;margin:2rem'><p style='color:#B84040'>{err}</p></div>", 200
+    results = _sync_apply('cristal', rows)
+    return _sync_html('cristal', rows, results=results)
 
 
 @app.route('/admin/clients-externs')
