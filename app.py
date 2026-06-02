@@ -7038,39 +7038,60 @@ def admin_fd_products_list():
     noms de camp reals que retorna FD)."""
     if not _FD_TOKEN or not _FD_COMPANY:
         return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
+    # CLAU: llegim com a MÀXIM 1 MB de la resposta de FD. Si el catàleg és gran,
+    # carregar-lo sencer a memòria fa OOM amb 1 worker i el sistema mata el
+    # procés (SIGKILL → 502), cosa que cap try/except pot capturar. Amb lectura
+    # acotada això no pot passar: sempre tornem JSON (dades o diagnòstic).
+    MAX = 1_000_000
+    q = (request.args.get('q') or '').strip()
+    path = f'products?search={urllib_quote(q)}' if q else 'products'
+    url = f'{_FD_BASE}/{_FD_COMPANY}/{path}'
     try:
-        q = (request.args.get('q') or '').strip()
-        path = f'products?search={urllib_quote(q)}' if q else 'products'
-        r = _fd_get(path, timeout=12)
-        if isinstance(r, dict) and '_error' in r:
-            return jsonify({'ok': False, 'error': f"FD {r.get('_error')}: {r.get('_msg','')}", 'path': path}), 502
-        items = _fd_extract_contacts_list(r)
-        total = len(items)
-        products = []
-        for p in items[:200]:  # límit per no retornar respostes enormes (1 worker)
-            if not isinstance(p, dict):
-                continue
-            content = p.get('content') or {}
-            main = content.get('main') or {}
-            products.append({
-                'id':        p.get('id') or p.get('uuid') or content.get('uuid') or main.get('id') or '',
-                'reference': main.get('reference') or main.get('code') or p.get('reference') or '',
-                'name':      main.get('name') or p.get('name') or '',
-                'price':     main.get('price', main.get('unitPrice', '')),
-                'tax':       main.get('tax', ''),
-            })
-        return jsonify({
-            'ok': True,
-            'total': total,
-            'count': len(products),
-            'truncated': total > len(products),
-            'products': products,
-            'sample_raw': items[0] if items else None,
-        })
+        req = urllib_request.Request(url, headers=_fd_headers())
+        try:
+            with urllib_request.urlopen(req, timeout=8) as resp:
+                status = getattr(resp, 'status', 200)
+                ctype = resp.headers.get('Content-Type', '')
+                raw = resp.read(MAX + 1)
+        except urllib_error.HTTPError as e:
+            head = e.read(2000).decode('utf-8', 'replace')
+            return jsonify({'ok': False, 'reason': 'http_error', 'http_status': e.code,
+                            'head': head, 'path': path}), 200
+        truncated = len(raw) > MAX
+        raw = raw[:MAX]
+        text = raw.decode('utf-8', 'replace')
+        parsed = None
+        parse_err = None
+        if not truncated:
+            try:
+                parsed = json.loads(text)
+            except Exception as e:
+                parse_err = str(e)[:200]
+        if parsed is not None:
+            items = _fd_extract_contacts_list(parsed)
+            products = []
+            for p in items[:100]:
+                if not isinstance(p, dict):
+                    continue
+                content = p.get('content') or {}
+                main = content.get('main') or {}
+                products.append({
+                    'id':        p.get('id') or p.get('uuid') or content.get('uuid') or main.get('id') or '',
+                    'reference': main.get('reference') or main.get('code') or p.get('reference') or '',
+                    'name':      main.get('name') or p.get('name') or '',
+                    'price':     main.get('price', main.get('unitPrice', '')),
+                    'tax':       main.get('tax', ''),
+                })
+            return jsonify({'ok': True, 'http_status': status, 'content_type': ctype,
+                            'total': len(items), 'count': len(products),
+                            'products': products, 'sample_raw': items[0] if items else None})
+        # Massa gran per parsejar o no és JSON: tornem diagnòstic segur (cap del cos).
+        return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
+                        'http_status': status, 'content_type': ctype,
+                        'bytes_read': len(raw), 'truncated': truncated,
+                        'parse_error': parse_err, 'head': text[:1500], 'path': path}), 200
     except Exception as e:
-        # Mai propaguem: amb 1 worker una excepció no controlada pot deixar
-        # l'app sense respondre. Retornem l'error perquè el puguem llegir.
-        return jsonify({'ok': False, 'error': f'exception: {str(e)[:300]}'}), 500
+        return jsonify({'ok': False, 'reason': 'exception', 'error': str(e)[:300], 'path': path}), 200
 
 
 @app.route('/admin/clients-externs')
