@@ -7373,6 +7373,186 @@ def admin_fd_album_sync_apply():
     return _album_sync_html(rows, results=results)
 
 
+# ── Sincronització general de preus → FacturaDirecta (multi-família) ─────────
+# Famílies: àlbum (origen web), vidres i miralls (origen taula `vidres` del calc).
+_SYNC_FAMILIES = {
+    'album':   {'titol': "Fulles d'àlbum", 'prefix': 'A',   'desc': 'Fulla àlbum', 'origen': 'web'},
+    'cristal': {'titol': 'Vidres',         'prefix': 'VID', 'desc': 'Vidre',       'origen': 'calc'},
+    'mirall':  {'titol': 'Miralls',        'prefix': 'MIR', 'desc': 'Mirall',      'origen': 'calc'},
+}
+
+def _sync_family_source(family):
+    """Retorna (rows, error). rows: [{'label','sku','price'}] des de l'origen."""
+    if family == 'album':
+        web = _fetch_web_album_prices()
+        if not isinstance(web, dict) or web.get('_error') or not web.get('sizes'):
+            return None, f"web album: {web.get('_error') if isinstance(web, dict) else 'error'}"
+        rows = []
+        for s in web['sizes']:
+            sku = _album_size_to_sku(s.get('id'))
+            if not sku:
+                continue
+            try:
+                rows.append({'label': s.get('label') or s.get('id'), 'sku': sku,
+                             'price': round(float(s['sheet_price']), 2)})
+            except Exception:
+                continue
+        return rows, None
+    if family in ('cristal', 'mirall'):
+        try:
+            allrows = query('SELECT referencia, preu FROM vidres') or []
+        except Exception as e:
+            return None, f"taula vidres: {str(e)[:150]}"
+        rows = []
+        for r in allrows:
+            ref = (_row_get(r, 'referencia') or '').strip()
+            preu = _row_get(r, 'preu')
+            if not ref or preu is None:
+                continue
+            up = ref.upper()
+            if family == 'cristal':
+                if up.startswith('DV-') or up.startswith('MIR-'):
+                    continue
+                sku = 'VID' + ref
+            else:  # mirall: 'MIR-30x40' → 'MIR30x40'
+                if not up.startswith('MIR-'):
+                    continue
+                sku = 'MIR' + ref[4:]
+            try:
+                rows.append({'label': ref, 'sku': sku, 'price': round(float(preu), 2)})
+            except Exception:
+                continue
+        return rows, None
+    return None, f"família desconeguda: {family}"
+
+def _sync_compare(family):
+    cfg = _SYNC_FAMILIES.get(family)
+    if not cfg:
+        return None, f"família desconeguda: {family}"
+    src, err = _sync_family_source(family)
+    if err:
+        return None, err
+    fd_map, err = _fd_products_by_prefix(cfg['prefix'])
+    if err:
+        return None, err
+    rows = []
+    for s in src:
+        fd = fd_map.get(s['sku'].upper())
+        if not fd:
+            status, fd_price, fd_id = 'missing', None, None
+        else:
+            fd_id = fd.get('id')
+            try:
+                fd_price = round(float(fd.get('price')), 2)
+            except Exception:
+                fd_price = None
+            status = 'ok' if fd_price == s['price'] else 'diff'
+        rows.append({**s, 'fd_price': fd_price, 'fd_id': fd_id, 'status': status})
+    return rows, None
+
+def _sync_apply(family, rows):
+    cfg = _SYNC_FAMILIES.get(family) or {}
+    desc = cfg.get('desc', '')
+    results = []
+    for r in rows:
+        if r['status'] == 'diff' and r.get('fd_id'):
+            g = _fd_get_bounded(f"products/{r['fd_id']}")
+            if not isinstance(g.get('parsed'), dict):
+                results.append({**r, 'result': f"error_get {g.get('http_error') or g.get('exc')}"})
+                continue
+            content = g['parsed'].get('content') or {}
+            main = content.get('main') or {}
+            sales = main.get('sales') or {}
+            sales['price'] = r['price']
+            main['sales'] = sales
+            content['main'] = main
+            w = _fd_write(f"products/{r['fd_id']}", {'content': content}, method='PUT')
+            ok = w['http_error'] is None and w['exc'] is None
+            results.append({**r, 'result': 'updated' if ok else f"error_put {w['http_error'] or w['exc']}"})
+        elif r['status'] == 'missing':
+            main = {'sku': r['sku'], 'name': r['sku'], 'title': r['sku'], 'currency': 'EUR',
+                    'sales': {'account': '700000', 'price': r['price'], 'tax': ['S_IVA_21'],
+                              'description': f"{desc} {r['label']}"}}
+            w = _fd_write('products', {'content': {'type': 'product', 'main': main}}, method='POST')
+            ok = w['http_error'] is None and w['exc'] is None
+            results.append({**r, 'result': 'created' if ok else f"error_post {w['http_error'] or w['exc']}"})
+    return results
+
+def _sync_html(family, rows, results=None):
+    cfg = _SYNC_FAMILIES.get(family, {})
+    color = {'ok': '#1A6B45', 'diff': '#C8873A', 'missing': '#B84040'}
+    nav = ' · '.join(
+        (f"<strong>{c['titol']}</strong>" if k == family
+         else f"<a href='/admin/fd/sync?family={k}'>{c['titol']}</a>")
+        for k, c in _SYNC_FAMILIES.items())
+    trs = []
+    for r in rows:
+        fd = '—' if r['fd_price'] is None else f"{r['fd_price']:.2f} €"
+        rescell = ''
+        if results is not None:
+            m = next((x for x in results if x.get('sku') == r['sku']), None)
+            rescell = f"<td><strong>{m['result']}</strong></td>" if m else "<td>—</td>"
+        trs.append(
+            f"<tr><td>{r['label']}</td><td><code>{r['sku']}</code></td>"
+            f"<td style='text-align:right'>{r['price']:.2f} €</td>"
+            f"<td style='text-align:right'>{fd}</td>"
+            f"<td style='color:{color.get(r['status'], '#000')};font-weight:700'>{r['status']}</td>{rescell}</tr>")
+    n_diff = sum(1 for r in rows if r['status'] == 'diff')
+    n_missing = sum(1 for r in rows if r['status'] == 'missing')
+    reshead = '<th>Resultat</th>' if results is not None else ''
+    btn = ''
+    if results is None and (n_diff or n_missing):
+        btn = (f"<form method='post' action='/admin/fd/sync/apply?family={family}' "
+               f"onsubmit=\"return confirm('Aplicar a FacturaDirecta ({cfg.get('titol','')}): "
+               f"{n_diff} preus a actualitzar i {n_missing} productes a crear?');\">"
+               f"<button type='submit' style='margin-top:1rem;padding:10px 18px;background:#1A6B45;"
+               f"color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer'>"
+               f"Sincronitzar {cfg.get('titol','')} ({n_diff} canvis · {n_missing} nous)</button></form>")
+    elif results is None:
+        btn = "<p style='color:#1A6B45;font-weight:700;margin-top:1rem'>✔ Tot quadra, res a sincronitzar.</p>"
+    return (
+        "<!doctype html><meta charset='utf-8'><title>Sync preus FD</title>"
+        "<div style='font-family:system-ui,sans-serif;max-width:840px;margin:2rem auto;padding:0 1rem'>"
+        "<h2>Sincronització de preus → FacturaDirecta</h2>"
+        f"<p style='font-size:15px'>{nav}</p><h3>{cfg.get('titol', family)}</h3>"
+        f"<p style='color:#6B6860'>Diferències: <strong>{n_diff}</strong> · Falten a FD: <strong>{n_missing}</strong>. "
+        "El preu del calculador/web mana; el botó actualitza FD perquè coincideixi.</p>"
+        "<table style='border-collapse:collapse;width:100%' border='1' cellpadding='7'>"
+        f"<tr style='background:#F5F4F1'><th>Mida</th><th>SKU FD</th><th>Preu origen</th><th>FD</th><th>Estat</th>{reshead}</tr>"
+        + ''.join(trs) + "</table>" + btn + "</div>")
+
+
+@app.route('/admin/fd/sync')
+@admin_required
+def admin_fd_sync():
+    """Eina general de sincronització de preus → FD (àlbum, vidres, miralls)."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return 'FacturaDirecta no configurat (variables d\'entorn)', 503
+    family = (request.args.get('family') or 'album').strip().lower()
+    if family not in _SYNC_FAMILIES:
+        family = 'album'
+    rows, err = _sync_compare(family)
+    if err:
+        return f"<div style='font-family:sans-serif;margin:2rem'><h2>Sync FD · {family}</h2><p style='color:#B84040'>{err}</p></div>", 200
+    return _sync_html(family, rows)
+
+
+@app.route('/admin/fd/sync/apply', methods=['POST'])
+@admin_required
+def admin_fd_sync_apply():
+    """Aplica la sincronització d'una família: PUT diferències, POST crea faltants."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return 'FacturaDirecta no configurat', 503
+    family = (request.args.get('family') or '').strip().lower()
+    if family not in _SYNC_FAMILIES:
+        return 'família desconeguda', 400
+    rows, err = _sync_compare(family)
+    if err:
+        return f"<div style='font-family:sans-serif;margin:2rem'><p style='color:#B84040'>{err}</p></div>", 200
+    results = _sync_apply(family, rows)
+    return _sync_html(family, rows, results=results)
+
+
 @app.route('/admin/clients-externs')
 @admin_required
 def admin_clients_externs():
