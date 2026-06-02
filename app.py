@@ -7020,6 +7020,44 @@ def admin_fd_contacts_search():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/admin/fd/products')
+@admin_required
+def admin_fd_products_list():
+    """Inspecció (només lectura) del catàleg de productes de FacturaDirecta.
+    Serveix per veure l'esquema real (id, referència, nom, IVA, preu) i poder
+    mapejar després els productes de la web/calculadora amb els de FD.
+    NO modifica res. Paràmetre opcional ?q= per filtrar per text.
+    `sample_raw` mostra l'estructura crua del primer element (per saber els
+    noms de camp reals que retorna FD)."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
+    q = (request.args.get('q') or '').strip()
+    path = f'products?search={urllib_quote(q)}' if q else 'products'
+    r = _fd_get(path)
+    if isinstance(r, dict) and '_error' in r:
+        return jsonify({'ok': False, 'error': f"FD {r.get('_error')}: {r.get('_msg','')}", 'path': path}), 502
+    items = _fd_extract_contacts_list(r)
+    products = []
+    for p in items:
+        if not isinstance(p, dict):
+            continue
+        content = p.get('content') or {}
+        main = content.get('main') or {}
+        products.append({
+            'id':        p.get('id') or p.get('uuid') or content.get('uuid') or main.get('id') or '',
+            'reference': main.get('reference') or main.get('code') or p.get('reference') or '',
+            'name':      main.get('name') or p.get('name') or '',
+            'price':     main.get('price', main.get('unitPrice', '')),
+            'tax':       main.get('tax', ''),
+        })
+    return jsonify({
+        'ok': True,
+        'count': len(products),
+        'products': products,
+        'sample_raw': items[0] if items else None,
+    })
+
+
 @app.route('/admin/clients-externs')
 @admin_required
 def admin_clients_externs():
