@@ -7076,38 +7076,72 @@ def _fd_product_row(p):
 @admin_required
 def admin_fd_products_list():
     """Inspecció (només lectura) de productes de FD. NO modifica res.
-    FD valida els params de forma estricta (no accepta 'page'), així que fem
-    UNA crida i retornem `meta_first_page` = claus de nivell superior de la
-    resposta, per descobrir com pagina realment. Params:
-      ?q=text → afegeix search=text · ?qs=... → passthrough cru (ex: ?qs=offset=25)
-    Extreu id/sku/nom/preu/IVA/compte. Lectura acotada (mai OOM)."""
+    FD pagina amb limit/offset (total ~970). Aquest endpoint auto-pagina i
+    retorna tot el catàleg (o filtrat). Params:
+      ?prefix=A → només productes amb sku/nom que comencen per 'A' (hojas àlbum),
+                  ?prefix=F → còpies Lustre, etc.
+      ?q=text   → search=text a FD
+      ?qs=...   → mode debug: una sola crida amb aquesta query crua (sense auto-paginar)
+    Lectura acotada per pàgina (mai OOM)."""
     if not _FD_TOKEN or not _FD_COMPANY:
         return jsonify({'ok': False, 'error': 'fd_not_configured'}), 503
-    q  = (request.args.get('q')  or '').strip()
-    qs = (request.args.get('qs') or '').strip()  # passthrough cru a la query de FD
-    parts = []
-    if q:  parts.append('search=' + urllib_quote(q))
-    if qs: parts.append(qs)
-    path = 'products' + (('?' + '&'.join(parts)) if parts else '')
-    res = _fd_get_bounded(path)
-    if res['http_error'] is not None:
-        return jsonify({'ok': False, 'reason': 'http_error',
-                        'http_status': res['http_error'], 'head': res['head'], 'path': path}), 200
-    if res['exc'] is not None:
-        return jsonify({'ok': False, 'reason': 'exception', 'error': res['exc'], 'path': path}), 200
-    parsed = res['parsed']
-    if parsed is None:
-        return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
-                        'truncated': res['truncated'], 'parse_error': res['parse_err'],
-                        'http_status': res['status'], 'head': res['head'], 'path': path}), 200
-    meta = None
-    if isinstance(parsed, dict):
-        meta = {k: (f'[list:{len(v)}]' if isinstance(v, list) else v) for k, v in parsed.items()}
-    items = _fd_extract_contacts_list(parsed)
-    products = [_fd_product_row(p) for p in items if isinstance(p, dict)]
-    return jsonify({'ok': True, 'http_status': res['status'], 'path': path,
-                    'count': len(products), 'meta_first_page': meta,
-                    'products': products, 'sample_raw': items[0] if items else None})
+    prefix = (request.args.get('prefix') or '').strip().upper()
+    q      = (request.args.get('q')  or '').strip()
+    qs     = (request.args.get('qs') or '').strip()
+    search = ('search=' + urllib_quote(q) + '&') if q else ''
+
+    # Mode debug: una sola crida amb query crua.
+    if qs:
+        res = _fd_get_bounded('products?' + qs)
+        if res['http_error'] is not None:
+            return jsonify({'ok': False, 'reason': 'http_error', 'http_status': res['http_error'], 'head': res['head']}), 200
+        if res['parsed'] is None:
+            return jsonify({'ok': False, 'reason': 'truncated_or_not_json', 'head': res['head'], 'exc': res['exc']}), 200
+        items = _fd_extract_contacts_list(res['parsed'])
+        return jsonify({'ok': True, 'mode': 'debug', 'count': len(items),
+                        'products': [_fd_product_row(p) for p in items if isinstance(p, dict)]})
+
+    # Mode auto: paginar amb limit/offset fins esgotar el total.
+    LIMIT = 200
+    offset = 0
+    total = None
+    pagination = None
+    all_rows = []
+    for _ in range(60):  # seguretat: 60 × 200 = 12000 >> 970
+        res = _fd_get_bounded(f'products?{search}limit={LIMIT}&offset={offset}')
+        if res['http_error'] is not None:
+            return jsonify({'ok': False, 'reason': 'http_error', 'http_status': res['http_error'],
+                            'head': res['head'], 'offset': offset}), 200
+        if res['exc'] is not None:
+            return jsonify({'ok': False, 'reason': 'exception', 'error': res['exc'], 'offset': offset}), 200
+        parsed = res['parsed']
+        if parsed is None:
+            return jsonify({'ok': False, 'reason': 'truncated_or_not_json',
+                            'truncated': res['truncated'], 'head': res['head'], 'offset': offset}), 200
+        if pagination is None and isinstance(parsed, dict):
+            pagination = parsed.get('pagination')
+        items = _fd_extract_contacts_list(parsed)
+        if not items:
+            break
+        for p in items:
+            if isinstance(p, dict):
+                all_rows.append(_fd_product_row(p))
+        if isinstance(parsed, dict):
+            total = (parsed.get('pagination') or {}).get('total', total)
+        offset += len(items)
+        if total is not None and offset >= total:
+            break
+        if len(items) < LIMIT:
+            break
+
+    rows = all_rows
+    if prefix:
+        rows = [r for r in all_rows
+                if str(r.get('sku') or '').upper().startswith(prefix)
+                or str(r.get('name') or '').upper().startswith(prefix)]
+    return jsonify({'ok': True, 'total_fd': total, 'fetched': len(all_rows),
+                    'returned': len(rows), 'prefix': prefix,
+                    'pagination_first_page': pagination, 'products': rows})
 
 
 @app.route('/admin/clients-externs')
