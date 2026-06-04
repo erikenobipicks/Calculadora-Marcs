@@ -3243,6 +3243,7 @@ function crearAlbaraFD(modePreu){
   var payload = {
     client_nom:    document.getElementById('client_nom').value||'',
     client_tel:    document.getElementById('client_tel').value||'',
+    client_extern_id: (document.getElementById('client_extern_id')||{}).value || '',
     marc:          document.getElementById('marc_principal').value||'',
     opcions:       partsOpcions.join(', '),
     observacions:  document.getElementById('observacions').value||'',
@@ -3251,6 +3252,10 @@ function crearAlbaraFD(modePreu){
     preu_net:       c.preu_net||0,
     preu_final:     c.preu_final||0,
     quantitat:      parseFloat(document.getElementById('quantitat').value)||1,
+    final_amplada:  parseFloat(document.getElementById('marc-w').value)||0,
+    final_alcada:   parseFloat(document.getElementById('marc-h').value)||0,
+    amplada:        parseFloat(document.getElementById('amplada').value)||0,
+    alcada:         parseFloat(document.getElementById('alcada').value)||0,
     revers_peu:     reversPeu,
     mode_preu:      modePreu,
   };
