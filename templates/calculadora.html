@@ -496,8 +496,8 @@ body.has-sticky-bar{padding-bottom:78px}
           </select>
         </div>
         <div class="f2">
-          <div class="f"><label>Amplada de la peça (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="recalcMides()"></div>
-          <div class="f"><label>Alçada de la peça (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="recalcMides()"></div>
+          <div class="f"><label>Amplada de la peça (cm)</label><input type="number" id="amplada" value="" min="0" placeholder="Ex: 30" oninput="_startNewBudgetAfterSave();recalcMides()"></div>
+          <div class="f"><label>Alçada de la peça (cm)</label><input type="number" id="alcada" value="" min="0" placeholder="Ex: 40" oninput="_startNewBudgetAfterSave();recalcMides()"></div>
         </div>
         <div id="piece-context-box" class="piece-context-box" style="display:none">
           <div class="f" id="photo-origin-row" style="display:none;margin-bottom:0">
@@ -810,11 +810,6 @@ body.has-sticky-bar{padding-bottom:78px}
             <button type="button" class="more-action" id="btn-wa-client" onclick="whatsappClient()" disabled title="Enviar per WhatsApp al client">WhatsApp al client</button>
             <button type="button" class="more-action" id="btn-wa-objectiu" onclick="whatsappObjectiu()" disabled title="Enviar per WhatsApp a Reus Revela">WhatsApp Reus Revela</button>
             <button type="button" class="more-action" id="btn-portar" onclick="obrirMailComanda()" title="Envia la comanda al taller Reus Revela per correu electrònic">Comanda al Taller</button>
-            {% if session.is_admin %}
-            <div class="more-action-sep" role="separator"></div>
-            <button type="button" class="more-action" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)">Generar albarà (PVP)</button>
-            <button type="button" class="more-action" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (cost de producció)">Generar albarà (cost)</button>
-            {% endif %}
             <div class="more-action-sep" role="separator"></div>
             <button type="button" class="more-action" onclick="novaComanda()">Nou pressupost</button>
           </div>
@@ -847,6 +842,10 @@ body.has-sticky-bar{padding-bottom:78px}
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       <span class="sb-label">Reus Revela</span>
     </button>
+    {% if session.is_admin %}
+    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)"><span class="sb-label">Albarà PVP</span></button>
+    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)"><span class="sb-label">Albarà PVD</span></button>
+    {% endif %}
     <button type="button" class="sticky-bar-cta sb-secondary" id="sb-nou" onclick="novaComanda()" title="Nou càlcul de marc">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span class="sb-label">Nou</span>
@@ -918,6 +917,10 @@ var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid
 // minim_pvp: si el subtotal PVP és inferior a aquest mínim, no s'aplica el combo.
 var COMBO_DESC = {marc_imp_protter:6, marc_imp_foam:5, marc_imp:3, marc_suport:3, minim_pvp:80};
 var opcions = [{nom:'Opció A', id:null}], opcioActual = 0, sessioId = null;
+// Després de Desar, el següent càlcul de marc nou s'ha de tractar com un
+// pressupost NOU (no sobreescriure el desat). Aquest flag s'activa en desar i
+// es consumeix quan l'usuari torna a tocar marc/mida/opcions.
+var _newBudgetPending = false;
 var _lastFetchKey = '';
 var _lang = 'ca';  // ca / es / en
 var _filterTimer = {pre:null, marc:null};
@@ -1533,6 +1536,22 @@ function onClientExternChange(){
   } else {
     nomInp.readOnly = false;
   }
+  updateAlbaraButtons();
+}
+
+// Mostra els botons d'albarà segons el tipus de client seleccionat:
+//  · client PVP    → només "Albarà PVP"
+//  · client Taller → només "Albarà PVD"
+//  · sense client  → tots dos
+function updateAlbaraButtons(){
+  var pvp = document.getElementById('sb-albara-pvp');
+  var pvd = document.getElementById('sb-albara-pvd');
+  if(!pvp || !pvd) return;  // no admin → no hi ha botons
+  var sel = document.getElementById('client_extern_id');
+  var opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+  var tipus = (opt && opt.value) ? (opt.dataset.tipus || 'pvp') : '';
+  pvp.style.display = (tipus === '' || tipus === 'pvp') ? '' : 'none';
+  pvd.style.display = (tipus === '' || tipus === 'taller') ? '' : 'none';
 }
 
 // Load moldura options once, then derive the filtered refs for both selectors
@@ -1741,6 +1760,7 @@ function closeSS(t){
   },250);
 }
 function selectRef(t,ref){
+  if(t==='marc') _startNewBudgetAfterSave();
   var id = t==='pre'?'pre_marc':t==='marc'?'marc_principal':t;
   document.getElementById(id).value=ref;
   if(id==='marc_principal') document.getElementById(id).dataset.lastLooked=ref;
@@ -2523,6 +2543,7 @@ function onImpressioChange(){ toggleImpressio(); }
 
 var _marcLookupTimer = null;
 function onMarcInput(){
+  _startNewBudgetAfterSave();
   var val = document.getElementById('marc_principal').value.trim();
   if(val === ''){
     PREUS.marc=0; GRUIX.marc=0; setChips('marc',[]);
@@ -2916,9 +2937,27 @@ function guardar(){
         var numLabel = d.num ? ' · ' + d.num : ' #'+d.id;
         showAlert('Pressupost guardat ('+opcions[opcioActual].nom + numLabel + ')','ok');
         window._numPressupost = d.num || ('#'+d.id);
+        _newBudgetPending = true;  // el proper marc que es calculi serà un pressupost nou
         renderTabs();
       }
     });
+}
+
+// Si s'acaba de desar i l'usuari comença a calcular un marc nou (canvia marc,
+// mida o opcions), reiniciem el seguiment perquè es desi com a pressupost NOU
+// en comptes de sobreescriure el desat. PDF/albarà del desat segueixen
+// disponibles fins que es toca alguna cosa.
+function _startNewBudgetAfterSave(){
+  if(!_newBudgetPending) return;
+  _newBudgetPending = false;
+  uid = null; sessioId = null;
+  opcions = [{nom:'Opció A', id:null}]; opcioActual = 0;
+  window._numPressupost = '';
+  ['btn-pdf','btn-wa-client','btn-wa-objectiu','sb-pdf','sb-wa-client','sb-wa-rr'].forEach(function(id){
+    var e = document.getElementById(id); if(e) e.disabled = true;
+  });
+  try{ renderTabs(); }catch(e){}
+  showAlert(_lang === 'es' ? 'Nuevo presupuesto (se guardará como nuevo)' : 'Nou pressupost (es desarà com a nou)', 'ok');
 }
 
 function guardarTotes(){
