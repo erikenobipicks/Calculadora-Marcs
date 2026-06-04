@@ -7667,6 +7667,91 @@ def admin_fd_sync_save_cost():
     return _sync_html('cristal', rows, results=results)
 
 
+# ── Creació de productes d'orla a FacturaDirecta (idempotent) ────────────────
+def _orles_fd_catalog():
+    """Productes d'orla a crear a FD (un per mida+tram). Tarifa Canva pàg.17."""
+    tier_labels = ['+50', '+100', '+150']
+    prods = [
+        ("Orla Lustre 30x40", "ORLA LUS 30x40", {'+50': 2.70, '+100': 2.55, '+150': 2.40}),
+        ("Orla Lustre 30x45", "ORLA LUS 30x45", {'+50': 3.24, '+100': 3.06, '+150': 2.88}),
+        ("Orla Lustre 40x50", "ORLA LUS 40x50", {'+50': 5.40, '+100': 5.10, '+150': 4.80}),
+        ("Orla Lustre 50x60", "ORLA LUS 50x60", {'+50': 7.65, '+100': 7.22, '+150': 6.80}),
+        ("Orla Offset 30x40/32x45 SRA3", "ORLA OFF 30x40", {'+50': 1.73, '+100': 1.64, '+150': 1.55}),
+        ("Carnet orla 10x15 (8 DNI o 4 DNI+cartera)", "ORLA CARNET 10x15", {'+50': 0.48, '+100': 0.43, '+150': 0.38}),
+        ("Carnet orla 15x20 (8 DNI+cartera)", "ORLA CARNET 15x20", {'+50': 0.73, '+100': 0.67, '+150': 0.64}),
+    ]
+    items = []
+    for name, sku, prices in prods:
+        for tl in tier_labels:
+            items.append({'sku': f"{sku} {tl}", 'name': f"{name} ({tl})", 'price': prices[tl]})
+    items.append({'sku': 'ORLA MONTATGE', 'name': 'Montatge orla (per alumne)', 'price': 1.00})
+    items.append({'sku': 'ORLA PRIMER DISSENY', 'name': 'Primer disseny orla', 'price': 25.00})
+    return items
+
+
+def _orles_create_html(catalog, results=None):
+    n_falten = sum(1 for it in catalog if not it.get('exists'))
+    trs = []
+    for it in catalog:
+        if results is not None:
+            m = next((x for x in results if x['sku'] == it['sku']), None)
+            estat = m['result'] if m else '—'
+        else:
+            estat = 'ja existeix' if it.get('exists') else 'a crear'
+        col = '#1A6B45' if estat in ('ja existeix', 'creat') else ('#B84040' if estat.startswith('error') else '#C8873A')
+        trs.append(f"<tr><td><code>{it['sku']}</code></td><td>{it['name']}</td>"
+                   f"<td style='text-align:right'>{it['price']:.2f} €</td>"
+                   f"<td style='color:{col};font-weight:700'>{estat}</td></tr>")
+    btnstyle = ("margin-top:1rem;padding:10px 18px;background:#1A6B45;color:#fff;"
+                "border:none;border-radius:8px;font-weight:700;cursor:pointer")
+    if results is None and n_falten:
+        btn = (f"<form method='post' onsubmit=\"return confirm('Crear {n_falten} productes d\\'orla a FacturaDirecta?');\">"
+               f"<button type='submit' style='{btnstyle}'>Crear els {n_falten} que falten</button></form>")
+    elif results is None:
+        btn = "<p style='color:#1A6B45;font-weight:700;margin-top:1rem'>✔ Ja existeixen tots.</p>"
+    else:
+        btn = "<p style='margin-top:1rem'><a href='/admin/fd/orles-create'>↻ Refrescar</a></p>"
+    return ("<!doctype html><meta charset='utf-8'><title>Crear orles FD</title>"
+            "<div style='font-family:system-ui,sans-serif;max-width:780px;margin:2rem auto;padding:0 1rem'>"
+            "<h2>Crear productes d'orla a FacturaDirecta</h2>"
+            f"<p style='color:#6B6860'>Total: {len(catalog)} · A crear: <strong>{n_falten}</strong>. "
+            "Compte 700000 · IVA 21%. Idempotent: només crea els SKU que no existeixin.</p>"
+            "<table style='border-collapse:collapse;width:100%' border='1' cellpadding='7'>"
+            "<tr style='background:#F5F4F1'><th>SKU</th><th>Nom</th><th>Preu</th><th>Estat</th></tr>"
+            + ''.join(trs) + "</table>" + btn + "</div>")
+
+
+@app.route('/admin/fd/orles-create', methods=['GET', 'POST'])
+@admin_required
+def admin_fd_orles_create():
+    """Crea (idempotentment) els productes d'orla a FD. GET = previsualització,
+    POST = crea els que falten."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return 'FacturaDirecta no configurat', 503
+    catalog = _orles_fd_catalog()
+    existing, err = _fd_products_by_prefix('ORLA')
+    if err:
+        return f"<div style='font-family:sans-serif;margin:2rem'><p style='color:#B84040'>{err}</p></div>", 200
+    existing_skus = set(existing.keys())  # ja en majúscules
+    for it in catalog:
+        it['exists'] = it['sku'].upper() in existing_skus
+    if request.method == 'GET':
+        return _orles_create_html(catalog)
+    # POST: crear els que falten
+    results = []
+    for it in catalog:
+        if it['exists']:
+            results.append({**it, 'result': 'ja existeix'})
+            continue
+        main = {'sku': it['sku'], 'name': it['name'], 'title': it['sku'], 'currency': 'EUR',
+                'sales': {'account': '700000', 'price': it['price'], 'tax': ['S_IVA_21'],
+                          'description': it['name']}}
+        w = _fd_write('products', {'content': {'type': 'product', 'main': main}}, method='POST')
+        ok = w['http_error'] is None and w['exc'] is None
+        results.append({**it, 'result': 'creat' if ok else f"error {w['http_error'] or w['exc']}"})
+    return _orles_create_html(catalog, results=results)
+
+
 @app.route('/admin/clients-externs')
 @admin_required
 def admin_clients_externs():
