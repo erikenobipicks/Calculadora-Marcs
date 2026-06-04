@@ -7978,27 +7978,58 @@ def api_crear_albara():
 
     # El contacte FD és el CLIENT (nom del client de la calculadora)
     # El NIF del client és opcional — si s'envia, s'usa per cercar exacte a FD
+    client_extern_id = (d.get('client_extern_id') or '').strip() or None
     nif_client = (d.get('client_nif') or '').strip()
     nom_fd     = client_nom
 
-    if not nom_fd:
-        return jsonify({'ok': False, 'error': 'Cal omplir el nom del client abans de crear l\'albarà.'}), 400
+    # 1) PRIORITAT: si s'ha triat un client habitual (importat) ja enllaçat amb un
+    #    contacte real de Factura Directa, fem servir aquest contacte directament.
+    #    Així l'albarà va a l'"usuari real" de FD i no creem un duplicat per nom.
+    contact_id = None
+    fd_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
+    if fd_id:
+        contact_id = fd_id
+        if fd_nom:
+            nom_fd = fd_nom
 
-    # Buscar per NIF (exacte) o crear nou — no busquem per nom per evitar falsos positius
-    contacte = _fd_cerca_contacte(nif=nif_client) if nif_client else None
-    if not contacte:
-        contacte = _fd_crear_contacte(nom_fd, nif=nif_client or None, telefon=client_tel or None)
-    if '_error' in (contacte or {}):
-        return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
-
-    contact_id = _fd_extract_contact_id(contacte)
+    # 2) Fallback (sense client habitual enllaçat): cercar per NIF o crear nou.
     if not contact_id:
-        print(f'FD contacte sense ID (api_crear_albara): {json.dumps(contacte, ensure_ascii=False)}')
-        return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'Cal omplir el nom del client abans de crear l\'albarà.'}), 400
+
+        # Buscar per NIF (exacte) o crear nou — no busquem per nom per evitar falsos positius
+        contacte = _fd_cerca_contacte(nif=nif_client) if nif_client else None
+        if not contacte:
+            contacte = _fd_crear_contacte(nom_fd, nif=nif_client or None, telefon=client_tel or None)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            print(f'FD contacte sense ID (api_crear_albara): {json.dumps(contacte, ensure_ascii=False)}')
+            return jsonify({'ok': False, 'error': f'Contacte FD sense ID. Resposta: {json.dumps(contacte, ensure_ascii=False)}'}), 500
+
+    # Mides del marc (molt important al detall de l'albarà)
+    final_w = float(d.get('final_amplada') or 0)
+    final_h = float(d.get('final_alcada') or 0)
+    peca_w  = float(d.get('amplada') or 0)
+    peca_h  = float(d.get('alcada') or 0)
+
+    def _fmt_cm(w, h):
+        if w and h:
+            return f'{w:g}×{h:g} cm'
+        return ''
+
+    mida_marc = _fmt_cm(final_w, final_h)
+    mida_foto = _fmt_cm(peca_w, peca_h)
 
     # Línies de l'albarà
     desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
     parts = []
+    if mida_marc:
+        parts.append(f'Mida {mida_marc}')
+    if mida_foto and mida_foto != mida_marc:
+        parts.append(f'foto {mida_foto}')
     if opcions_text:
         parts.append(opcions_text)
     if revers_peu:
