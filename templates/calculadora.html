@@ -407,6 +407,53 @@ body.has-sticky-bar{padding-bottom:78px}
         </div>
       </div>
 
+      <div class="card" id="enviament-card">
+        <div class="card-t">Enviament a domicili</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:.5rem">
+          <input type="checkbox" id="env-actiu" onchange="onEnviamentToggle()"> Enviar directament al client final (NACEX)
+        </label>
+        <div id="env-fields" style="display:none">
+          <div class="f2">
+            <div class="f"><label>Nom del destinatari</label><input type="text" id="env-nom"></div>
+            <div class="f"><label>Telèfon</label><input type="text" id="env-tel"></div>
+          </div>
+          <div class="f" style="margin-top:.5rem"><label>Adreça</label><input type="text" id="env-adreca" placeholder="Carrer, número, pis..."></div>
+          <div class="f2" style="margin-top:.5rem">
+            <div class="f"><label>Població</label><input type="text" id="env-poblacio"></div>
+            <div class="f"><label>Codi postal</label><input type="text" id="env-cp" inputmode="numeric" oninput="recalcEnviament()" placeholder="43204"></div>
+          </div>
+          <div class="f2" style="margin-top:.5rem">
+            <div class="f"><label>País</label>
+              <select id="env-pais" onchange="recalcEnviament()">
+                <option value="ES" selected>Espanya</option>
+                <option value="PT">Portugal</option>
+                <option value="AD">Andorra</option>
+              </select>
+            </div>
+            <div class="f"><label>Tarifa</label>
+              <select id="env-tarifa" onchange="recalcEnviament()">
+                <option value="pluspack" selected>Pluspack (econòmic, 1-2 dies)</option>
+                <option value="peninsular">Peninsular (urgent, dia següent)</option>
+              </select>
+            </div>
+          </div>
+          <div class="f2" style="margin-top:.5rem;align-items:end">
+            <div class="f"><label>Pes (kg) <span id="env-pes-sugg" style="font-size:11px;color:var(--hint)"></span></label><input type="number" id="env-pes" min="0" step="0.1" oninput="recalcEnviament()"></div>
+            <div class="f"><button type="button" class="btn btn-d" onclick="recalcEnviament()" style="width:100%">Calcular enviament</button></div>
+          </div>
+          <div id="env-result" style="display:none;margin-top:.7rem;padding:.7rem .85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Zona</span><strong id="env-zona">—</strong></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Enviament (net)</span><span id="env-net">—</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Marge enviament</span><span id="env-marge">—</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px"><span>IVA 21%</span><span id="env-iva">—</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px"><span>Total enviament</span><strong id="env-total">—</strong></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--green);margin-top:4px"><span>Pressupost + enviament</span><strong id="env-combinat-val">—</strong></div>
+            <div id="env-avisos" style="font-size:11px;color:var(--amber);margin-top:5px"></div>
+          </div>
+          <div id="env-error" style="display:none;font-size:12px;color:var(--red);margin-top:.5rem"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-t">Selecció de motllures</div>
         <div class="f2">
@@ -3230,6 +3277,68 @@ function obrirMailClient(){
   window.location.href = mailto;
 }
 
+// ── Enviament a domicili (NACEX) ───────────────────────────────────────────
+window._enviament = null;
+function envEur(n){ return (n||0).toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €'; }
+
+function onEnviamentToggle(){
+  var on = document.getElementById('env-actiu').checked;
+  document.getElementById('env-fields').style.display = on ? 'block' : 'none';
+  if(on){ recalcEnviament(); } else { window._enviament = null; }
+}
+
+function suggerirPesEnviament(){
+  var w = parseFloat(document.getElementById('marc-w').value)||0;
+  var h = parseFloat(document.getElementById('marc-h').value)||0;
+  if(w<=0 || h<=0){ w = parseFloat(document.getElementById('amplada').value)||0; h = parseFloat(document.getElementById('alcada').value)||0; }
+  var area = (w/100)*(h/100);
+  if(area<=0) return 0;
+  var prot = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
+  var vidre = prot==='doble_vidre' ? 10 : ((prot==='vidre'||prot==='conservar') ? 5 : 0);
+  return Math.round((area*(vidre+6)+0.5)*10)/10;
+}
+
+function recalcEnviament(){
+  var actiuEl = document.getElementById('env-actiu');
+  if(!actiuEl || !actiuEl.checked){ window._enviament = null; return; }
+  var pesEl = document.getElementById('env-pes');
+  var sugg = suggerirPesEnviament();
+  document.getElementById('env-pes-sugg').textContent = sugg>0 ? ('· suggerit ' + sugg + ' kg') : '';
+  if((!pesEl.value || parseFloat(pesEl.value)<=0) && sugg>0){ pesEl.value = sugg; }
+  var pes = parseFloat(pesEl.value)||0;
+  var cp = document.getElementById('env-cp').value.trim();
+  var pais = document.getElementById('env-pais').value;
+  var tarifa = document.getElementById('env-tarifa').value;
+  var resBox = document.getElementById('env-result');
+  var errBox = document.getElementById('env-error');
+  if(!cp || pes<=0){ resBox.style.display='none'; errBox.style.display='none'; window._enviament=null; return; }
+  var w = parseFloat(document.getElementById('marc-w').value)||0;
+  var h = parseFloat(document.getElementById('marc-h').value)||0;
+  var sumCm = (w&&h) ? (w+h+5) : 0;
+  fetch('/api/calcular-enviament', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({tarifa:tarifa, cp:cp, pais:pais, pes:pes, sum_cm:sumCm})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok){ resBox.style.display='none'; errBox.style.display='block'; errBox.textContent = d.error||'Error'; window._enviament=null; return; }
+    errBox.style.display='none'; resBox.style.display='block';
+    var znames = {provincial:'Provincial', regional:'Regional', nacional:'Nacional', portugal:'Portugal'};
+    document.getElementById('env-zona').textContent = znames[d.zona]||d.zona;
+    document.getElementById('env-net').textContent = envEur(d.net);
+    document.getElementById('env-marge').textContent = d.marge_pct>0 ? ('+'+d.marge_pct+'%') : '—';
+    document.getElementById('env-iva').textContent = envEur(d.iva);
+    document.getElementById('env-total').textContent = envEur(d.total);
+    var pres = (window._c && window._c.preu_final) || 0;
+    document.getElementById('env-combinat-val').textContent = envEur(pres + d.total);
+    document.getElementById('env-avisos').textContent = (d.avisos||[]).join(' ');
+    window._enviament = {
+      tarifa:tarifa, tarifa_nom:d.tarifa_nom, zona:d.zona, cp:cp, pais:pais, pes:pes,
+      net:d.net, base:d.base, iva:d.iva, total:d.total,
+      nom:document.getElementById('env-nom').value, tel:document.getElementById('env-tel').value,
+      adreca:document.getElementById('env-adreca').value, poblacio:document.getElementById('env-poblacio').value
+    };
+  }).catch(function(){ errBox.style.display='block'; errBox.textContent='Error de connexió'; window._enviament=null; });
+}
+
 function crearAlbaraFD(modePreu){
   var c = window._c || {};
   var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
@@ -3263,6 +3372,7 @@ function crearAlbaraFD(modePreu){
     alcada:         parseFloat(document.getElementById('alcada').value)||0,
     revers_peu:     reversPeu,
     mode_preu:      modePreu,
+    enviament:      (document.getElementById('env-actiu') && document.getElementById('env-actiu').checked) ? (window._enviament || null) : null,
   };
 
   fetch('/api/crear-albara', {
