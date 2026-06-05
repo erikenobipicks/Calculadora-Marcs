@@ -1,5 +1,5 @@
 <!-- Feedback widget — include before </body> -->
-<button id="fb-toggle" onclick="document.getElementById('fb-modal').style.display='flex'" title="Envia suggeriment o error" style="position:fixed;bottom:5.5rem;right:1.35rem;z-index:9990;width:40px;height:40px;border-radius:50%;border:none;background:var(--nav,#1A6B45);color:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;transition:transform .15s">&#9993;</button>
+<button id="fb-toggle" onclick="document.getElementById('fb-modal').style.display='flex'" title="Envia suggeriment o error" style="position:fixed;bottom:5.4rem;right:1.25rem;z-index:9990;width:54px;height:54px;border-radius:50%;border:none;background:var(--nav,#1A6B45);color:#fff;font-size:1.4rem;cursor:pointer;box-shadow:0 16px 36px rgba(28,27,24,.24);display:flex;align-items:center;justify-content:center;transition:transform .15s">&#9993;</button>
 <div id="fb-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.35);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.2);width:92%;max-width:420px;font-family:'DM Sans',sans-serif;overflow:hidden">
     <div style="padding:1.1rem 1.3rem;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between">
@@ -25,6 +25,7 @@
 .fb-pill{padding:5px 12px;border-radius:20px;border:1px solid #ddd;background:#f8f8f8;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .12s}
 .fb-pill-active{background:var(--nav,#1A6B45);color:#fff;border-color:var(--nav,#1A6B45)}
 #fb-toggle:hover{transform:scale(1.08)}
+@media(max-width:920px){#fb-toggle{right:1rem;bottom:5.15rem}}
 </style>
 <script>
 var _fbTipus='millora';

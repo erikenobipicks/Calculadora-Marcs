@@ -3,8 +3,8 @@
   right:1.25rem;
   bottom:1.25rem;
   z-index:260;
-  width:58px;
-  height:58px;
+  width:54px;
+  height:54px;
   border:none;
   border-radius:50%;
   background:#25d366;
@@ -13,7 +13,7 @@
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:1.45rem;
+  font-size:1.4rem;
   cursor:pointer;
 }
 .rr-wa-fab:hover{background:#1fb85a}
