@@ -2705,6 +2705,62 @@ def public_clients_habituals():
     })
 
 
+@app.route('/api/public/clients-habituals/save', methods=['POST'])
+def public_clients_habituals_save():
+    """Crea o actualitza un client habitual (clients_externs) des de la web.
+    Auth: X-Bridge-Token. Body: {nom/name, email, telefon/phone, nif, tipus,
+    client_id (opcional)}. Dedup soft per email."""
+    expected_token = _bridge_api_token()
+    provided_token = request.headers.get('X-Bridge-Token', '').strip()
+    if not expected_token or provided_token != expected_token:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    data = request.get_json(silent=True) or {}
+    nom = (data.get('nom') or data.get('name') or '').strip()
+    email = (data.get('email') or '').strip()
+    telefon = (data.get('telefon') or data.get('phone') or '').strip()
+    nif = (data.get('nif') or '').strip()
+    tipus = (data.get('tipus') or 'pvp').strip() or 'pvp'
+    client_id = (data.get('client_id') or '').strip()
+    if not (nom or email or telefon):
+        return jsonify({'ok': False, 'error': 'missing_identity'}), 400
+    if not nom:
+        nom = email or telefon
+
+    def _out(row):
+        return {
+            'id': _row_get(row, 'id'),
+            'nom': _row_get(row, 'nom') or '',
+            'nif': _row_get(row, 'nif') or '',
+            'email': _row_get(row, 'email') or '',
+            'telefon': _row_get(row, 'telefon') or '',
+            'tipus': _row_get(row, 'tipus') or 'pvp',
+        }
+
+    try:
+        if client_id and str(client_id).isdigit():
+            existing = query('SELECT id FROM clients_externs WHERE id=?', [int(client_id)], one=True)
+            if not existing:
+                return jsonify({'ok': False, 'error': 'client_not_found'}), 404
+            execute('UPDATE clients_externs SET nom=?, nif=?, email=?, telefon=?, tipus=? WHERE id=?',
+                    [nom, nif, email, telefon, tipus, int(client_id)])
+            row = query('SELECT * FROM clients_externs WHERE id=?', [int(client_id)], one=True)
+        else:
+            existing = query('SELECT id FROM clients_externs WHERE LOWER(email)=? AND actiu=TRUE',
+                             [email.lower()], one=True) if email else None
+            if existing:
+                execute('UPDATE clients_externs SET nom=?, nif=?, email=?, telefon=?, tipus=? WHERE id=?',
+                        [nom, nif, email, telefon, tipus, existing['id']])
+                row = query('SELECT * FROM clients_externs WHERE id=?', [existing['id']], one=True)
+            else:
+                execute('INSERT INTO clients_externs (nom, nif, email, telefon, tipus, actiu) '
+                        'VALUES (?, ?, ?, ?, ?, TRUE)', [nom, nif, email, telefon, tipus])
+                row = query('SELECT * FROM clients_externs WHERE nom=? ORDER BY id DESC LIMIT 1', [nom], one=True)
+        return jsonify({'ok': True, 'client': _out(row)})
+    except Exception as exc:
+        print(f'clients_habituals_save error: {exc}')
+        return jsonify({'ok': False, 'error': 'internal_error'}), 500
+
+
 def _pro_clients_lookup_user_id(username):
     """Resol username (case-insensitive) → usuaris.id. Retorna None si no
     existeix o si l'usuari està bloquejat."""
