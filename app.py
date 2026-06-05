@@ -7984,6 +7984,28 @@ ENVIAMENT_TARIFES = {
 _ENV_CP_REGIONAL = {'08', '17', '25'}              # Barcelona, Girona, Lleida (resta Catalunya)
 _ENV_CP_NO_PENINSULAR = {'07', '35', '38', '51', '52'}  # Balears, Las Palmas, Tenerife, Ceuta, Melilla
 
+# Tarifa de manipulació/embalatge (ingrés del taller), per tram de pes (≈ volum).
+# Es suma al cost net del transport, abans d'IVA.
+ENVIAMENT_MANIPULACIO = [
+    (1, 1.00),     # ≤1 kg — sobre / fotos petites
+    (5, 2.50),     # 1-5 kg — paquet petit
+    (15, 5.00),    # 5-15 kg — voluminós
+    (float('inf'), 8.00),  # >15 kg — gran / fràgil (marcs amb vidre)
+]
+
+
+def _enviament_manipulacio(pes_kg):
+    try:
+        pes = float(pes_kg or 0)
+    except (TypeError, ValueError):
+        pes = 0.0
+    if pes <= 0:
+        pes = 0.001
+    for upper, fee in ENVIAMENT_MANIPULACIO:
+        if pes <= upper:
+            return fee
+    return ENVIAMENT_MANIPULACIO[-1][1]
+
 
 def _enviament_zona_from_cp(cp, pais='ES'):
     """Retorna 'provincial'|'regional'|'nacional'|'portugal'|'no_cobert'|None."""
@@ -8058,13 +8080,13 @@ def calcular_enviament(tarifa_key, cp, pes_kg, pais='ES', sum_cm=None):
         sc = None
     if sc and sc > t['max_sum_cm']:
         avisos.append(f"La suma ample+llarg+alt ({sc:.0f} cm) supera el màxim de {t['max_sum_cm']} cm; pot comportar recàrrec per excés de mides.")
-    marge = float(get_config_value('marge_enviament_pct', '0') or 0)
-    base = round(net * (1 + marge / 100.0), 2)
+    manip = _enviament_manipulacio(pes_kg)
+    base = round(net + manip, 2)        # transport net + manipulació (sense IVA)
     iva = round(base * 0.21, 2)
     total = round(base + iva, 2)
     return {
         'ok': True, 'zona': zona, 'tarifa': tarifa_key, 'tarifa_nom': t['nom'],
-        'net': round(net, 2), 'marge_pct': marge, 'base': base, 'iva': iva, 'total': total,
+        'net': round(net, 2), 'manipulacio': round(manip, 2), 'base': base, 'iva': iva, 'total': total,
         'avisos': avisos,
     }
 
