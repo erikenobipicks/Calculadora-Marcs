@@ -136,6 +136,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .opt-btn.opt-conservar.selected{background:#D4E9DD;border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
 .opt-text{font-size:12px;font-weight:600}
 .opt-preu{font-size:10px;font-weight:700;color:var(--green);background:var(--green-l);padding:2px 6px;border-radius:999px;margin-left:2px;white-space:nowrap}
+.opt-preu:empty{display:none}
+.grup-opcions.single{display:flex}
 .opt-btn.selected .opt-preu{background:rgba(26,107,69,.2);color:#0F4A30}
 .opt-btn.disabled{opacity:.35;pointer-events:none}
 .opt-btn.locked{cursor:not-allowed;pointer-events:none}
@@ -249,6 +251,10 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .sb-secondary:hover{background:#4a4843}
 .sb-wa{background:#dcefe1;color:#0e5430;border:1px solid rgba(184,220,201,.65)}
 .sb-wa:hover{filter:brightness(.96)}
+.sb-albara{background:transparent;color:#cfe9d9;border:1px solid rgba(122,184,148,.55)}
+.sb-albara:hover{background:rgba(122,184,148,.16)}
+#sb-albara-pvp{margin-left:6px;position:relative}
+#sb-albara-pvp::before{content:'';position:absolute;left:-6px;top:7px;bottom:7px;width:1px;background:rgba(255,255,255,.14)}
 .sticky-bar-cta svg{display:block;flex-shrink:0}
 body.has-sticky-bar{padding-bottom:78px}
 @media (max-width:640px){
@@ -600,7 +606,6 @@ body.has-sticky-bar{padding-bottom:78px}
               <input type="radio" name="proteccio" value="conservar" onchange="onGrupChange('proteccio')">
               <span class="opt-text">Conservar vidre</span>
               <span class="help-tip" tabindex="0" role="button" aria-label="Més informació" onclick="toggleHelp(event,this)" onkeydown="helpKey(event,this)">?<span class="help-bubble">Per quan el client porta el seu marc i només en vol canviar la motllura: reaprofitem el vidre. Comporta una feina extra que se suma automàticament al preu.</span></span>
-              <span class="opt-preu" style="background:#E8F3EE;color:#1A6B45">0,00 €</span>
             </label>
             <label class="opt-btn opt-none" id="opt-proteccio-cap">
               <input type="radio" name="proteccio" value="" checked onchange="onGrupChange('proteccio')">
@@ -674,11 +679,11 @@ body.has-sticky-bar{padding-bottom:78px}
         <!-- GRUP 4: Impressió (independent) -->
         <div class="grup">
           <div class="grup-label">Impressió fotogràfica</div>
-          <div class="grup-opcions">
+          <div class="grup-opcions single">
             <div class="opt-btn" id="opt-impressio" onclick="toggleImpressio()" style="cursor:pointer">
               <input type="checkbox" id="chk-impressio" style="display:none">
               <span class="opt-text">Impressió</span>
-              <span class="opt-preu" id="preu-impressio">—</span>
+              <span class="opt-preu" id="preu-impressio"></span>
             </div>
           </div>
           <div id="impressio-paper-row" style="display:none;margin-top:.55rem">
@@ -697,11 +702,11 @@ body.has-sticky-bar{padding-bottom:78px}
         <!-- Refs seleccionades (per al càlcul) -->
         <div class="grup" id="grup-revers-peu">
           <div class="grup-label">Revers amb peu</div>
-          <div class="grup-opcions">
+          <div class="grup-opcions single">
             <div class="opt-btn disabled" id="opt-revers-peu" onclick="toggleReversPeu()" style="cursor:pointer">
               <input type="checkbox" id="chk-revers-peu" style="display:none" disabled>
               <span class="opt-text">Revers amb peu</span>
-              <span class="opt-preu" id="preu-revers-peu">-</span>
+              <span class="opt-preu" id="preu-revers-peu"></span>
             </div>
           </div>
           <div id="revers-peu-avis" class="desc" style="display:none;color:var(--red);margin-top:.45rem"></div>
@@ -1707,19 +1712,19 @@ function updateBtnPreus(){
   ['encolat','protter','laminat','vidre','doble_vidre','mirall','passpartu','doble_pas'].forEach(function(k){
     var el = document.getElementById('preu-'+k); if(!el) return;
     if(CLOSEST[k] && CLOSEST[k].preu) el.textContent = preuDisplay(CLOSEST[k].preu, false);
-    else el.textContent = '—';
+    else el.textContent = '';
   });
   ['puzzle_foam_cristal','puzzle_foam_laminat'].forEach(function(v){
     var el = document.getElementById('preu-'+v); if(!el) return;
     var c = puzzlePresetCost(v);
-    el.textContent = c>0 ? preuDisplay(c, false) : '—';
+    el.textContent = c>0 ? preuDisplay(c, false) : '';
   });
   var elImp = document.getElementById('preu-impressio');
   if(elImp){
     if(CLOSEST.impressio && CLOSEST.impressio.preu)
       elImp.textContent = preuDisplay(CLOSEST.impressio.preu, true);
     else
-      elImp.textContent = '—';
+      elImp.textContent = '';
   }
 }
 
@@ -2063,7 +2068,7 @@ function updateReversPeu(){
     chk.disabled = true;
     opt.classList.remove('selected');
     opt.classList.add('disabled');
-    preu.textContent = '-';
+    preu.textContent = '';
     return;
   }
 
@@ -2086,7 +2091,7 @@ function updateReversPeu(){
   chk.disabled = true;
   opt.classList.remove('selected');
   opt.classList.add('disabled');
-  preu.textContent = '-';
+  preu.textContent = '';
   avis.textContent = getReversPeuWarningText();
   avis.style.display = 'block';
 }
@@ -3500,7 +3505,7 @@ function netejar(){
   document.querySelectorAll('.extra-toggle-input').forEach(function(cb){ cb.checked = false; });
   document.getElementById('opt-revers-peu').classList.remove('selected');
   document.getElementById('opt-revers-peu').classList.add('disabled');
-  document.getElementById('preu-revers-peu').textContent='-';
+  document.getElementById('preu-revers-peu').textContent='';
   document.getElementById('revers-peu-avis').style.display='none';
   document.getElementById('revers-peu-avis').textContent='';
   PREUS.impressio=0;
