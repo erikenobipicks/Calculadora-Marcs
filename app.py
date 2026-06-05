@@ -7949,6 +7949,153 @@ def _resolve_client_extern_fd_id(client_extern_id):
         return None, None
     return _row_get(row, 'fd_contact_id') or None, _row_get(row, 'nom') or None
 
+
+# ── Enviament a client final (tarifes NACEX, vàlides fins 31/12/2026) ────────
+# Preus NETS (sense IVA). Origen: Reus (Tarragona). El client final paga el
+# net × (1 + marge_enviament_pct) + 21% IVA. Zona deduïda pel codi postal.
+ENVIAMENT_TARIFES = {
+    'pluspack': {
+        'nom': 'Pluspack (econòmic, 1-2 dies)',
+        'max_kg': 20,
+        'max_sum_cm': 150,
+        'zones': {
+            # (kg_màx_del_tram, preu_net)
+            'provincial': [(2, 7.10), (5, 8.41), (10, 9.00), (15, 9.73), (20, 10.46)],
+            'regional':   [(2, 7.31), (5, 8.64), (10, 9.22), (15, 9.95), (20, 10.70)],
+            'nacional':   [(2, 7.83), (5, 9.51), (10, 11.21), (15, 11.92), (20, 12.64)],
+            'portugal':   [(2, 7.83), (5, 9.51), (10, 11.21), (15, 11.92), (20, 12.64)],
+        },
+    },
+    'peninsular': {
+        'nom': 'Peninsular (urgent, dia següent 19h)',
+        'max_kg': 40,
+        'max_sum_cm': 100,
+        'zones': {
+            'provincial': [(2, 9.11), (5, 10.21), (10, 12.87), (15, 15.78), (20, 18.68), (25, 21.59), (30, 24.49), (35, 27.39), (40, 30.29)],
+            'regional':   [(2, 10.76), (5, 13.26), (10, 17.85), (15, 23.33), (20, 28.82), (25, 34.29), (30, 39.76), (35, 45.26), (40, 50.75)],
+            'nacional':   [(2, 11.49), (5, 14.50), (10, 20.52), (15, 26.52), (20, 32.51), (25, 38.52), (30, 44.52), (35, 50.52), (40, 56.50)],
+        },
+        # Fracció addicional per cada 5 kg que superi el màxim (només peninsular)
+        'fraccio_5kg': {'provincial': 2.90, 'regional': 5.49, 'nacional': 6.01},
+    },
+}
+
+# Codis de província (2 dígits del CP) per a la deducció de zona des de Reus.
+_ENV_CP_REGIONAL = {'08', '17', '25'}              # Barcelona, Girona, Lleida (resta Catalunya)
+_ENV_CP_NO_PENINSULAR = {'07', '35', '38', '51', '52'}  # Balears, Las Palmas, Tenerife, Ceuta, Melilla
+
+
+def _enviament_zona_from_cp(cp, pais='ES'):
+    """Retorna 'provincial'|'regional'|'nacional'|'portugal'|'no_cobert'|None."""
+    pais = (pais or 'ES').strip().upper()
+    if pais in ('PT', 'PORTUGAL'):
+        return 'portugal'
+    if pais in ('AD', 'ANDORRA'):
+        return 'nacional'  # "Nacional Peninsular + Andorra"
+    digits = re.sub(r'\D', '', str(cp or ''))
+    if len(digits) < 2:
+        return None
+    pref = digits[:2]
+    if pref in _ENV_CP_NO_PENINSULAR:
+        return 'no_cobert'
+    if pref == '43':
+        return 'provincial'
+    if pref in _ENV_CP_REGIONAL:
+        return 'regional'
+    try:
+        n = int(pref)
+    except ValueError:
+        return None
+    return 'nacional' if 1 <= n <= 52 else None
+
+
+def _enviament_preu_net(tarifa_key, zona, pes_kg):
+    """Preu net del tram segons pes. Si supera el màxim, aplica fracció +5kg
+    (peninsular) o retorna None (pluspack no admet excés)."""
+    t = ENVIAMENT_TARIFES.get(tarifa_key)
+    if not t or zona not in t['zones']:
+        return None
+    try:
+        pes = float(pes_kg or 0)
+    except (TypeError, ValueError):
+        pes = 0.0
+    if pes <= 0:
+        pes = 0.001
+    brackets = t['zones'][zona]
+    if pes <= t['max_kg']:
+        for upper, price in brackets:
+            if pes <= upper:
+                return price
+        return brackets[-1][1]
+    fr = (t.get('fraccio_5kg') or {}).get(zona)
+    if fr is None:
+        return None
+    extra = pes - t['max_kg']
+    n = math.ceil(extra / 5.0)
+    return round(brackets[-1][1] + n * fr, 2)
+
+
+def calcular_enviament(tarifa_key, cp, pes_kg, pais='ES', sum_cm=None):
+    """Calcula el cost d'enviament a client final. Retorna dict amb ok/error."""
+    tarifa_key = (tarifa_key or 'pluspack').strip().lower()
+    t = ENVIAMENT_TARIFES.get(tarifa_key)
+    if not t:
+        return {'ok': False, 'error': 'Tarifa d\'enviament no vàlida.'}
+    zona = _enviament_zona_from_cp(cp, pais)
+    if zona == 'no_cobert':
+        return {'ok': False, 'error': 'Destí no cobert per aquesta tarifa terrestre (Balears/Canàries/Ceuta/Melilla). Cal enviament especial.'}
+    if not zona:
+        return {'ok': False, 'error': 'Codi postal o país no vàlid.'}
+    if zona not in t['zones']:
+        return {'ok': False, 'error': f"La tarifa «{t['nom']}» no cobreix aquest destí."}
+    net = _enviament_preu_net(tarifa_key, zona, pes_kg)
+    if net is None:
+        return {'ok': False, 'error': f"Pes fora de rang per a «{t['nom']}» (màxim {t['max_kg']} kg)."}
+    avisos = []
+    try:
+        sc = float(sum_cm) if sum_cm not in (None, '') else None
+    except (TypeError, ValueError):
+        sc = None
+    if sc and sc > t['max_sum_cm']:
+        avisos.append(f"La suma ample+llarg+alt ({sc:.0f} cm) supera el màxim de {t['max_sum_cm']} cm; pot comportar recàrrec per excés de mides.")
+    marge = float(get_config_value('marge_enviament_pct', '0') or 0)
+    base = round(net * (1 + marge / 100.0), 2)
+    iva = round(base * 0.21, 2)
+    total = round(base + iva, 2)
+    return {
+        'ok': True, 'zona': zona, 'tarifa': tarifa_key, 'tarifa_nom': t['nom'],
+        'net': round(net, 2), 'marge_pct': marge, 'base': base, 'iva': iva, 'total': total,
+        'avisos': avisos,
+    }
+
+
+def estimar_pes_marc(w_cm, h_cm, te_vidre=True, doble_vidre=False):
+    """Estimació orientativa del pes d'un marc embalat (kg), editable per l'usuari."""
+    try:
+        area = (float(w_cm) / 100.0) * (float(h_cm) / 100.0)
+    except (TypeError, ValueError):
+        return 0.0
+    if area <= 0:
+        return 0.0
+    vidre = (10.0 if doble_vidre else 5.0) if te_vidre else 0.0  # kg/m²
+    estructura = 6.0  # motllura + fons + embalatge (kg/m² aprox)
+    return round(area * (vidre + estructura) + 0.5, 1)
+
+
+@app.route('/api/calcular-enviament', methods=['POST'])
+@login_required
+def api_calcular_enviament():
+    d = request.get_json(force=True) or {}
+    res = calcular_enviament(
+        d.get('tarifa') or 'pluspack',
+        d.get('cp') or '',
+        d.get('pes') or 0,
+        pais=(d.get('pais') or 'ES'),
+        sum_cm=d.get('sum_cm'),
+    )
+    return jsonify(res)
+
+
 @app.route('/api/crear-albara', methods=['POST'])
 @login_required
 def api_crear_albara():
