@@ -8194,11 +8194,37 @@ def api_crear_albara():
         'tax':       ['S_IVA_21'],
     }]
 
+    # Línia d'enviament a client final (NACEX), si s'ha activat a la calc.
+    env = d.get('enviament')
+    env = env if isinstance(env, dict) else None
+    if env:
+        try:
+            env_base = float(env.get('base') or 0)  # net × (1+marge), sense IVA
+        except (TypeError, ValueError):
+            env_base = 0.0
+        if env_base > 0:
+            env_text = f"Enviament {env.get('tarifa_nom') or 'NACEX'}"
+            if env.get('poblacio'):
+                env_text += f" a {env.get('poblacio')}"
+            if env.get('cp'):
+                env_text += f" (CP {env.get('cp')})"
+            linies.append({
+                'text':      env_text,
+                'quantity':  1.0,
+                'unitPrice': round(env_base, 2),
+                'tax':       ['S_IVA_21'],
+            })
+
     notes_parts = []
     if num_pressupost:
         notes_parts.append(f'Pressupost: {num_pressupost}')
     if observacions:
         notes_parts.append(f'Obs: {observacions}')
+    if env:
+        dest = [p for p in [env.get('nom'), env.get('adreca'), env.get('poblacio'),
+                            env.get('cp'), env.get('tel')] if p]
+        if dest:
+            notes_parts.append('Enviament a: ' + ', '.join(str(x) for x in dest))
     notes = ' | '.join(notes_parts)
 
     albara = _fd_crear_albara(contact_id, linies, notes=notes)
