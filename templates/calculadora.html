@@ -118,8 +118,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .grup{margin-bottom:.9rem;padding-bottom:.9rem;border-bottom:1px solid var(--border)}
 .grup:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
 .grup-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--hint);margin-bottom:.5rem}
-.grup-opcions{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:.45rem}
-.opt-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;user-select:none;min-height:44px}
+.grup-opcions{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.45rem}
+.opt-btn{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;user-select:none;min-height:44px;min-width:0}
 .opt-btn:hover{border-color:var(--green);background:var(--green-l)}
 .opt-btn input{display:none}
 /* Indicador circular sempre present (no shift en seleccionar). Buit a sense
@@ -134,8 +134,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .opt-btn.opt-none.selected{background:var(--bg);border-color:var(--border2);color:var(--muted);box-shadow:none}
 .opt-btn.opt-conservar{border-color:#B8DCC9;color:var(--green)}
 .opt-btn.opt-conservar.selected{background:#D4E9DD;border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
-.opt-text{font-size:12px;font-weight:600}
-.opt-preu{font-size:10px;font-weight:700;color:var(--green);background:var(--green-l);padding:2px 6px;border-radius:999px;margin-left:2px;white-space:nowrap}
+.opt-text{font-size:12px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.opt-preu{font-size:10px;font-weight:700;color:var(--green);background:var(--green-l);padding:2px 6px;border-radius:999px;margin-left:2px;white-space:nowrap;flex-shrink:0}
 .opt-preu:empty{display:none}
 .grup-opcions.single{display:flex}
 .opt-btn.selected .opt-preu{background:rgba(26,107,69,.2);color:#0F4A30}
