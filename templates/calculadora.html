@@ -3288,14 +3288,30 @@ function onEnviamentToggle(){
 }
 
 function suggerirPesEnviament(){
+  // Estimació orientativa del pes embalat segons els materials triats.
   var w = parseFloat(document.getElementById('marc-w').value)||0;
   var h = parseFloat(document.getElementById('marc-h').value)||0;
   if(w<=0 || h<=0){ w = parseFloat(document.getElementById('amplada').value)||0; h = parseFloat(document.getElementById('alcada').value)||0; }
-  var area = (w/100)*(h/100);
-  if(area<=0) return 0;
+  if(w<=0 || h<=0) return 0;
+  var area  = (w/100)*(h/100);   // m²
+  var perim = 2*(w+h)/100;       // m
+  // Protecció (vidre 2mm ~5, doble ~10, mirall 3mm ~7,5 kg/m²)
   var prot = (document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
-  var vidre = prot==='doble_vidre' ? 10 : ((prot==='vidre'||prot==='conservar') ? 5 : 0);
-  return Math.round((area*(vidre+6)+0.5)*10)/10;
+  var protKg = prot==='doble_vidre' ? 10 : (prot==='mirall' ? 7.5 : ((prot==='vidre'||prot==='conservar') ? 5 : 0));
+  // Muntatge / suport (foam encolat, protter+foam, laminat)
+  var munt = (document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
+  var muntKg = munt==='protter' ? 1.0 : (munt==='encolat' ? 0.7 : (munt==='laminat' ? 0.3 : 0));
+  // Interior (passpartú/doble passpartú, cartró)
+  var inter = (document.querySelector('input[name="interior"]:checked')||{}).value||'';
+  var interKg = inter ? 0.4 : 0;
+  // Fons/dors (cartró ploma o DM fi), sempre present
+  var fonsKg = 2.0;
+  // Motllura per perímetre (estimació mitjana fusta/alumini)
+  var moldura = perim * 0.45;
+  // Embalatge (caixa + cantoneres)
+  var embalatge = 0.6 + 1.0*area;
+  var pes = area*(protKg + muntKg + interKg + fonsKg) + moldura + embalatge;
+  return Math.round(pes*10)/10;
 }
 
 function recalcEnviament(){
