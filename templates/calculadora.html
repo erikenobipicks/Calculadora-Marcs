@@ -443,8 +443,8 @@ body.has-sticky-bar{padding-bottom:78px}
           </div>
           <div id="env-result" style="display:none;margin-top:.7rem;padding:.7rem .85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
             <div style="display:flex;justify-content:space-between;font-size:12px"><span>Zona</span><strong id="env-zona">—</strong></div>
-            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Enviament (net)</span><span id="env-net">—</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Marge enviament</span><span id="env-marge">—</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Transport (net)</span><span id="env-net">—</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px"><span>Manipulació</span><span id="env-marge">—</span></div>
             <div style="display:flex;justify-content:space-between;font-size:12px"><span>IVA 21%</span><span id="env-iva">—</span></div>
             <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px"><span>Total enviament</span><strong id="env-total">—</strong></div>
             <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--green);margin-top:4px"><span>Pressupost + enviament</span><strong id="env-combinat-val">—</strong></div>
@@ -3340,7 +3340,7 @@ function recalcEnviament(){
     var znames = {provincial:'Provincial', regional:'Regional', nacional:'Nacional', portugal:'Portugal'};
     document.getElementById('env-zona').textContent = znames[d.zona]||d.zona;
     document.getElementById('env-net').textContent = envEur(d.net);
-    document.getElementById('env-marge').textContent = d.marge_pct>0 ? ('+'+d.marge_pct+'%') : '—';
+    document.getElementById('env-marge').textContent = envEur(d.manipulacio||0);
     document.getElementById('env-iva').textContent = envEur(d.iva);
     document.getElementById('env-total').textContent = envEur(d.total);
     var pres = (window._c && window._c.preu_final) || 0;
