@@ -122,6 +122,32 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
       </div>
     </div>
 
+    <!-- Stock -->
+    <div class="card">
+      <h3>Control d'stock (metres lineals)</h3>
+      <div class="grid-2">
+        <div class="f">
+          <label>Stock mínim (m)</label>
+          <input type="number" name="stock_min_m" value="{{ moldura.stock_min_m if moldura.stock_min_m is not none else '' }}" step="0.1" min="0" placeholder="Ex: 3">
+          <div class="hint">Llindar d'avís. Per sota d'aquest valor, l'app avisa l'admin.</div>
+        </div>
+        <div class="f">
+          <label>Stock actual</label>
+          {% if nova %}
+          <input type="text" value="—" readonly>
+          <div class="hint">L'stock es carrega i ajusta després de crear la motllura, des de la seva pàgina d'stock (queda registrat a l'historial).</div>
+          {% elif moldura.stock_controlat %}
+          <input type="text" value="{{ '%.2f'|format(moldura.stock_m) }} m{% if moldura.stock_baix %} ⚠ sota mínim{% endif %}" readonly
+                 style="{% if moldura.stock_baix %}color:var(--red);font-weight:700{% endif %}">
+          <div class="hint"><a href="/admin/cataleg/{{ moldura.referencia }}/stock" style="color:var(--green)">Gestionar stock i historial →</a></div>
+          {% else %}
+          <input type="text" value="No controlat" readonly>
+          <div class="hint"><a href="/admin/cataleg/{{ moldura.referencia }}/stock" style="color:var(--green)">Activar control d'stock →</a></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
     <!-- Foto -->
     <div class="card">
       <h3>Imatge</h3>

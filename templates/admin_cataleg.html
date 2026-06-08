@@ -138,6 +138,7 @@ tr:hover td{background:#FAFAF8}
           <th>Gruix</th>
           <th>Prove&iuml;dor</th>
           <th>Ubicacio</th>
+          <th>Stock</th>
           <th>Accions</th>
         </tr>
       </thead>
@@ -168,6 +169,15 @@ tr:hover td{background:#FAFAF8}
           <td>{{ "%.1f"|format(m.gruix or 0) }} cm</td>
           <td>{% if m.proveidor %}<span class="chip chip-prov">{{ m.proveidor }}</span>{% else %}-{% endif %}</td>
           <td>{% if m.ubicacio %}<span class="chip chip-ubi">{{ m.ubicacio }}</span>{% else %}-{% endif %}</td>
+          <td>
+            {% if m.stock_controlat %}
+              <a href="/admin/cataleg/{{ m.referencia }}/stock" style="text-decoration:none;font-weight:600;{% if m.stock_baix %}color:var(--red){% else %}color:var(--green){% endif %}" title="Gestionar stock">
+                {{ "%.1f"|format(m.stock_m) }} m{% if m.stock_baix %} ⚠{% endif %}
+              </a>
+            {% else %}
+              <a href="/admin/cataleg/{{ m.referencia }}/stock" style="text-decoration:none;color:var(--hint)" title="Activar control d'stock">—</a>
+            {% endif %}
+          </td>
           <td>
             <div class="actions">
               <a href="/admin/cataleg/{{ m.referencia }}/editar" class="btn-icon" title="Editar">E</a>
