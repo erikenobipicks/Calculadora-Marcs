@@ -265,6 +265,9 @@ body.has-sticky-bar{padding-bottom:78px}
   .sticky-bar-actions{gap:4px}
   .sb-secondary,.sb-wa{padding:8px 10px}
   .sb-secondary .sb-label,.sb-wa .sb-label{display:none}
+  /* Albarà PVP/PVD: en mòbil amaguem el prefix "Albarà " i deixem només
+     PVP/PVD, perquè la barra (admin) no es desbordi lateralment. */
+  .sb-albara .sb-prefix{display:none}
   body.has-sticky-bar{padding-bottom:66px}
 }
 </style>
@@ -895,8 +898,8 @@ body.has-sticky-bar{padding-bottom:78px}
       <span class="sb-label">Reus Revela</span>
     </button>
     {% if session.is_admin %}
-    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)"><span class="sb-label">Albarà PVP</span></button>
-    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)"><span class="sb-label">Albarà PVD</span></button>
+    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVP</span></button>
+    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVD</span></button>
     {% endif %}
     <button type="button" class="sticky-bar-cta sb-secondary" id="sb-nou" onclick="novaComanda()" title="Nou càlcul de marc">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
