@@ -514,6 +514,7 @@ body.has-sticky-bar{padding-bottom:78px}
               <div class="ss-list" id="list-pre"></div>
             </div>
             <div class="chip-row" id="chips-pre"></div>
+            <div id="pre-invalid-banner" style="display:none;margin-top:.5rem;padding:.7rem .85rem;border:1.5px solid var(--red);background:#fdecec;color:var(--red);border-radius:8px;font-size:12px;font-weight:700;line-height:1.4">⚠ <span id="pre-invalid-text"></span></div>
             <div class="desc" id="desc-pre"></div>
             <div id="aviso-descatalogada-pre" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
               ⚠ Motllura amb stock limitat — no es reposarà
@@ -1831,6 +1832,7 @@ function togglePremarc(){
   document.getElementById('fotos-grid').style.gridTemplateColumns = actiu ? '1fr 1fr' : '1fr';
   if(!actiu){
     // Netejar premarc quan es desactiva
+    _setPreInvalid(false);
     document.getElementById('pre_marc').value = '';
     document.getElementById('desc-pre').textContent = '';
     document.getElementById('chips-pre').innerHTML = '';
@@ -1867,7 +1869,7 @@ function lookupRef(t,ref){
   if(!ref||ref==='-'){
     PREUS[t]=0; GRUIX[t]=0; MERMA[t]={pct:10,min:100}; setChips(t,[]);
     setDescatalogadaWarning(t, false);
-    if(t==='pre'){ document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
+    if(t==='pre'){ _setPreInvalid(false); document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
     if(t==='marc'){ _setMarcInvalid(false); document.getElementById('desc-marc').textContent=''; resetFoto(); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
     calcular(); return;
   }
@@ -1879,6 +1881,7 @@ function lookupRef(t,ref){
         setChips(t,[{txt:'gruix '+d.gruix+' cm',cls:'chip-n'}]);
         setDescatalogadaWarning(t, !!d.descatalogada);
         if(t==='pre'){
+          _setPreInvalid(false);
           document.getElementById('desc-pre').textContent=d.descripcio||'';
           document.getElementById('desc-pre').style.color='';
           document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
@@ -1903,6 +1906,7 @@ function lookupRef(t,ref){
           _lastFetchKey=''; recalcMides(); updateReversPeu();
           showAlert(msg + ' — Comprova la referència o consulta el catàleg.', 'err');
         } else if(t==='pre'){
+          _setPreInvalid(true, ref);
           document.getElementById('desc-pre').textContent = msg;
           document.getElementById('desc-pre').style.color = 'var(--red)';
           showAlert(msg, 'err');
@@ -2721,8 +2725,9 @@ function updateExtrasLabels(){
 }
 
 // ── Càlcul ────────────────────────────────────────────────────────────────
-// ── Bloqueig per motllura inexistent ──────────────────────────────────────
+// ── Bloqueig per motllura inexistent (principal o premarc) ────────────────
 var _marcInvalid = false;
+var _preInvalid = false;
 function _setMarcInvalid(on, ref){
   _marcInvalid = !!on;
   var b = document.getElementById('marc-invalid-banner');
@@ -2730,6 +2735,19 @@ function _setMarcInvalid(on, ref){
     if(on){
       document.getElementById('marc-invalid-text').textContent =
         'La motllura «' + (ref || '') + '» no existeix al catàleg. Corregeix la referència per poder calcular.';
+      b.style.display = 'block';
+    } else {
+      b.style.display = 'none';
+    }
+  }
+}
+function _setPreInvalid(on, ref){
+  _preInvalid = !!on;
+  var b = document.getElementById('pre-invalid-banner');
+  if(b){
+    if(on){
+      document.getElementById('pre-invalid-text').textContent =
+        'El premarc «' + (ref || '') + '» no existeix al catàleg. Corregeix-lo o treu el premarc per poder calcular.';
       b.style.display = 'block';
     } else {
       b.style.display = 'none';
@@ -2750,9 +2768,10 @@ function _renderMarcBloquejat(){
 }
 
 function calcular(){
-  // Si s'ha escrit una referència de motllura que no existeix, bloquegem el
-  // càlcul sencer perquè el client no es despisti amb un total que no és real.
-  if(_marcInvalid){
+  // Si s'ha escrit una referència de motllura (principal o premarc) que no
+  // existeix, bloquegem el càlcul sencer perquè el client no es despisti amb
+  // un total que no és real.
+  if(_marcInvalid || _preInvalid){
     _renderMarcBloquejat();
     return;
   }
@@ -2986,7 +3005,7 @@ function desarMarge(){
 
 // ── Guardar ───────────────────────────────────────────────────────────────
 function guardar(){
-  if(_marcInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
+  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
   var d={
     comanda_id: uid || null,
     sessio_id:sessioId, opcio_nom:opcions[opcioActual].nom,
@@ -3056,7 +3075,7 @@ function _startNewBudgetAfterSave(){
 }
 
 function guardarTotes(){
-  if(_marcInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
+  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
   // Snapshot the current option so its latest DOM state is captured
   opcions[opcioActual].estat = capturaEstat();
 
@@ -3400,7 +3419,7 @@ function recalcEnviament(){
 }
 
 function crearAlbaraFD(modePreu){
-  if(_marcInvalid){ showAlert('Corregeix la referència de la motllura abans de generar l\'albarà.', 'err'); return; }
+  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de generar l\'albarà.', 'err'); return; }
   var c = window._c || {};
   var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
   var grp = document.getElementById('albara-btns');
