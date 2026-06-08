@@ -495,6 +495,7 @@ body.has-sticky-bar{padding-bottom:78px}
             <div class="ss-list" id="list-marc"></div>
           </div>
           <div class="chip-row" id="chips-marc"></div>
+          <div id="marc-invalid-banner" style="display:none;margin-top:.5rem;padding:.75rem .9rem;border:1.5px solid var(--red);background:#fdecec;color:var(--red);border-radius:8px;font-size:13px;font-weight:700;line-height:1.4">⚠ <span id="marc-invalid-text"></span></div>
           <div class="desc" id="desc-marc"></div>
           <div id="aviso-descatalogada-marc" style="display:none;background:var(--amber-l);border:1px solid color-mix(in srgb, var(--amber) 30%, white);border-radius:6px;padding:.5rem .75rem;font-size:.85rem;color:color-mix(in srgb, var(--amber) 60%, black);margin-top:.35rem">
             ⚠ Motllura amb stock limitat — no es reposarà
@@ -1870,7 +1871,7 @@ function lookupRef(t,ref){
     PREUS[t]=0; GRUIX[t]=0; MERMA[t]={pct:10,min:100}; setChips(t,[]);
     setDescatalogadaWarning(t, false);
     if(t==='pre'){ document.getElementById('desc-pre').textContent=''; document.getElementById('foto-box-pre').innerHTML='<div class="no-foto">—</div>'; }
-    if(t==='marc'){ document.getElementById('desc-marc').textContent=''; resetFoto(); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
+    if(t==='marc'){ _setMarcInvalid(false); document.getElementById('desc-marc').textContent=''; resetFoto(); _lastFetchKey=''; recalcMides(); updateReversPeu(); }
     calcular(); return;
   }
   fetch('/api/lookup?tipus=moldura&ref='+encodeURIComponent(ref))
@@ -1886,6 +1887,7 @@ function lookupRef(t,ref){
           document.getElementById('foto-box-pre').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
         }
         if(t==='marc'){
+          _setMarcInvalid(false);
           document.getElementById('desc-marc').textContent=d.descripcio||'';
           document.getElementById('desc-marc').style.color='';
           document.getElementById('foto-box').innerHTML=d.foto?'<img src="'+d.foto+'" alt="'+ref+'">'  :'<div class="no-foto">Sense imatge</div>';
@@ -1897,6 +1899,7 @@ function lookupRef(t,ref){
         var msg = (t==='pre'||t==='marc') ? '⚠ Motllura "'+ref+'" no trobada al catàleg' : 'Referència no trobada';
         setChips(t,[{txt: (t==='pre'||t==='marc') ? '⚠ Fora de catàleg' : '⚠ No trobada', cls:'chip-r'}]);
         if(t==='marc'){
+          _setMarcInvalid(true, ref);
           document.getElementById('desc-marc').textContent = msg;
           document.getElementById('desc-marc').style.color = 'var(--red)';
           resetFoto();
@@ -2601,6 +2604,7 @@ function onMarcInput(){
   _startNewBudgetAfterSave();
   var val = document.getElementById('marc_principal').value.trim();
   if(val === ''){
+    _setMarcInvalid(false);
     PREUS.marc=0; GRUIX.marc=0; setChips('marc',[]);
     document.getElementById('desc-marc').textContent='';
     document.getElementById('desc-marc').style.color='';
@@ -2720,7 +2724,45 @@ function updateExtrasLabels(){
 }
 
 // ── Càlcul ────────────────────────────────────────────────────────────────
+// ── Bloqueig per motllura inexistent ──────────────────────────────────────
+var _marcInvalid = false;
+function _setMarcInvalid(on, ref){
+  _marcInvalid = !!on;
+  var b = document.getElementById('marc-invalid-banner');
+  if(b){
+    if(on){
+      document.getElementById('marc-invalid-text').textContent =
+        'La motllura «' + (ref || '') + '» no existeix al catàleg. Corregeix la referència per poder calcular.';
+      b.style.display = 'block';
+    } else {
+      b.style.display = 'none';
+    }
+  }
+}
+function _renderMarcBloquejat(){
+  // No calculem res: deixem els totals en blanc i desactivem accions.
+  ['r-subtotal','r-net','r-iva','r-final','r-pend','r-combo','r-desc'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.textContent = '—';
+  });
+  var bt = document.getElementById('sticky-bar-total'); if(bt) bt.textContent = '—';
+  var bm = document.getElementById('sticky-bar-meta'); if(bm) bm.textContent = '⚠ Motllura no vàlida';
+  window._c = null;
+  // Desactiva Desar i Albarà; PDF/WhatsApp queden desactivats fins que es desi.
+  ['sticky-bar-cta','sb-albara-pvp','sb-albara-pvd','sb-pdf','btn-pdf','sb-wa-client','sb-wa-rr']
+    .forEach(function(id){ var el = document.getElementById(id); if(el) el.disabled = true; });
+}
+
 function calcular(){
+  // Si s'ha escrit una referència de motllura que no existeix, bloquegem el
+  // càlcul sencer perquè el client no es despisti amb un total que no és real.
+  if(_marcInvalid){
+    _renderMarcBloquejat();
+    return;
+  }
+  // Motllura vàlida: reactiva Desar i Albarà (PDF/WA els gestiona el seu propi flux).
+  ['sticky-bar-cta','sb-albara-pvp','sb-albara-pvd'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.disabled = false;
+  });
   refreshDescatalogadaWarnings();
   var amp  = parseFloat(document.getElementById('amplada').value)||0;
   var alt  = parseFloat(document.getElementById('alcada').value)||0;
@@ -2947,6 +2989,7 @@ function desarMarge(){
 
 // ── Guardar ───────────────────────────────────────────────────────────────
 function guardar(){
+  if(_marcInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
   var d={
     comanda_id: uid || null,
     sessio_id:sessioId, opcio_nom:opcions[opcioActual].nom,
@@ -3016,6 +3059,7 @@ function _startNewBudgetAfterSave(){
 }
 
 function guardarTotes(){
+  if(_marcInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
   // Snapshot the current option so its latest DOM state is captured
   opcions[opcioActual].estat = capturaEstat();
 
@@ -3359,6 +3403,7 @@ function recalcEnviament(){
 }
 
 function crearAlbaraFD(modePreu){
+  if(_marcInvalid){ showAlert('Corregeix la referència de la motllura abans de generar l\'albarà.', 'err'); return; }
   var c = window._c || {};
   var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
   var grp = document.getElementById('albara-btns');
