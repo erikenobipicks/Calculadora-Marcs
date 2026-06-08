@@ -360,6 +360,13 @@ def _serialize_moldura(row):
     data = dict(row)
     data['foto'] = _resolve_moldura_photo(
         data.get('referencia', ''), data.get('foto', ''), ref2=data.get('ref2', ''))
+    # Stock de marcs: valors derivats en metres per a la UI.
+    sc = data.get('stock_cm')
+    smin = data.get('stock_min_cm')
+    data['stock_controlat'] = sc is not None
+    data['stock_m'] = _cm_a_m(sc)
+    data['stock_min_m'] = _cm_a_m(smin)
+    data['stock_baix'] = (sc is not None and smin is not None and float(sc) < float(smin))
     return data
 
 
@@ -917,6 +924,157 @@ def calcular_preu_marc(amplada, alcada, gruix, preu_cost, merma_pct=10.0, minim_
     cost = round(long_final * preu_cost / 100, 4)
     pvd = calcular_pvd(cost, 'moldures')
     return {'cost': cost, 'pvd': pvd}
+
+
+# ── Control d'stock de marcs (metres lineals) ───────────────────────────────
+# L'stock es desa en CM lineals a moldures.stock_cm. NULL = aquesta referència
+# NO es controla per stock (opt-in): no es descompta ni es mostra alerta.
+# stock_min_cm és el llindar d'avís (NULL/0 = sense avís). Tot el moviment queda
+# registrat a la taula moviments_stock_marc (entrada/sortida/ajust).
+
+def _m_a_cm(valor):
+    """Converteix una entrada en metres (string del formulari) a cm. Buit → None."""
+    if valor is None:
+        return None
+    s = str(valor).strip().replace(',', '.')
+    if s == '':
+        return None
+    try:
+        return round(float(s) * 100, 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _cm_a_m(cm):
+    """cm → metres per mostrar (2 decimals). None → None."""
+    if cm is None:
+        return None
+    try:
+        return round(float(cm) / 100, 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _consum_marc_cm(final_w, final_h, gruix, merma_pct=10.0, minim_cm=100.0, gruix_extra=0.0):
+    """Llargada de motllura consumida (cm lineals) per a un marc, replicant
+    EXACTAMENT la fórmula de la calculadora (calcular() a calculadora.html):
+        per       = 2·(final_w + final_h)        # mides EXTERIORS del marc
+        long_bruta = (per + (gruix+gruix_extra)·8) · (1 + merma/100)
+        long_final = max(long_bruta, minim_cm)
+    Per al marc principal gruix_extra=0. Per al premarc, gruix=gruix_pre i
+    gruix_extra=gruix_marc (suma dels dos gruixos, com fa la calc)."""
+    fw = float(final_w or 0)
+    fh = float(final_h or 0)
+    if fw <= 0 or fh <= 0:
+        return 0.0
+    per = 2 * (fw + fh)
+    g = float(gruix or 0) + float(gruix_extra or 0)
+    long_bruta = (per + g * 8) * (1 + (float(merma_pct) if merma_pct is not None else 10.0) / 100)
+    return round(max(long_bruta, float(minim_cm) if minim_cm else 100.0), 2)
+
+
+def _aplica_moviment_stock(ref, cm, tipus, motiu='', usuari_id=None, albara_num=None, activar=False):
+    """Aplica un moviment d'stock a una referència de marc i el registra.
+
+    cm: magnitud en cm lineals (sempre positiu). El signe l'aplica `tipus`:
+        'entrada' (+cm, compra), 'sortida' (-cm, consum), 'ajust' (=cm, fixa el valor).
+    activar: si True i la referència encara no es controla per stock (stock_cm IS
+        NULL), la inicialitza partint de 0 (opt-in). El descompte automàtic NO
+        l'activa (activar=False), de manera que només es descompten els marcs que
+        l'admin ha donat d'alta explícitament.
+    Retorna dict {referencia, tipus, cm, stock_resultant, sota_minim} o None si la
+    referència no es controla per stock i no s'activa, o no existeix.
+    No llança si hi ha problemes: el descompte automàtic és best-effort."""
+    ref = (ref or '').strip()
+    if not ref or ref == '-':
+        return None
+    try:
+        m = query('SELECT stock_cm, stock_min_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+                  [ref], one=True)
+    except Exception:
+        return None
+    if not m:
+        return None
+    actual = _row_get(m, 'stock_cm', None)
+    if actual is None:
+        if not activar:
+            # Opt-in: referència sense stock controlat → no fem res.
+            return None
+        actual = 0.0
+    actual = float(actual)
+    cm = abs(float(cm or 0))
+    if tipus == 'ajust':
+        nou = cm
+        delta = nou - actual
+    elif tipus == 'entrada':
+        delta = cm
+        nou = actual + cm
+    else:  # sortida (consum)
+        tipus = 'sortida'
+        delta = -cm
+        nou = actual - cm  # pot quedar negatiu: avisem però no bloquegem
+    nou = round(nou, 2)
+    min_cm = _row_get(m, 'stock_min_cm', None)
+    sota_minim = (min_cm is not None) and (nou < float(min_cm))
+    try:
+        execute('UPDATE moldures SET stock_cm=? WHERE LOWER(referencia)=LOWER(?)', [nou, ref])
+        execute(
+            '''INSERT INTO moviments_stock_marc
+               (referencia, data, tipus, cm, motiu, albara_num, usuari_id, stock_resultant)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            [ref, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+             tipus, round(delta, 2), (motiu or '')[:300], albara_num, usuari_id, nou])
+    except Exception as e:
+        print('moviment stock err:', e)
+        return None
+    return {'referencia': ref, 'tipus': tipus, 'cm': round(delta, 2),
+            'stock_resultant': nou, 'sota_minim': sota_minim}
+
+
+def _stock_dades_marc(ref):
+    """Retorna (gruix, merma_pct, minim_cm, stock_cm) d'una referència o None."""
+    ref = (ref or '').strip()
+    if not ref or ref == '-':
+        return None
+    try:
+        m = query('SELECT gruix, merma_pct, minim_cm, stock_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+                  [ref], one=True)
+    except Exception:
+        return None
+    if not m:
+        return None
+    return (float(_row_get(m, 'gruix', 0) or 0),
+            float(_row_get(m, 'merma_pct', 10.0) or 10.0),
+            float(_row_get(m, 'minim_cm', 100.0) or 100.0),
+            _row_get(m, 'stock_cm', None))
+
+
+def _descompta_stock_albara(marc, pre_marc, final_w, final_h, quantitat, num_albara, usuari_id):
+    """Descompta l'stock consumit pel marc principal i el premarc en generar un
+    albarà. Best-effort: si una referència no es controla per stock o falla, se
+    salta. Retorna llista d'avisos (refs que queden sota mínim o negatives) per
+    informar l'admin a la calculadora."""
+    avisos = []
+    qty = max(1.0, float(quantitat or 1))
+    motiu = f'Albarà {num_albara}' if num_albara else 'Albarà'
+    # Marc principal
+    dm = _stock_dades_marc(marc)
+    gruix_marc = dm[0] if dm else 0.0
+    if dm and dm[3] is not None:
+        cm = _consum_marc_cm(final_w, final_h, dm[0], dm[1], dm[2]) * qty
+        res = _aplica_moviment_stock(marc, cm, 'sortida', motiu, usuari_id, num_albara)
+        if res and (res['sota_minim'] or res['stock_resultant'] < 0):
+            avisos.append({'ref': marc, 'stock_resultant': res['stock_resultant'],
+                           'negatiu': res['stock_resultant'] < 0})
+    # Premarc (consumeix amb gruix_pre + gruix_marc, com la calc)
+    dp = _stock_dades_marc(pre_marc)
+    if dp and dp[3] is not None:
+        cm = _consum_marc_cm(final_w, final_h, dp[0], dp[1], dp[2], gruix_extra=gruix_marc) * qty
+        res = _aplica_moviment_stock(pre_marc, cm, 'sortida', motiu, usuari_id, num_albara)
+        if res and (res['sota_minim'] or res['stock_resultant'] < 0):
+            avisos.append({'ref': pre_marc, 'stock_resultant': res['stock_resultant'],
+                           'negatiu': res['stock_resultant'] < 0})
+    return avisos
 
 
 def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None):
@@ -4430,6 +4588,19 @@ def admin_run_migrations():
     # queden bloquejades. Les fem ABANS que les ALTERs perquè si una ALTER
     # esgota el budget de gunicorn, almenys les taules noves ja existeixen.
     creates_primers = [
+        # Moviments d'stock de marcs (control d'inventari per cm lineals)
+        """CREATE TABLE IF NOT EXISTS moviments_stock_marc (
+            id SERIAL PRIMARY KEY,
+            referencia TEXT NOT NULL,
+            data TEXT,
+            tipus TEXT NOT NULL,
+            cm REAL,
+            motiu TEXT,
+            albara_num TEXT,
+            usuari_id INTEGER,
+            stock_resultant REAL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_mov_stock_ref ON moviments_stock_marc(referencia, data)",
         # Historial de preus de cost
         """CREATE TABLE IF NOT EXISTS historial_preus_cost (
             id SERIAL PRIMARY KEY,
@@ -4543,6 +4714,9 @@ def admin_run_migrations():
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS cost_verificat INTEGER DEFAULT 0",
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS descatalogada BOOLEAN DEFAULT FALSE",
         "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS notes_stock TEXT",
+        # Control d'stock de marcs (cm lineals)
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS stock_cm REAL",
+        "ALTER TABLE moldures ADD COLUMN IF NOT EXISTS stock_min_cm REAL",
         # Vidres
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost DECIMAL(8,4)",
         "ALTER TABLE vidres ADD COLUMN IF NOT EXISTS preu_cost_ant DECIMAL(8,4)",
@@ -5838,12 +6012,13 @@ def admin_moldura_nova():
             return render_template('admin_moldura_form.html', error=str(e), moldura=d, nova=True)
         if uploaded_photo:
             foto = uploaded_photo
-        execute("""INSERT INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+        execute("""INSERT INTO moldures (referencia,preu_taller,gruix,cost,proveidor,ref2,ubicacio,descripcio,foto,stock_min_cm)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 [d['referencia'], float(d.get('preu_taller',0)),
                  float(d.get('gruix',0)), float(d.get('cost',0)),
                  d.get('proveidor',''), d.get('ref2',''),
-                 d.get('ubicacio',''), d.get('descripcio',''), foto])
+                 d.get('ubicacio',''), d.get('descripcio',''), foto,
+                 _m_a_cm(d.get('stock_min_m'))])
         return redirect(url_for('admin_cataleg'))
     return render_template('admin_moldura_form.html', moldura={}, nova=True, error=None)
 
@@ -5866,13 +6041,48 @@ def admin_moldura_editar(ref):
         if uploaded_photo:
             foto = uploaded_photo
         execute("""UPDATE moldures SET preu_taller=?,gruix=?,cost=?,proveidor=?,
-                   ref2=?,ubicacio=?,descripcio=?,foto=? WHERE referencia=?""",
+                   ref2=?,ubicacio=?,descripcio=?,foto=?,stock_min_cm=? WHERE referencia=?""",
                 [float(d.get('preu_taller',0)), float(d.get('gruix',0)),
                  float(d.get('cost',0)), d.get('proveidor',''),
                  d.get('ref2',''), d.get('ubicacio',''),
-                 d.get('descripcio',''), foto, ref])
+                 d.get('descripcio',''), foto, _m_a_cm(d.get('stock_min_m')), ref])
         return redirect(url_for('admin_cataleg'))
     return render_template('admin_moldura_form.html', moldura=_serialize_moldura(moldura), nova=False, error=None)
+
+@app.route('/admin/cataleg/<ref>/stock', methods=['GET','POST'])
+@admin_required
+def admin_moldura_stock(ref):
+    """Gestió d'stock d'una motllura: activar control, registrar compres
+    (entrada), ajustar el valor i veure l'historial de moviments."""
+    moldura = query('SELECT * FROM moldures WHERE referencia=?', [ref], one=True)
+    if not moldura:
+        return redirect(url_for('admin_cataleg'))
+    error = None
+    if request.method == 'POST':
+        accio = (request.form.get('accio') or '').strip()
+        motiu = (request.form.get('motiu') or '').strip()
+        cm = _m_a_cm(request.form.get('valor_m'))
+        if accio == 'desactivar':
+            execute('UPDATE moldures SET stock_cm=NULL WHERE referencia=?', [ref])
+            return redirect(url_for('admin_moldura_stock', ref=ref))
+        if cm is None or cm < 0:
+            error = 'Introdueix un valor en metres vàlid.'
+        elif accio in ('entrada', 'ajust'):
+            res = _aplica_moviment_stock(
+                ref, cm, accio, motiu or ('Compra' if accio == 'entrada' else 'Ajust manual'),
+                usuari_id=session.get('user_id'), activar=True)
+            if res is None:
+                error = 'No s\'ha pogut aplicar el moviment.'
+            else:
+                return redirect(url_for('admin_moldura_stock', ref=ref))
+        else:
+            error = 'Acció no vàlida.'
+    moviments = query(
+        'SELECT * FROM moviments_stock_marc WHERE LOWER(referencia)=LOWER(?) ORDER BY id DESC LIMIT 200',
+        [ref]) or []
+    return render_template('admin_moldura_stock.html',
+                           moldura=_serialize_moldura(moldura),
+                           moviments=moviments, error=error)
 
 @app.route('/admin/cataleg/<ref>/eliminar', methods=['POST'])
 @admin_required
@@ -8310,7 +8520,18 @@ def api_crear_albara():
         return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
 
     num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
-    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+    # Descompte automàtic d'stock de marcs (best-effort: no fa fallar l'albarà).
+    avisos_stock = []
+    try:
+        pre_marc = (d.get('pre_marc') or '').strip()
+        avisos_stock = _descompta_stock_albara(
+            marc, pre_marc, final_w, final_h, quantitat, num_albara, session.get('user_id'))
+    except Exception as e:
+        print('descompte stock albarà err:', e)
+
+    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd,
+                    'avisos_stock': avisos_stock})
 
 
 @app.route('/api/albara-de-comanda', methods=['POST'])
@@ -10437,6 +10658,9 @@ def init_db():
                 ('moldures','usuari_cost_id','INTEGER'),
                 ('moldures','notes_cost','TEXT'),
                 ('moldures','cost_verificat','INTEGER DEFAULT 0'),
+                # --- Control d'stock de marcs (cm lineals) ---
+                ('moldures','stock_cm','REAL'),
+                ('moldures','stock_min_cm','REAL'),
                 ('vidres','preu_cost','REAL'),
                 ('vidres','preu_cost_ant','REAL'),
                 ('vidres','data_cost','TEXT'),
@@ -10491,6 +10715,21 @@ def init_db():
                 )""")
             except Exception as e:
                 print("historial_preus_cost skip:", e)
+            try:
+                ddl_cur.execute("""CREATE TABLE IF NOT EXISTS moviments_stock_marc (
+                    id SERIAL PRIMARY KEY,
+                    referencia TEXT NOT NULL,
+                    data TEXT,
+                    tipus TEXT NOT NULL,
+                    cm REAL,
+                    motiu TEXT,
+                    albara_num TEXT,
+                    usuari_id INTEGER,
+                    stock_resultant REAL
+                )""")
+                ddl_cur.execute("CREATE INDEX IF NOT EXISTS idx_mov_stock_ref ON moviments_stock_marc(referencia, data)")
+            except Exception as e:
+                print("moviments_stock_marc skip:", e)
             try:
                 ddl_cur.execute("""CREATE TABLE IF NOT EXISTS feedback (
                     id SERIAL PRIMARY KEY,
@@ -10698,6 +10937,18 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS config (
                     clau TEXT PRIMARY KEY, valor TEXT
                 );
+                CREATE TABLE IF NOT EXISTS moviments_stock_marc (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    referencia TEXT NOT NULL,
+                    data TEXT,
+                    tipus TEXT NOT NULL,
+                    cm REAL,
+                    motiu TEXT,
+                    albara_num TEXT,
+                    usuari_id INTEGER,
+                    stock_resultant REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_mov_stock_ref ON moviments_stock_marc(referencia, data);
             ''')
             db.commit()
             for sql in [
@@ -10738,6 +10989,9 @@ def init_db():
                 "ALTER TABLE moldures ADD COLUMN usuari_cost_id INTEGER",
                 "ALTER TABLE moldures ADD COLUMN notes_cost TEXT",
                 "ALTER TABLE moldures ADD COLUMN cost_verificat INTEGER DEFAULT 0",
+                # --- Control d'stock de marcs (cm lineals) ---
+                "ALTER TABLE moldures ADD COLUMN stock_cm REAL",
+                "ALTER TABLE moldures ADD COLUMN stock_min_cm REAL",
                 "ALTER TABLE vidres ADD COLUMN preu_cost REAL",
                 "ALTER TABLE vidres ADD COLUMN preu_cost_ant REAL",
                 "ALTER TABLE vidres ADD COLUMN data_cost TEXT",

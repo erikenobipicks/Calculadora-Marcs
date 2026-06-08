@@ -3442,6 +3442,7 @@ function crearAlbaraFD(modePreu){
     client_tel:    document.getElementById('client_tel').value||'',
     client_extern_id: (document.getElementById('client_extern_id')||{}).value || '',
     marc:          document.getElementById('marc_principal').value||'',
+    pre_marc:      document.getElementById('pre_marc').value||'',
     opcions:       partsOpcions.join(', '),
     observacions:  document.getElementById('observacions').value||'',
     num_pressupost: window._numPressupost||'',
@@ -3467,6 +3468,14 @@ function crearAlbaraFD(modePreu){
     if(d.ok){
       if(grp) grp.innerHTML = '<span style="padding:8px 14px;border-radius:7px;background:var(--green-l);color:var(--green);border:1px solid var(--green);font-size:12px;font-weight:600">✓ Albarà ' + d.albara + ' (' + label + ')</span>';
       showAlert('Albarà ' + d.albara + ' creat a Factura Directa (' + label + ') per ' + d.contact, 'ok');
+      // Avisos d'stock baix de marcs (només admin, des del backend).
+      if(d.avisos_stock && d.avisos_stock.length){
+        var parts = d.avisos_stock.map(function(a){
+          var m = (a.stock_resultant/100).toFixed(2) + ' m';
+          return a.ref + (a.negatiu ? ' (stock NEGATIU: ' : ' (stock baix: ') + m + ')';
+        });
+        showAlert('⚠ Stock de marcs: ' + parts.join(' · '), 'err');
+      }
     } else {
       showAlert('Error FD: ' + (d.error||'Error desconegut'), 'err');
     }
