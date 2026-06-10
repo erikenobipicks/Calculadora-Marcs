@@ -51,8 +51,11 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
 .empty{color:var(--muted);font-size:13px;padding:1rem 0}
 .progress{height:10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden;margin:.6rem 0 .3rem}
 .progress>div{height:100%;background:var(--green);width:0;transition:width .25s}
-#send-modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:60;padding:1rem}
-#send-modal.show{display:flex}
+#send-modal,#prev-modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:60;padding:1rem}
+#send-modal.show,#prev-modal.show{display:flex}
+.c-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;font-weight:600;padding:.2rem .4rem}
+.c-del:hover{text-decoration:underline}
+.tag-min{font-size:11px;color:var(--hint)}
 .modal-card{background:#fff;border-radius:14px;padding:1.4rem;max-width:440px;width:100%}
 .modal-card h3{margin:0 0 .5rem;font-size:17px}
 @media(max-width:820px){.cols{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
@@ -75,8 +78,10 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
   <div class="banner banner-warn">
     ⚠️ <strong>Resend no està configurat.</strong> Cal definir <code>resend_api_key</code> i <code>resend_from</code> (amb domini verificat) a la configuració abans de poder enviar. Pots preparar la llista igualment.
   </div>
+  {% elif resend_from %}
+  <div class="banner banner-ok">✓ Enviament actiu via Resend &middot; remitent: <strong>{{ resend_from }}</strong></div>
   {% else %}
-  <div class="banner banner-ok">✓ Enviament actiu via Resend &middot; remitent: <strong>{{ resend_from or 'onboarding@resend.dev' }}</strong></div>
+  <div class="banner banner-warn">⚠️ Resend té clau però <strong>sense remitent propi</strong> (<code>resend_from</code> buit → s'usa <code>onboarding@resend.dev</code>). Amb això Resend <strong>només entrega al teu propi correu</strong>: va bé per provar, però per enviar als clients cal verificar un domini (p. ex. <code>reusrevela.cat</code>) i posar-lo a <code>resend_from</code>.</div>
   {% endif %}
 
   <div class="stats">
@@ -127,10 +132,11 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
           <option value="es">Només castellà</option>
         </select>
 
-        <label>Provar abans (s'envia només a aquesta adreça)</label>
-        <div class="row">
-          <input type="email" id="m-test" placeholder="el-teu-correu@exemple.com">
-          <button class="btn btn-o" style="flex:0 0 auto" id="btn-test" onclick="sendTest()">Enviar prova</button>
+        <label>Provar abans d'enviar</label>
+        <button class="btn btn-o btn-full" onclick="preview()">👁 Previsualitzar l'email (sense enviar)</button>
+        <div class="row" style="margin-top:.5rem">
+          <input type="email" id="m-test" value="reusrevela@gmail.com" placeholder="el-teu-correu@exemple.com">
+          <button class="btn btn-o" style="flex:0 0 auto" id="btn-test" onclick="sendTest()">Enviar prova a mi</button>
         </div>
 
         <button class="btn btn-g btn-full" id="btn-send" style="margin-top:1rem" onclick="openSend()">Enviar a tots els subscrits →</button>
@@ -140,6 +146,23 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
           <div class="note" id="pinfo">Preparant…</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap">
+      <h2 style="margin:0">Contactes de la llista</h2>
+      <div class="row" style="flex:0 0 auto;gap:.4rem">
+        <input type="text" id="c-search" placeholder="Cercar nom o correu…" style="min-width:200px" oninput="loadContactsDebounced()">
+        <button class="btn btn-o" style="flex:0 0 auto" onclick="loadContacts()">Refrescar</button>
+      </div>
+    </div>
+    <p class="help" id="c-info" style="margin:.5rem 0 0">Carregant…</p>
+    <div style="overflow:auto;margin-top:.6rem">
+      <table>
+        <thead><tr><th>Nom</th><th>Correu</th><th>Idioma</th><th>Origen</th><th>Estat</th><th></th></tr></thead>
+        <tbody id="c-body"></tbody>
+      </table>
     </div>
   </div>
 
@@ -178,6 +201,16 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
   </div>
 </div>
 
+<div id="prev-modal">
+  <div class="modal-card" style="max-width:660px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
+      <h3 style="margin:0">Previsualització de l'email</h3>
+      <button class="btn btn-o" style="flex:0 0 auto" onclick="closePreview()">Tancar</button>
+    </div>
+    <iframe id="prev-frame" title="Previsualització" style="width:100%;height:60vh;border:1px solid var(--border);border-radius:10px;background:#fff"></iframe>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <script>
 var TIPUS='campanya', RESEND_OK={{ 'true' if resend_ok else 'false' }};
@@ -193,7 +226,7 @@ function syncClients(){var b=document.getElementById('btn-sync');b.disabled=true
   jpost('/admin/mailing/sync-clients').then(function(d){
     b.disabled=false;b.textContent='Sincronitzar des dels clients del taller';
     if(!d.ok){toast(d.error||'Error');return;}
-    toast('Afegits '+d.added+' · actualitzats '+d.updated);refreshStats(d.total);
+    toast('Afegits '+d.added+' · actualitzats '+d.updated);refreshStats(d.total);bump('st-subs',d.added);loadContacts();
   });
 }
 function importContacts(){var txt=document.getElementById('imp-text').value.trim();
@@ -203,10 +236,50 @@ function importContacts(){var txt=document.getElementById('imp-text').value.trim
     b.disabled=false;b.textContent='Importar contactes';
     if(!d.ok){toast(d.error||'Error');return;}
     toast('Afegits '+d.added+' · ja existents '+d.skipped+' · invàlids '+d.invalid);
-    document.getElementById('imp-text').value='';refreshStats(d.total);
+    document.getElementById('imp-text').value='';refreshStats(d.total);bump('st-subs',d.added);loadContacts();
   });
 }
 function refreshStats(total){if(typeof total==='number')document.getElementById('st-total').textContent=total;}
+function bump(id,delta){var el=document.getElementById(id);if(el)el.textContent=(parseInt(el.textContent||'0',10)+(delta||0));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+var _cTimer=null;
+function loadContactsDebounced(){clearTimeout(_cTimer);_cTimer=setTimeout(loadContacts,300);}
+function loadContacts(){
+  var q=encodeURIComponent((document.getElementById('c-search').value||'').trim());
+  fetch('/admin/mailing/contacts?q='+q).then(function(r){return r.json()}).then(function(d){
+    var body=document.getElementById('c-body');var info=document.getElementById('c-info');
+    if(!d.ok){info.textContent='No s\'ha pogut carregar la llista.';return;}
+    document.getElementById('st-total').textContent=d.total;
+    if(!d.contacts.length){body.innerHTML='';info.textContent='Cap contacte'+(q?' per a aquesta cerca.':' encara. Sincronitza o importa.');return;}
+    info.textContent='Mostrant '+d.shown+(d.total>d.shown?' de '+d.total+' (primers 500)':'')+'.';
+    body.innerHTML=d.contacts.map(function(c){
+      var estat=c.subscrit?'<span class="pill pill-sent">Subscrit</span>':'<span class="tag-min">Baixa</span>';
+      return '<tr><td>'+esc(c.nom||'—')+'</td><td>'+esc(c.email)+'</td><td>'+esc(c.idioma)+'</td>'+
+             '<td class="tag-min">'+esc(c.origen)+'</td><td>'+estat+'</td>'+
+             '<td style="text-align:right"><button class="c-del" onclick="delContact('+c.id+',this)">Esborrar</button></td></tr>';
+    }).join('');
+  }).catch(function(){document.getElementById('c-info').textContent='Error de xarxa.';});
+}
+function delContact(id,btn){
+  if(!confirm('Esborrar aquest contacte de la llista de mailing?'))return;
+  if(btn)btn.disabled=true;
+  jpost('/admin/mailing/contacts/delete',{id:id}).then(function(d){
+    if(!d.ok){toast(d.error||'Error');if(btn)btn.disabled=false;return;}
+    document.getElementById('st-total').textContent=d.total;
+    document.getElementById('st-subs').textContent=d.subscrits;
+    document.getElementById('st-baixes').textContent=d.baixes;
+    toast('Contacte esborrat');loadContacts();
+  });
+}
+function preview(){
+  jpost('/admin/mailing/preview',{cos:document.getElementById('m-cos').value}).then(function(d){
+    if(!d.ok){toast('No s\'ha pogut generar la previsualització');return;}
+    document.getElementById('prev-frame').srcdoc=d.html;
+    document.getElementById('prev-modal').classList.add('show');
+  });
+}
+function closePreview(){document.getElementById('prev-modal').classList.remove('show');}
 
 function sendTest(){if(!RESEND_OK){toast('Resend no està configurat');return;}
   var to=document.getElementById('m-test').value.trim();
@@ -256,6 +329,7 @@ function runChunks(cid,total){
   }
   step();
 }
+loadContacts();
 </script>
 </body>
 </html>
