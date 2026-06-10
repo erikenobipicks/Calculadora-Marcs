@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math
+import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math, ipaddress
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime, timedelta
@@ -799,6 +799,55 @@ def _bridge_signing_secret():
     return os.environ.get('BRIDGE_LOGIN_SECRET', '').strip() or _bridge_api_token()
 
 
+def _bridge_tokens_valids():
+    """Tokens de bridge acceptats per als endpoints /api/public/*. Suporta
+    rotació sense downtime: durant una rotació es defineix
+    PUBLIC_BRIDGE_TOKEN_NEXT amb el valor nou mentre el vell
+    (PUBLIC_BRIDGE_TOKEN) encara és vàlid; quan la web ja envia el nou, es
+    promou NEXT → principal i s'esborra NEXT. Si NEXT no està definit, el
+    comportament és idèntic al d'abans (un sol token vàlid)."""
+    toks = [
+        os.environ.get('PUBLIC_BRIDGE_TOKEN', '').strip(),
+        os.environ.get('PUBLIC_BRIDGE_TOKEN_NEXT', '').strip(),
+    ]
+    return [t for t in toks if t]
+
+
+def _bridge_token_ok(provided):
+    """Compara el token rebut amb els vàlids en temps constant
+    (hmac.compare_digest) per evitar el canal lateral de temporització que
+    tenia la comparació '!=' anterior. Retorna False si no hi ha cap token
+    configurat o si el rebut és buit."""
+    provided = (provided or '').strip()
+    if not provided:
+        return False
+    return any(hmac.compare_digest(provided, t) for t in _bridge_tokens_valids())
+
+
+def _bridge_ip_allowed():
+    """Allowlist d'IPs opcional per als endpoints /api/public/*. Si
+    BRIDGE_ALLOWED_IPS no està definida (cas per defecte), no restringeix res
+    i és totalment retrocompatible. Quan es defineix (CSV d'IPs o xarxes
+    CIDR), només es permeten peticions des d'aquestes adreces. request.remote_addr
+    ja és la IP real del client gràcies a ProxyFix (x_for=1)."""
+    allow = os.environ.get('BRIDGE_ALLOWED_IPS', '').strip()
+    if not allow:
+        return True
+    try:
+        client = ipaddress.ip_address((request.remote_addr or '').strip())
+    except ValueError:
+        return False
+    for net in (n.strip() for n in allow.split(',')):
+        if not net:
+            continue
+        try:
+            if client in ipaddress.ip_network(net, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _main_site_url():
     return os.environ.get('MAIN_SITE_URL', 'https://reusrevela.cat').strip().rstrip('/')
 
@@ -1018,7 +1067,7 @@ def _build_bridge_token(data):
     return f'{payload}.{signature}'
 
 
-def _read_bridge_token(token, max_age=120):
+def _read_bridge_token(token, max_age=45):
     secret = _bridge_signing_secret()
     if not secret or '.' not in str(token or ''):
         return None
@@ -1890,7 +1939,7 @@ def public_professional_signup():
     expected_token = os.environ.get('PUBLIC_SIGNUP_TOKEN', '').strip()
     provided_token = request.headers.get('X-Signup-Token', '').strip()
 
-    if not expected_token or provided_token != expected_token:
+    if not expected_token or not hmac.compare_digest(provided_token, expected_token):
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2307,10 +2356,9 @@ def _send_user_activation_email(name, email, temp_password):
 
 @app.route('/api/public/bridge-login', methods=['POST'])
 def public_bridge_login():
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
 
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2366,9 +2414,8 @@ def public_bridge_refresh():
     calculadora des de l'àrea privada passats els 120s de vida del token
     original) sense demanar la contrasenya una altra vegada.
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2407,10 +2454,9 @@ def public_bridge_refresh():
 @app.route('/api/public/professional-summary', methods=['POST'])
 def public_professional_summary():
     try:
-        expected_token = _bridge_api_token()
         provided_token = request.headers.get('X-Bridge-Token', '').strip()
 
-        if not expected_token or provided_token != expected_token:
+        if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
             return jsonify({'ok': False, 'error': 'unauthorized'}), 401
 
         data = request.get_json(silent=True) or {}
@@ -2522,9 +2568,8 @@ def public_professional_summary():
 
 @app.route('/api/public/commercial-settings-sync', methods=['POST'])
 def public_commercial_settings_sync():
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2563,9 +2608,8 @@ def public_pricing():
       laminate_only — preus de laminat sol per mida (ref, preu)
       encolat_pro   — preus de muntatge encolat i protter per mida (ref, preu, tipus)
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     # Còpies fotogràfiques
@@ -2645,9 +2689,8 @@ def public_impressio_price():
     Autenticació: X-Bridge-Token.
     Params: w, h (cm), paper (lustre|silk|baryta, default lustre).
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     w = float(request.args.get('w', 0))
@@ -2675,9 +2718,8 @@ def public_impressio_price():
 def public_clients_habituals():
     """Llista de clients habituals actius per a consum des de reusrevela-web.
     Autenticació: X-Bridge-Token."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     rows = query("""
         SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
@@ -2710,9 +2752,8 @@ def public_clients_habituals_save():
     """Crea o actualitza un client habitual (clients_externs) des de la web.
     Auth: X-Bridge-Token. Body: {nom/name, email, telefon/phone, nif, tipus,
     client_id (opcional)}. Dedup soft per email."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     data = request.get_json(silent=True) or {}
     nom = (data.get('nom') or data.get('name') or '').strip()
@@ -2811,9 +2852,8 @@ def public_pro_clients_save():
                  source, last_order_ref, client_id (opcional per update) }
     Cal almenys un de {name, email, phone} no buit.
     Retorna: { ok, client: {...} } o { ok: false, error: <code> }."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2895,9 +2935,8 @@ def public_pro_clients_save():
 def public_pro_clients_list():
     """Llista els clients privats d'un distribuïdor (ordenats per
     updated_at DESC). Auth: X-Bridge-Token. Query: ?username=&limit=."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     username = (request.args.get('username') or '').strip()
@@ -2926,9 +2965,8 @@ def public_pro_clients_list():
 def public_pro_clients_get(client_id):
     """Obté un client privat (només si pertany al distribuïdor).
     Auth: X-Bridge-Token. Query: ?username=."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     username = (request.args.get('username') or '').strip()
@@ -2962,9 +3000,8 @@ def public_compute():
 
     Resposta: {ok, kind, width_cm, height_cm, base_price, vat_rate, breakdown}
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     kind = (request.args.get('kind') or '').strip().lower()
