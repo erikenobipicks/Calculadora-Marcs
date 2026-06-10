@@ -141,8 +141,12 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <input type="password" name="resend_api_key" value="" placeholder="{% if config.get('resend_api_key') %}··· (ja configurada — deixa buit per no canviar){% else %}re_xxxxxxxxxxxxxxxxxxxx{% endif %}" autocomplete="new-password">
 
       <label>Adreça remitent (from)</label>
-      <p class="hint">Per provar pots usar <code>onboarding@resend.dev</code> (default si deixes buit). Per producció, verifica el teu domini a Resend i posa una adreça pròpia (ex. <code>noreply@reusrevela.cat</code>).</p>
-      <input type="text" name="resend_from" value="{{ config.get('resend_from', '') }}" placeholder="onboarding@resend.dev" autocomplete="off">
+      <p class="hint">Per provar pots usar <code>onboarding@resend.dev</code> (default si deixes buit). Per producció, verifica el teu domini a Resend i posa una adreça pròpia (ex. <code>noreply@reusrevela.cat</code>). Pots posar-hi nom: <code>Reus Revela &lt;taller@reusrevela.cat&gt;</code>.</p>
+      <input type="text" name="resend_from" value="{{ config.get('resend_from', '') }}" placeholder="Reus Revela &lt;taller@reusrevela.cat&gt;" autocomplete="off">
+
+      <label style="margin-top:.9rem">Adreça de respostes (reply-to)</label>
+      <p class="hint">On arriben les respostes dels clients. Útil si el remitent (ex. <code>taller@reusrevela.cat</code>) no té bústia: posa-hi una adreça que llegeixis, com <code>reusrevela@gmail.com</code>. Deixa-ho buit per no fer-ne servir.</p>
+      <input type="text" name="resend_reply_to" value="{{ config.get('resend_reply_to', '') }}" placeholder="reusrevela@gmail.com" autocomplete="off">
     </div>
 
     <div class="section">

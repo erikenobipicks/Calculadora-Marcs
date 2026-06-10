@@ -6908,6 +6908,11 @@ def admin_config():
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_api_key', ?)", [rk])
         if rf:
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_from', ?)", [rf])
+        # Adreça de respostes (reply-to). Es desa sempre que el camp arribi,
+        # perquè es pugui també esborrar deixant-lo buit.
+        rr = request.form.get('resend_reply_to')
+        if rr is not None:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_reply_to', ?)", [rr.strip()])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)
@@ -11293,7 +11298,7 @@ def _mailing_send_one(to_addr, subject, html, baixa_url):
     if not api_key:
         return False, 'resend_api_key no configurat'
     from_addr = (get_config_value('resend_from', '') or '').strip() or 'onboarding@resend.dev'
-    payload = json.dumps({
+    payload_dict = {
         'from': from_addr,
         'to': [to_addr],
         'subject': subject,
@@ -11302,7 +11307,13 @@ def _mailing_send_one(to_addr, subject, html, baixa_url):
             'List-Unsubscribe': f'<{baixa_url}>',
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
-    }).encode('utf-8')
+    }
+    # Reply-to opcional: les respostes dels clients van on de debò es llegeix
+    # el correu (p. ex. reusrevela@gmail.com), no a la adreca remitent sense bustia.
+    reply_to = (get_config_value('resend_reply_to', '') or '').strip()
+    if reply_to:
+        payload_dict['reply_to'] = reply_to
+    payload = json.dumps(payload_dict).encode('utf-8')
     req = urllib_request.Request(
         'https://api.resend.com/emails', data=payload,
         headers={
