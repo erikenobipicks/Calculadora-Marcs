@@ -11642,6 +11642,55 @@ def admin_mailing_import():
     return jsonify(ok=True, added=added, skipped=skipped, invalid=invalid, total=total)
 
 
+@app.route('/admin/mailing/contacts')
+@admin_required
+def admin_mailing_contacts():
+    _ensure_mailing_schema()
+    q = (request.args.get('q') or '').strip().lower()
+    if q:
+        like = f'%{q}%'
+        rows = query("SELECT id, nom, email, idioma, origen, subscrit FROM mailing_contacts "
+                     "WHERE LOWER(email) LIKE ? OR LOWER(COALESCE(nom,'')) LIKE ? "
+                     "ORDER BY id DESC LIMIT 500", [like, like]) or []
+    else:
+        rows = query("SELECT id, nom, email, idioma, origen, subscrit FROM mailing_contacts "
+                     "ORDER BY id DESC LIMIT 500") or []
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    items = [{
+        'id': _row_get(r, 'id'),
+        'nom': _row_get(r, 'nom', '') or '',
+        'email': _row_get(r, 'email', ''),
+        'idioma': _row_get(r, 'idioma', 'ca'),
+        'origen': _row_get(r, 'origen', ''),
+        'subscrit': bool(_row_get(r, 'subscrit')),
+    } for r in rows]
+    return jsonify(ok=True, contacts=items, shown=len(items), total=total)
+
+
+@app.route('/admin/mailing/contacts/delete', methods=['POST'])
+@admin_required
+def admin_mailing_contacts_delete():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cid = data.get('id')
+    if not cid:
+        return jsonify(ok=False, error='Falta id'), 400
+    execute('DELETE FROM mailing_contacts WHERE id=?', [cid])
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    subs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts WHERE subscrit', one=True), 'n', 0)
+    return jsonify(ok=True, total=total, subscrits=subs, baixes=(total - subs))
+
+
+@app.route('/admin/mailing/preview', methods=['POST'])
+@admin_required
+def admin_mailing_preview():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cos = _mailing_text_to_html(data.get('cos', ''))
+    fake = {'nom': 'Nom del client', 'token': 'PREVISUALITZACIO'}
+    return jsonify(ok=True, html=_mailing_render_html(cos, fake))
+
+
 @app.route('/admin/mailing/test', methods=['POST'])
 @admin_required
 def admin_mailing_test():
