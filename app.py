@@ -11541,6 +11541,14 @@ def _mailing_render_html(cos_html, contact):
         f'{peu}<br>Reps aquest correu perqu&egrave; ets client del taller. '
         f'Si no en vols rebre m&eacute;s, pots <a href="{baixa_url}" '
         'style="color:#1A6B45">donar-te de baixa aqu&iacute;</a>.'
+        '<br><br>'
+        f'<span style="color:#a9a299">Responsable del tractament: {empresa}. '
+        'Tractem les teves dades nom&eacute;s per enviar-te comunicacions del taller, '
+        'sobre la base del nostre inter&eacute;s leg&iacute;tim com a client. Pots exercir els teus '
+        'drets d\'acc&eacute;s, rectificaci&oacute;, supressi&oacute; i oposici&oacute; responent a aquest '
+        'correu o donant-te de baixa. M&eacute;s informaci&oacute; a la '
+        '<a href="https://reusrevela.cat/politica-de-privacitat" '
+        'style="color:#8d877d;text-decoration:underline">Pol&iacute;tica de Privacitat</a>.</span>'
         '</div></div></body></html>'
     )
 
