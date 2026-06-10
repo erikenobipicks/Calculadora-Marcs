@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baixa del mailing — Reus Revela</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#f6f3ee;color:#1d1b18;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem}
+.card{background:#fff;border:1px solid #e5ded2;border-radius:16px;padding:2.4rem 2rem;max-width:440px;width:100%;text-align:center;box-shadow:0 18px 40px rgba(29,27,24,.06)}
+.ic{font-size:42px;margin-bottom:.6rem}
+h1{font-size:21px;margin-bottom:.6rem}
+p{color:#6c675f;font-size:14px;line-height:1.6}
+.mail{color:#1A6B45;font-weight:600}
+.foot{margin-top:1.6rem;font-size:12px;color:#9e9b94}
+.foot a{color:#1A6B45;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="card">
+  {% if estat == 'ok' %}
+    <div class="ic">✓</div>
+    <h1>Ja no rebràs més correus</h1>
+    <p>Hem donat de baixa <span class="mail">{{ email }}</span> de la llista de comunicacions del taller. No t'enviarem res més.</p>
+    <p style="margin-top:.8rem">Si ha estat un error, contacta amb nosaltres i et tornem a afegir.</p>
+  {% else %}
+    <div class="ic">🔍</div>
+    <h1>Enllaç no vàlid</h1>
+    <p>Aquest enllaç de baixa no és correcte o ja no existeix. Si vols deixar de rebre els nostres correus, respon a qualsevol missatge i ho fem manualment.</p>
+  {% endif %}
+  <div class="foot"><a href="https://reusrevela.cat">reusrevela.cat</a></div>
+</div>
+</body>
+</html>

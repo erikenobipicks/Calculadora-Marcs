@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math
+import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math, ipaddress
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime, timedelta
@@ -806,6 +806,55 @@ def _bridge_signing_secret():
     return os.environ.get('BRIDGE_LOGIN_SECRET', '').strip() or _bridge_api_token()
 
 
+def _bridge_tokens_valids():
+    """Tokens de bridge acceptats per als endpoints /api/public/*. Suporta
+    rotació sense downtime: durant una rotació es defineix
+    PUBLIC_BRIDGE_TOKEN_NEXT amb el valor nou mentre el vell
+    (PUBLIC_BRIDGE_TOKEN) encara és vàlid; quan la web ja envia el nou, es
+    promou NEXT → principal i s'esborra NEXT. Si NEXT no està definit, el
+    comportament és idèntic al d'abans (un sol token vàlid)."""
+    toks = [
+        os.environ.get('PUBLIC_BRIDGE_TOKEN', '').strip(),
+        os.environ.get('PUBLIC_BRIDGE_TOKEN_NEXT', '').strip(),
+    ]
+    return [t for t in toks if t]
+
+
+def _bridge_token_ok(provided):
+    """Compara el token rebut amb els vàlids en temps constant
+    (hmac.compare_digest) per evitar el canal lateral de temporització que
+    tenia la comparació '!=' anterior. Retorna False si no hi ha cap token
+    configurat o si el rebut és buit."""
+    provided = (provided or '').strip()
+    if not provided:
+        return False
+    return any(hmac.compare_digest(provided, t) for t in _bridge_tokens_valids())
+
+
+def _bridge_ip_allowed():
+    """Allowlist d'IPs opcional per als endpoints /api/public/*. Si
+    BRIDGE_ALLOWED_IPS no està definida (cas per defecte), no restringeix res
+    i és totalment retrocompatible. Quan es defineix (CSV d'IPs o xarxes
+    CIDR), només es permeten peticions des d'aquestes adreces. request.remote_addr
+    ja és la IP real del client gràcies a ProxyFix (x_for=1)."""
+    allow = os.environ.get('BRIDGE_ALLOWED_IPS', '').strip()
+    if not allow:
+        return True
+    try:
+        client = ipaddress.ip_address((request.remote_addr or '').strip())
+    except ValueError:
+        return False
+    for net in (n.strip() for n in allow.split(',')):
+        if not net:
+            continue
+        try:
+            if client in ipaddress.ip_network(net, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _main_site_url():
     return os.environ.get('MAIN_SITE_URL', 'https://reusrevela.cat').strip().rstrip('/')
 
@@ -1176,7 +1225,7 @@ def _build_bridge_token(data):
     return f'{payload}.{signature}'
 
 
-def _read_bridge_token(token, max_age=120):
+def _read_bridge_token(token, max_age=45):
     secret = _bridge_signing_secret()
     if not secret or '.' not in str(token or ''):
         return None
@@ -2048,7 +2097,7 @@ def public_professional_signup():
     expected_token = os.environ.get('PUBLIC_SIGNUP_TOKEN', '').strip()
     provided_token = request.headers.get('X-Signup-Token', '').strip()
 
-    if not expected_token or provided_token != expected_token:
+    if not expected_token or not hmac.compare_digest(provided_token, expected_token):
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2465,10 +2514,9 @@ def _send_user_activation_email(name, email, temp_password):
 
 @app.route('/api/public/bridge-login', methods=['POST'])
 def public_bridge_login():
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
 
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2524,9 +2572,8 @@ def public_bridge_refresh():
     calculadora des de l'àrea privada passats els 120s de vida del token
     original) sense demanar la contrasenya una altra vegada.
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2565,10 +2612,9 @@ def public_bridge_refresh():
 @app.route('/api/public/professional-summary', methods=['POST'])
 def public_professional_summary():
     try:
-        expected_token = _bridge_api_token()
         provided_token = request.headers.get('X-Bridge-Token', '').strip()
 
-        if not expected_token or provided_token != expected_token:
+        if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
             return jsonify({'ok': False, 'error': 'unauthorized'}), 401
 
         data = request.get_json(silent=True) or {}
@@ -2680,9 +2726,8 @@ def public_professional_summary():
 
 @app.route('/api/public/commercial-settings-sync', methods=['POST'])
 def public_commercial_settings_sync():
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2721,9 +2766,8 @@ def public_pricing():
       laminate_only — preus de laminat sol per mida (ref, preu)
       encolat_pro   — preus de muntatge encolat i protter per mida (ref, preu, tipus)
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     # Còpies fotogràfiques
@@ -2803,9 +2847,8 @@ def public_impressio_price():
     Autenticació: X-Bridge-Token.
     Params: w, h (cm), paper (lustre|silk|baryta, default lustre).
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     w = float(request.args.get('w', 0))
@@ -2833,9 +2876,8 @@ def public_impressio_price():
 def public_clients_habituals():
     """Llista de clients habituals actius per a consum des de reusrevela-web.
     Autenticació: X-Bridge-Token."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     rows = query("""
         SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
@@ -2868,9 +2910,8 @@ def public_clients_habituals_save():
     """Crea o actualitza un client habitual (clients_externs) des de la web.
     Auth: X-Bridge-Token. Body: {nom/name, email, telefon/phone, nif, tipus,
     client_id (opcional)}. Dedup soft per email."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     data = request.get_json(silent=True) or {}
     nom = (data.get('nom') or data.get('name') or '').strip()
@@ -2969,9 +3010,8 @@ def public_pro_clients_save():
                  source, last_order_ref, client_id (opcional per update) }
     Cal almenys un de {name, email, phone} no buit.
     Retorna: { ok, client: {...} } o { ok: false, error: <code> }."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -3053,9 +3093,8 @@ def public_pro_clients_save():
 def public_pro_clients_list():
     """Llista els clients privats d'un distribuïdor (ordenats per
     updated_at DESC). Auth: X-Bridge-Token. Query: ?username=&limit=."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     username = (request.args.get('username') or '').strip()
@@ -3084,9 +3123,8 @@ def public_pro_clients_list():
 def public_pro_clients_get(client_id):
     """Obté un client privat (només si pertany al distribuïdor).
     Auth: X-Bridge-Token. Query: ?username=."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     username = (request.args.get('username') or '').strip()
@@ -3120,9 +3158,8 @@ def public_compute():
 
     Resposta: {ok, kind, width_cm, height_cm, base_price, vat_rate, breakdown}
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     kind = (request.args.get('kind') or '').strip().lower()
@@ -11299,6 +11336,437 @@ def _run_v2_price_backfill(db):
 # des de /admin/run-migrations perquè els workers arranquin sempre sense tocar BD
 # (evita penjades d'arrencada a PG). Cal visitar /admin/run-migrations com a admin
 # després de cada deploy amb canvis d'schema.
+
+# ============================================================================
+#  MAILING ALS CLIENTS DEL TALLER  (campanyes + avisos d'horari/vacances)
+#  - Llista de marqueting propia (mailing_contacts), separada de clients_externs
+#  - Importacio per enganxat/CSV + sync des de clients_externs
+#  - Enviament per Resend en lots (guiat des del client) amb prova previa
+#  - Baixa RGPD tokenitzada (/baixa/<token>) + llista de supressio
+# ============================================================================
+
+_MAILING_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _mailing_base_url():
+    return (os.environ.get('CALC_BASE_URL', '').strip().rstrip('/')
+            or 'https://calculadora.reusrevela.cat')
+
+
+def _mailing_now():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _mailing_valid_email(e):
+    e = (e or '').strip().lower()
+    return e if _MAILING_EMAIL_RE.match(e) else ''
+
+
+def _ensure_mailing_schema():
+    """Crea les taules de mailing si no existeixen (idempotent i dialecte-aware).
+    Es crida a l'inici de cada ruta de mailing perque el panell funcioni sense
+    dependre d'una migracio manual."""
+    if USE_PG:
+        stmts = [
+            """CREATE TABLE IF NOT EXISTS mailing_contacts (
+                id SERIAL PRIMARY KEY,
+                nom VARCHAR(255),
+                email VARCHAR(255) NOT NULL UNIQUE,
+                idioma VARCHAR(5) DEFAULT 'ca',
+                origen VARCHAR(20) DEFAULT 'manual',
+                subscrit BOOLEAN DEFAULT TRUE,
+                token VARCHAR(64) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                unsubscribed_at TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_campaigns (
+                id SERIAL PRIMARY KEY,
+                uid VARCHAR(32) NOT NULL UNIQUE,
+                assumpte VARCHAR(300) NOT NULL,
+                cos_html TEXT NOT NULL,
+                tipus VARCHAR(20) DEFAULT 'campanya',
+                idioma_filtre VARCHAR(5) DEFAULT 'tot',
+                estat VARCHAR(20) DEFAULT 'sending',
+                total INTEGER DEFAULT 0,
+                enviats INTEGER DEFAULT 0,
+                errors INTEGER DEFAULT 0,
+                creat_per VARCHAR(120),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_at TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_sends (
+                id SERIAL PRIMARY KEY,
+                campaign_id INTEGER NOT NULL,
+                contact_id INTEGER,
+                email VARCHAR(255) NOT NULL,
+                nom VARCHAR(255),
+                token VARCHAR(64),
+                estat VARCHAR(20) DEFAULT 'pending',
+                error TEXT,
+                sent_at TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_mailing_sends_campaign ON mailing_sends(campaign_id, estat)",
+        ]
+    else:
+        stmts = [
+            """CREATE TABLE IF NOT EXISTS mailing_contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT,
+                email TEXT NOT NULL UNIQUE,
+                idioma TEXT DEFAULT 'ca',
+                origen TEXT DEFAULT 'manual',
+                subscrit INTEGER DEFAULT 1,
+                token TEXT NOT NULL UNIQUE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                unsubscribed_at TEXT
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uid TEXT NOT NULL UNIQUE,
+                assumpte TEXT NOT NULL,
+                cos_html TEXT NOT NULL,
+                tipus TEXT DEFAULT 'campanya',
+                idioma_filtre TEXT DEFAULT 'tot',
+                estat TEXT DEFAULT 'sending',
+                total INTEGER DEFAULT 0,
+                enviats INTEGER DEFAULT 0,
+                errors INTEGER DEFAULT 0,
+                creat_per TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                sent_at TEXT
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_sends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id INTEGER NOT NULL,
+                contact_id INTEGER,
+                email TEXT NOT NULL,
+                nom TEXT,
+                token TEXT,
+                estat TEXT DEFAULT 'pending',
+                error TEXT,
+                sent_at TEXT
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_mailing_sends_campaign ON mailing_sends(campaign_id, estat)",
+        ]
+    for s in stmts:
+        try:
+            execute(s)
+        except Exception as e:
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
+            print(f"[mailing_schema] skip: {str(e)[:120]}")
+
+
+def _mailing_upsert_contact(nom, email, idioma='ca', origen='manual'):
+    """Insereix o actualitza un contacte. MAI reactiva una baixa (no toca
+    subscrit). Retorna 'added' | 'updated' | 'skipped'."""
+    email = _mailing_valid_email(email)
+    if not email:
+        return 'skipped'
+    existing = query('SELECT id, nom FROM mailing_contacts WHERE email=?', [email], one=True)
+    if existing:
+        if (nom or '').strip() and not (_row_get(existing, 'nom', '') or '').strip():
+            execute('UPDATE mailing_contacts SET nom=? WHERE id=?', [nom.strip(), _row_get(existing, 'id')])
+            return 'updated'
+        return 'skipped'
+    token = secrets.token_urlsafe(24)
+    execute('INSERT INTO mailing_contacts (nom, email, idioma, origen, token) VALUES (?,?,?,?,?)',
+            [(nom or '').strip(), email, (idioma or 'ca'), origen, token])
+    return 'added'
+
+
+def _mailing_parse_lines(text):
+    """Parseja text enganxat: una linia per contacte. Accepta 'email',
+    'nom,email', 'nom;email', 'nom <email>' o 'email,nom'. Retorna [(nom,email)]."""
+    out = []
+    for raw in (text or '').replace('\r', '').split('\n'):
+        line = raw.strip().strip(',;').strip()
+        if not line:
+            continue
+        parts = [p.strip() for p in re.split(r'[,;\t]', line) if p.strip()]
+        email = ''
+        name_parts = []
+        for p in parts:
+            m = re.search(r'<([^<>@\s]+@[^<>@\s]+)>', p)
+            if m:
+                email = m.group(1)
+                rest = p.replace(m.group(0), '').strip()
+                if rest:
+                    name_parts.append(rest)
+            elif '@' in p and not email:
+                email = p
+            else:
+                name_parts.append(p)
+        if email:
+            out.append((' '.join(name_parts).strip(), email))
+    return out
+
+
+def _mailing_text_to_html(text):
+    """Converteix el text pla que escriu l'admin en HTML segur: escapa,
+    paragrafs per linia en blanc, salts simples en <br>."""
+    import html as _html
+    safe = _html.escape((text or '').strip())
+    paras = [p.strip().replace('\n', '<br>') for p in re.split(r'\n\s*\n', safe) if p.strip()]
+    return ''.join(f'<p style="margin:0 0 14px">{p}</p>' for p in paras)
+
+
+def _mailing_render_html(cos_html, contact):
+    """Embolcalla el cos amb la plantilla de marca + peu RGPD amb enllac de baixa."""
+    empresa = (get_config_value('empresa_nom', 'Reus Revela') or 'Reus Revela').strip()
+    adreca = (get_config_value('empresa_adreca', '') or '').strip()
+    tel = (get_config_value('empresa_tel', '') or '').strip()
+    nom = (_row_get(contact, 'nom', '') or '').strip()
+    token = _row_get(contact, 'token', '') or ''
+    body = (cos_html or '').replace('{nom}', nom or 'hola')
+    baixa_url = f"{_mailing_base_url()}/baixa/{token}"
+    peu = ' &middot; '.join([x for x in [empresa, adreca, tel] if x])
+    return (
+        '<!DOCTYPE html><html lang="ca"><body style="margin:0;background:#f6f3ee;'
+        'padding:24px 12px;font-family:\'Helvetica Neue\',Arial,sans-serif">'
+        '<div style="max-width:580px;margin:0 auto;background:#fff;border:1px solid #e5ded2;'
+        'border-radius:14px;overflow:hidden">'
+        f'<div style="background:#1A6B45;padding:18px 24px;color:#fff;font-size:18px;'
+        f'font-weight:700">{empresa}</div>'
+        f'<div style="padding:24px;color:#1d1b18;font-size:15px;line-height:1.7">{body}</div>'
+        '<div style="padding:18px 24px;border-top:1px solid #eee;color:#8d877d;'
+        'font-size:12px;line-height:1.6">'
+        f'{peu}<br>Reps aquest correu perqu&egrave; ets client del taller. '
+        f'Si no en vols rebre m&eacute;s, pots <a href="{baixa_url}" '
+        'style="color:#1A6B45">donar-te de baixa aqu&iacute;</a>.'
+        '</div></div></body></html>'
+    )
+
+
+def _mailing_send_one(to_addr, subject, html, baixa_url):
+    """Envia un correu via Resend amb capcalera List-Unsubscribe (deliverability).
+    Retorna (ok, error)."""
+    api_key = (get_config_value('resend_api_key', '') or '').strip()
+    if not api_key:
+        return False, 'resend_api_key no configurat'
+    from_addr = (get_config_value('resend_from', '') or '').strip() or 'onboarding@resend.dev'
+    payload = json.dumps({
+        'from': from_addr,
+        'to': [to_addr],
+        'subject': subject,
+        'html': html,
+        'headers': {
+            'List-Unsubscribe': f'<{baixa_url}>',
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+    }).encode('utf-8')
+    req = urllib_request.Request(
+        'https://api.resend.com/emails', data=payload,
+        headers={
+            'Authorization': 'Bearer ' + api_key,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Calculadora-Marcs/1.0 (+https://calculadora.reusrevela.cat)',
+            'Accept': 'application/json',
+        }, method='POST')
+    try:
+        with urllib_request.urlopen(req, timeout=12) as resp:
+            resp.read()
+        return True, ''
+    except urllib_error.HTTPError as e:
+        body = ''
+        try:
+            body = e.read().decode('utf-8', errors='replace')[:200]
+        except Exception:
+            pass
+        return False, f'HTTP {e.code}: {body}'
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+@app.route('/admin/mailing')
+@admin_required
+def admin_mailing():
+    _ensure_mailing_schema()
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    subs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts WHERE subscrit', one=True), 'n', 0)
+    camps = query('SELECT id, assumpte, tipus, estat, total, enviats, errors, created_at, sent_at '
+                  'FROM mailing_campaigns ORDER BY id DESC LIMIT 20') or []
+    return render_template(
+        'admin_mailing.html',
+        total=total, subscrits=subs, baixes=(total - subs), campaigns=camps,
+        resend_ok=_resend_is_configured(),
+        resend_from=(get_config_value('resend_from', '') or ''),
+    )
+
+
+@app.route('/admin/mailing/sync-clients', methods=['POST'])
+@admin_required
+def admin_mailing_sync_clients():
+    _ensure_mailing_schema()
+    rows = query("SELECT nom, email FROM clients_externs "
+                 "WHERE actiu AND email IS NOT NULL AND email <> ''") or []
+    added = updated = 0
+    for r in rows:
+        res = _mailing_upsert_contact(_row_get(r, 'nom', ''), _row_get(r, 'email', ''), origen='clients')
+        if res == 'added':
+            added += 1
+        elif res == 'updated':
+            updated += 1
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    return jsonify(ok=True, added=added, updated=updated, total=total)
+
+
+@app.route('/admin/mailing/import', methods=['POST'])
+@admin_required
+def admin_mailing_import():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    idioma = (data.get('idioma') or 'ca').strip().lower()
+    if idioma not in ('ca', 'es'):
+        idioma = 'ca'
+    parsed = _mailing_parse_lines(data.get('text', ''))
+    added = skipped = invalid = 0
+    seen = set()
+    for nom, email in parsed:
+        ve = _mailing_valid_email(email)
+        if not ve:
+            invalid += 1
+            continue
+        if ve in seen:
+            skipped += 1
+            continue
+        seen.add(ve)
+        res = _mailing_upsert_contact(nom, ve, idioma=idioma, origen='import')
+        if res == 'added':
+            added += 1
+        else:
+            skipped += 1
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    return jsonify(ok=True, added=added, skipped=skipped, invalid=invalid, total=total)
+
+
+@app.route('/admin/mailing/test', methods=['POST'])
+@admin_required
+def admin_mailing_test():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    to = _mailing_valid_email(data.get('to', ''))
+    if not to:
+        return jsonify(ok=False, error='Adreca de prova no valida'), 400
+    assumpte = (data.get('assumpte') or '').strip() or '(sense assumpte)'
+    cos = _mailing_text_to_html(data.get('cos', ''))
+    fake = {'nom': 'prova', 'token': 'PROVA-TOKEN'}
+    html = _mailing_render_html(cos, fake)
+    baixa = f"{_mailing_base_url()}/baixa/PROVA-TOKEN"
+    ok, err = _mailing_send_one(to, '[PROVA] ' + assumpte, html, baixa)
+    return jsonify(ok=ok, error=err)
+
+
+@app.route('/admin/mailing/create', methods=['POST'])
+@admin_required
+def admin_mailing_create():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    assumpte = (data.get('assumpte') or '').strip()
+    cos_raw = (data.get('cos') or '').strip()
+    tipus = (data.get('tipus') or 'campanya').strip()
+    idioma_filtre = (data.get('idioma') or 'tot').strip().lower()
+    if idioma_filtre not in ('tot', 'ca', 'es'):
+        idioma_filtre = 'tot'
+    if not assumpte or not cos_raw:
+        return jsonify(ok=False, error='Cal assumpte i cos'), 400
+    cos_html = _mailing_text_to_html(cos_raw)
+    if idioma_filtre == 'tot':
+        contacts = query('SELECT id, nom, email, token FROM mailing_contacts WHERE subscrit') or []
+    else:
+        contacts = query('SELECT id, nom, email, token FROM mailing_contacts '
+                         'WHERE subscrit AND idioma=?', [idioma_filtre]) or []
+    if not contacts:
+        return jsonify(ok=False, error='No hi ha destinataris subscrits per a aquest filtre'), 400
+    uid = secrets.token_hex(8)
+    execute('INSERT INTO mailing_campaigns (uid, assumpte, cos_html, tipus, idioma_filtre, estat, total, creat_per) '
+            'VALUES (?,?,?,?,?,?,?,?)',
+            [uid, assumpte, cos_html, tipus, idioma_filtre, 'sending', len(contacts),
+             (session.get('nom') or 'admin')])
+    camp = query('SELECT id FROM mailing_campaigns WHERE uid=?', [uid], one=True)
+    cid = _row_get(camp, 'id')
+    for c in contacts:
+        execute('INSERT INTO mailing_sends (campaign_id, contact_id, email, nom, token, estat) '
+                'VALUES (?,?,?,?,?,?)',
+                [cid, _row_get(c, 'id'), _row_get(c, 'email'), _row_get(c, 'nom', ''),
+                 _row_get(c, 'token', ''), 'pending'])
+    return jsonify(ok=True, campaign_id=cid, total=len(contacts))
+
+
+@app.route('/admin/mailing/send-chunk', methods=['POST'])
+@admin_required
+def admin_mailing_send_chunk():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cid = data.get('campaign_id')
+    camp = query('SELECT id, assumpte, cos_html FROM mailing_campaigns WHERE id=?', [cid], one=True)
+    if not camp:
+        return jsonify(ok=False, error='Campanya no trobada'), 404
+    assumpte = _row_get(camp, 'assumpte')
+    cos_html = _row_get(camp, 'cos_html')
+    pend = query('SELECT id, email, nom, token FROM mailing_sends '
+                 'WHERE campaign_id=? AND estat=? ORDER BY id LIMIT 20', [cid, 'pending']) or []
+    for s in pend:
+        contact = {'nom': _row_get(s, 'nom', ''), 'token': _row_get(s, 'token', '')}
+        html = _mailing_render_html(cos_html, contact)
+        baixa = f"{_mailing_base_url()}/baixa/{_row_get(s, 'token', '')}"
+        ok, err = _mailing_send_one(_row_get(s, 'email'), assumpte, html, baixa)
+        if ok:
+            execute('UPDATE mailing_sends SET estat=?, sent_at=? WHERE id=?',
+                    ['sent', _mailing_now(), _row_get(s, 'id')])
+        else:
+            execute('UPDATE mailing_sends SET estat=?, error=? WHERE id=?',
+                    ['failed', err, _row_get(s, 'id')])
+        time.sleep(0.08)
+    enviats = _row_get(query('SELECT COUNT(*) AS n FROM mailing_sends WHERE campaign_id=? AND estat=?',
+                             [cid, 'sent'], one=True), 'n', 0)
+    errs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_sends WHERE campaign_id=? AND estat=?',
+                          [cid, 'failed'], one=True), 'n', 0)
+    remaining = _row_get(query('SELECT COUNT(*) AS n FROM mailing_sends WHERE campaign_id=? AND estat=?',
+                               [cid, 'pending'], one=True), 'n', 0)
+    done = (remaining == 0)
+    if done:
+        execute('UPDATE mailing_campaigns SET estat=?, enviats=?, errors=?, sent_at=? WHERE id=?',
+                ['sent', enviats, errs, _mailing_now(), cid])
+    else:
+        execute('UPDATE mailing_campaigns SET enviats=?, errors=? WHERE id=?', [enviats, errs, cid])
+    return jsonify(ok=True, enviats=enviats, errors=errs, remaining=remaining, done=done)
+
+
+@app.route('/admin/mailing/campaign/<int:cid>')
+@admin_required
+def admin_mailing_campaign(cid):
+    _ensure_mailing_schema()
+    camp = query('SELECT * FROM mailing_campaigns WHERE id=?', [cid], one=True)
+    if not camp:
+        return jsonify(ok=False), 404
+    fails = query('SELECT email, error FROM mailing_sends WHERE campaign_id=? AND estat=? '
+                  'ORDER BY id LIMIT 100', [cid, 'failed']) or []
+    return jsonify(
+        ok=True,
+        campaign={k: _row_get(camp, k) for k in
+                  ['id', 'assumpte', 'tipus', 'estat', 'total', 'enviats', 'errors']},
+        failures=[{'email': _row_get(f, 'email'), 'error': _row_get(f, 'error')} for f in fails],
+    )
+
+
+@app.route('/baixa/<token>', methods=['GET', 'POST'])
+def mailing_unsubscribe(token):
+    _ensure_mailing_schema()
+    c = query('SELECT id, email, subscrit FROM mailing_contacts WHERE token=?', [token], one=True)
+    if not c:
+        if request.method == 'POST':
+            return ('', 200)
+        return render_template('baixa.html', estat='no_trobat'), 404
+    if _row_get(c, 'subscrit'):
+        execute('UPDATE mailing_contacts SET subscrit=?, unsubscribed_at=? WHERE id=?',
+                [(False if USE_PG else 0), _mailing_now(), _row_get(c, 'id')])
+    if request.method == 'POST':
+        return ('', 200)
+    return render_template('baixa.html', estat='ok', email=_row_get(c, 'email'))
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

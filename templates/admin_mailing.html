@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mailing — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f3ee;--paper:#fff;--text:#1d1b18;--muted:#6c675f;--hint:#9e9b94;--border:#e5ded2;--green:#1A6B45;--green-l:#E8F3EE;--red:#C0392B;--red-l:#FDEDEC;--amber:#b45309;--amber-l:#FFF7ED;--nav:{{ nav_color|default('#1A6B45') }};--nav-text:{{ nav_text_color|default('#fff') }}}
+*{box-sizing:border-box}body{margin:0;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+nav{background:var(--nav);padding:.9rem 1.4rem;display:flex;align-items:center;gap:1rem}
+nav a{color:var(--nav-text);text-decoration:none;font-size:13px;font-weight:500;opacity:.85}nav a:hover{opacity:1}
+nav .brand{color:var(--nav-text);font-weight:700;font-size:16px;margin-right:auto}
+.wrap{max-width:1000px;margin:1.6rem auto;padding:0 1.2rem}
+h1{font-size:22px;margin:0 0 .3rem}
+.sub{color:var(--muted);font-size:13px;margin:0 0 1.2rem}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:1rem}
+.stat{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:.85rem 1rem}
+.stat strong{display:block;font-size:26px;line-height:1.1}
+.stat span{font-size:12px;color:var(--muted)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.card{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.2rem;margin-bottom:1rem}
+.card h2{font-size:15px;margin:0 0 .2rem}
+.card p.help{font-size:12px;color:var(--muted);margin:0 0 .8rem;line-height:1.5}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:.6rem 0 .25rem}
+input[type=text],input[type=email],textarea,select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:#fff;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(26,107,69,.08)}
+textarea{min-height:160px;resize:vertical;line-height:1.55}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.row>*{flex:1;min-width:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:9px 15px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;text-decoration:none}
+.btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#155c3a}
+.btn-o{background:#fff;border:1px solid var(--border);color:var(--text)}.btn-o:hover{background:var(--bg)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn-full{width:100%;margin-top:.4rem}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{padding:7px 13px;border:none;background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);font-family:inherit}
+.seg button.on{background:var(--green);color:#fff}
+.note{font-size:12px;color:var(--muted);margin-top:.45rem;line-height:1.5}
+.banner{padding:.7rem 1rem;border-radius:10px;font-size:13px;margin-bottom:1rem;line-height:1.5}
+.banner-warn{background:var(--amber-l);border:1px solid #f4d29a;color:#7a4e1a}
+.banner-ok{background:var(--green-l);border:1px solid #bfe0cd;color:#1f5c40}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1d1b18;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;z-index:50;max-width:90vw}
+.toast.show{opacity:1}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:.5rem .4rem;border-bottom:1px solid var(--border)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.pill-sent{background:var(--green-l);color:var(--green)}
+.pill-sending{background:var(--amber-l);color:var(--amber)}
+.empty{color:var(--muted);font-size:13px;padding:1rem 0}
+.progress{height:10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden;margin:.6rem 0 .3rem}
+.progress>div{height:100%;background:var(--green);width:0;transition:width .25s}
+#send-modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:60;padding:1rem}
+#send-modal.show{display:flex}
+.modal-card{background:#fff;border-radius:14px;padding:1.4rem;max-width:440px;width:100%}
+.modal-card h3{margin:0 0 .5rem;font-size:17px}
+@media(max-width:820px){.cols{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<nav>
+  <span class="brand">Mailing</span>
+  <a href="/">Portal</a>
+  <a href="/admin/clients-externs">Clients</a>
+  <a href="/admin">Admin</a>
+  <a href="/logout">Sortir</a>
+</nav>
+<div class="wrap">
+  <h1>Mailing als clients del taller</h1>
+  <p class="sub">Campanyes i avisos (horaris, vacances) als clients habituals. Cada correu porta enllaç de baixa automàtic.</p>
+
+  {% if not resend_ok %}
+  <div class="banner banner-warn">
+    ⚠️ <strong>Resend no està configurat.</strong> Cal definir <code>resend_api_key</code> i <code>resend_from</code> (amb domini verificat) a la configuració abans de poder enviar. Pots preparar la llista igualment.
+  </div>
+  {% else %}
+  <div class="banner banner-ok">✓ Enviament actiu via Resend &middot; remitent: <strong>{{ resend_from or 'onboarding@resend.dev' }}</strong></div>
+  {% endif %}
+
+  <div class="stats">
+    <div class="stat"><strong id="st-total">{{ total }}</strong><span>Contactes a la llista</span></div>
+    <div class="stat"><strong id="st-subs">{{ subscrits }}</strong><span>Subscrits (rebran correu)</span></div>
+    <div class="stat"><strong id="st-baixes">{{ baixes }}</strong><span>Baixes (no s'envia)</span></div>
+  </div>
+
+  <div class="cols">
+    <!-- ESQUERRA: gestió de la llista -->
+    <div>
+      <div class="card">
+        <h2>1 · Clients del taller</h2>
+        <p class="help">Porta a la llista de mailing tots els clients amb correu que ja tens a la calculadora (clients externs / FacturaDirecta). No es duplica ni reactiva ningú que s'hagi donat de baixa.</p>
+        <button class="btn btn-g btn-full" id="btn-sync" onclick="syncClients()">Sincronitzar des dels clients del taller</button>
+      </div>
+      <div class="card">
+        <h2>2 · Afegir mails extra</h2>
+        <p class="help">Enganxa la teva llista, un contacte per línia. Accepta <code>email</code>, <code>Nom, email</code> o <code>Nom &lt;email&gt;</code>. Es validen i es dedupliquen sols.</p>
+        <label>Idioma per defecte d'aquests contactes</label>
+        <div class="seg" id="imp-lang">
+          <button class="on" data-v="ca" onclick="segPick('imp-lang',this)">Català</button>
+          <button data-v="es" onclick="segPick('imp-lang',this)">Castellà</button>
+        </div>
+        <label>Contactes</label>
+        <textarea id="imp-text" placeholder="anna@exemple.com&#10;Joan Pla, joan@exemple.com&#10;Maria &lt;maria@exemple.com&gt;"></textarea>
+        <button class="btn btn-o btn-full" id="btn-import" onclick="importContacts()">Importar contactes</button>
+      </div>
+    </div>
+
+    <!-- DRETA: redacció i enviament -->
+    <div>
+      <div class="card">
+        <h2>3 · Redactar i enviar</h2>
+        <label>Tipus</label>
+        <div class="seg" id="m-tipus">
+          <button class="on" data-v="campanya" onclick="pickTipus(this)">Campanya</button>
+          <button data-v="avis" onclick="pickTipus(this)">Avís / horari</button>
+        </div>
+        <label>Assumpte</label>
+        <input type="text" id="m-assumpte" placeholder="Ex: Tancament per vacances d'agost">
+        <label>Missatge <span style="font-weight:400;color:var(--hint)">— pots fer servir <code>{nom}</code> per personalitzar</span></label>
+        <textarea id="m-cos" placeholder="Hola {nom},&#10;&#10;Escriu aquí el teu missatge…"></textarea>
+        <label>Enviar a</label>
+        <select id="m-idioma">
+          <option value="tot">Tots els subscrits</option>
+          <option value="ca">Només català</option>
+          <option value="es">Només castellà</option>
+        </select>
+
+        <label>Provar abans (s'envia només a aquesta adreça)</label>
+        <div class="row">
+          <input type="email" id="m-test" placeholder="el-teu-correu@exemple.com">
+          <button class="btn btn-o" style="flex:0 0 auto" id="btn-test" onclick="sendTest()">Enviar prova</button>
+        </div>
+
+        <button class="btn btn-g btn-full" id="btn-send" style="margin-top:1rem" onclick="openSend()">Enviar a tots els subscrits →</button>
+
+        <div id="send-progress" style="display:none;margin-top:1rem">
+          <div class="progress"><div id="pbar"></div></div>
+          <div class="note" id="pinfo">Preparant…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Historial d'enviaments</h2>
+    {% if campaigns %}
+    <table>
+      <thead><tr><th>Data</th><th>Assumpte</th><th>Tipus</th><th>Estat</th><th>Enviats</th><th>Errors</th></tr></thead>
+      <tbody>
+      {% for c in campaigns %}
+        <tr>
+          <td>{{ c.created_at }}</td>
+          <td>{{ c.assumpte }}</td>
+          <td>{{ 'Avís' if c.tipus == 'avis' else 'Campanya' }}</td>
+          <td><span class="pill {{ 'pill-sent' if c.estat == 'sent' else 'pill-sending' }}">{{ 'Enviada' if c.estat == 'sent' else 'En curs' }}</span></td>
+          <td>{{ c.enviats }} / {{ c.total }}</td>
+          <td>{{ c.errors }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">Encara no s'ha enviat cap campanya.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="send-modal">
+  <div class="modal-card">
+    <h3>Confirmar enviament</h3>
+    <p style="font-size:14px;color:var(--muted);line-height:1.55" id="confirm-text">S'enviarà a tots els subscrits. Aquesta acció no es pot desfer.</p>
+    <div class="row" style="margin-top:1rem">
+      <button class="btn btn-o" onclick="closeSend()">Cancel·lar</button>
+      <button class="btn btn-g" id="btn-confirm" onclick="startSend()">Sí, enviar ara</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+var TIPUS='campanya', RESEND_OK={{ 'true' if resend_ok else 'false' }};
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},3200);}
+function segPick(group,btn){document.querySelectorAll('#'+group+' button').forEach(function(b){b.classList.remove('on')});btn.classList.add('on');}
+function pickTipus(btn){segPick('m-tipus',btn);TIPUS=btn.dataset.v;
+  if(TIPUS==='avis'){if(!document.getElementById('m-assumpte').value)document.getElementById('m-assumpte').value='Canvi d\'horari del taller';}
+}
+function impLang(){var b=document.querySelector('#imp-lang button.on');return b?b.dataset.v:'ca';}
+function jpost(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json().catch(function(){return{ok:false,error:'resposta no vàlida'}})});}
+
+function syncClients(){var b=document.getElementById('btn-sync');b.disabled=true;b.textContent='Sincronitzant…';
+  jpost('/admin/mailing/sync-clients').then(function(d){
+    b.disabled=false;b.textContent='Sincronitzar des dels clients del taller';
+    if(!d.ok){toast(d.error||'Error');return;}
+    toast('Afegits '+d.added+' · actualitzats '+d.updated);refreshStats(d.total);
+  });
+}
+function importContacts(){var txt=document.getElementById('imp-text').value.trim();
+  if(!txt){toast('Enganxa algun contacte primer');return;}
+  var b=document.getElementById('btn-import');b.disabled=true;b.textContent='Important…';
+  jpost('/admin/mailing/import',{text:txt,idioma:impLang()}).then(function(d){
+    b.disabled=false;b.textContent='Importar contactes';
+    if(!d.ok){toast(d.error||'Error');return;}
+    toast('Afegits '+d.added+' · ja existents '+d.skipped+' · invàlids '+d.invalid);
+    document.getElementById('imp-text').value='';refreshStats(d.total);
+  });
+}
+function refreshStats(total){if(typeof total==='number')document.getElementById('st-total').textContent=total;}
+
+function sendTest(){if(!RESEND_OK){toast('Resend no està configurat');return;}
+  var to=document.getElementById('m-test').value.trim();
+  if(!to){toast('Posa una adreça de prova');return;}
+  var b=document.getElementById('btn-test');b.disabled=true;b.textContent='Enviant…';
+  jpost('/admin/mailing/test',{to:to,assumpte:document.getElementById('m-assumpte').value,cos:document.getElementById('m-cos').value}).then(function(d){
+    b.disabled=false;b.textContent='Enviar prova';
+    toast(d.ok?'Prova enviada a '+to:'Error: '+(d.error||''));
+  });
+}
+
+function openSend(){
+  if(!RESEND_OK){toast('Resend no està configurat');return;}
+  if(!document.getElementById('m-assumpte').value.trim()){toast('Falta l\'assumpte');return;}
+  if(!document.getElementById('m-cos').value.trim()){toast('Falta el missatge');return;}
+  var seg={tot:'tots els subscrits',ca:'els subscrits en català',es:'els subscrits en castellà'};
+  document.getElementById('confirm-text').textContent='S\'enviarà a '+seg[document.getElementById('m-idioma').value]+'. Has fet una prova abans? Aquesta acció no es pot desfer.';
+  document.getElementById('send-modal').classList.add('show');
+}
+function closeSend(){document.getElementById('send-modal').classList.remove('show');}
+
+function startSend(){
+  closeSend();
+  var btn=document.getElementById('btn-send');btn.disabled=true;
+  var prog=document.getElementById('send-progress');prog.style.display='block';
+  document.getElementById('pinfo').textContent='Creant la campanya…';
+  jpost('/admin/mailing/create',{
+    assumpte:document.getElementById('m-assumpte').value,
+    cos:document.getElementById('m-cos').value,
+    tipus:TIPUS,idioma:document.getElementById('m-idioma').value
+  }).then(function(d){
+    if(!d.ok){toast(d.error||'Error');btn.disabled=false;prog.style.display='none';return;}
+    runChunks(d.campaign_id,d.total);
+  });
+}
+function runChunks(cid,total){
+  function step(){
+    jpost('/admin/mailing/send-chunk',{campaign_id:cid}).then(function(d){
+      if(!d.ok){document.getElementById('pinfo').textContent='Error: '+(d.error||'');return;}
+      var fet=d.enviats+d.errors;var pct=total?Math.round(fet/total*100):100;
+      document.getElementById('pbar').style.width=pct+'%';
+      document.getElementById('pinfo').textContent='Enviats '+d.enviats+' / '+total+(d.errors?' · '+d.errors+' errors':'')+(d.done?' · fet!':'…');
+      if(d.done){toast('Campanya enviada: '+d.enviats+' correus'+(d.errors?' ('+d.errors+' errors)':''));
+        setTimeout(function(){location.reload()},1500);
+      }else{step();}
+    });
+  }
+  step();
+}
+</script>
+</body>
+</html>
