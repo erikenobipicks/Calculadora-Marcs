@@ -2338,6 +2338,9 @@ def _send_welcome_email(username, password, nom, to_addr=None):
     base_url = 'https://calculadora.reusrevela.cat'
     html = f"""\
 <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1C1B18;padding:24px;background:#FBFAF7">
+  <div style="text-align:center;margin:0 0 16px">
+    <img src="https://reusrevela.cat/static/img/logo-reusrevela.png" alt="Reus Revela" width="56" height="56" style="border:0">
+  </div>
   <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:10px;margin:0 0 18px">
     Et donem la benvinguda
   </h2>
@@ -11542,16 +11545,21 @@ def _mailing_render_html(cos_html, contact):
     return (
         '<!DOCTYPE html><html lang="ca"><body style="margin:0;background:#f6f3ee;'
         'padding:24px 12px;font-family:\'Helvetica Neue\',Arial,sans-serif">'
-        '<div style="max-width:580px;margin:0 auto;background:#fff;border:1px solid #e5ded2;'
-        'border-radius:14px;overflow:hidden">'
-        f'<div style="background:#1A6B45;padding:18px 24px;color:#fff;font-size:18px;'
-        f'font-weight:700">{marca}</div>'
+        '<div style="max-width:580px;margin:0 auto;background:#fff;border:1px solid #DDD3C4;'
+        'overflow:hidden">'
+        # Capcalera segons manual de marca: logo simbol + nom en serif sobre
+        # fons blanc amb separador Linia — sense bandes de color.
+        '<div style="padding:18px 24px;background:#FFFFFF;border-bottom:1px solid #DDD3C4">'
+        '<img src="https://reusrevela.cat/static/img/logo-reusrevela.png" alt="" '
+        'width="44" height="44" style="vertical-align:middle;border:0">'
+        f'<span style="font-family:Georgia,\'Times New Roman\',serif;font-size:21px;'
+        f'color:#12100C;margin-left:12px;vertical-align:middle">{marca}</span></div>'
         f'<div style="padding:24px;color:#1d1b18;font-size:15px;line-height:1.7">{body}</div>'
         '<div style="padding:18px 24px;border-top:1px solid #eee;color:#8d877d;'
         'font-size:12px;line-height:1.6">'
         f'{peu}<br>Reps aquest correu perqu&egrave; ets client del taller. '
         f'Si no en vols rebre m&eacute;s, pots <a href="{baixa_url}" '
-        'style="color:#1A6B45">donar-te de baixa aqu&iacute;</a>.'
+        'style="color:#A67843">donar-te de baixa aqu&iacute;</a>.'
         '<br><br>'
         f'<span style="color:#a9a299">Responsable del tractament: {responsable}. '
         'Tractem les teves dades nom&eacute;s per enviar-te comunicacions del taller, '
