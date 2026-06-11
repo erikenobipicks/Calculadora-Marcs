@@ -11561,7 +11561,12 @@ def _mailing_render_html(cos_html, contact):
     tel = (get_config_value('empresa_tel', '') or '').strip()
     nom = (_row_get(contact, 'nom', '') or '').strip()
     token = _row_get(contact, 'token', '') or ''
-    body = (cos_html or '').replace('{nom}', nom or 'hola')
+    # {nom} amb contacte sense nom: s'elimina el marcador i l'espai previ,
+    # perque "Hola {nom}," quedi "Hola," i no "Hola hola,".
+    if nom:
+        body = (cos_html or '').replace('{nom}', nom)
+    else:
+        body = re.sub(r'[ \t]*\{nom\}', '', cos_html or '')
     baixa_url = f"{_mailing_base_url()}/baixa/{token}"
     peu = ' &middot; '.join([x for x in [marca, adreca, tel] if x])
     return (
