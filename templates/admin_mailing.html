@@ -55,6 +55,9 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
 #send-modal.show,#prev-modal.show{display:flex}
 .c-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;font-weight:600;padding:.2rem .4rem}
 .c-del:hover{text-decoration:underline}
+.c-lang{border:1px solid var(--border);background:#fff;color:var(--muted);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;cursor:pointer;letter-spacing:.4px}
+.c-lang:hover{border-color:var(--green);color:var(--green)}
+.c-lang[data-lang="es"]{background:var(--amber-l);color:var(--amber);border-color:#f4d29a}
 .tag-min{font-size:11px;color:var(--hint)}
 .modal-card{background:#fff;border-radius:14px;padding:1.4rem;max-width:440px;width:100%}
 .modal-card h3{margin:0 0 .5rem;font-size:17px}
@@ -121,15 +124,31 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
           <button class="on" data-v="campanya" onclick="pickTipus(this)">Campanya</button>
           <button data-v="avis" onclick="pickTipus(this)">Avís / horari</button>
         </div>
-        <label>Assumpte</label>
-        <input type="text" id="m-assumpte" placeholder="Ex: Tancament per vacances d'agost">
-        <label>Missatge <span style="font-weight:400;color:var(--hint)">— pots fer servir <code>{nom}</code> per personalitzar</span></label>
-        <textarea id="m-cos" placeholder="Hola {nom},&#10;&#10;Escriu aquí el teu missatge…"></textarea>
+        <label>Idioma del missatge</label>
+        <div class="seg" id="m-lang-tab">
+          <button class="on" data-v="ca" onclick="pickLangTab(this)">Català</button>
+          <button data-v="es" onclick="pickLangTab(this)">Castellà <span id="es-state" style="font-weight:400">(buit)</span></button>
+        </div>
+        <p class="note" style="margin:.4rem 0 0">Si omples la versió en castellà, cada client rebrà la del seu idioma <strong>en un sol enviament</strong>. Si la deixes buida, tothom rep la catalana.</p>
+
+        <div id="lang-pane-ca">
+          <label>Assumpte</label>
+          <input type="text" id="m-assumpte" placeholder="Ex: Tancament per vacances d'agost">
+          <label>Missatge <span style="font-weight:400;color:var(--hint)">— pots fer servir <code>{nom}</code> per personalitzar</span></label>
+          <textarea id="m-cos" placeholder="Hola {nom},&#10;&#10;Escriu aquí el teu missatge…"></textarea>
+        </div>
+        <div id="lang-pane-es" style="display:none">
+          <label>Assumpte (castellà)</label>
+          <input type="text" id="m-assumpte-es" placeholder="Ej: Cierre por vacaciones de agosto" oninput="updateEsState()">
+          <label>Missatge (castellà) <span style="font-weight:400;color:var(--hint)">— també accepta <code>{nom}</code></span></label>
+          <textarea id="m-cos-es" placeholder="Hola {nom},&#10;&#10;Escribe aquí tu mensaje…" oninput="updateEsState()"></textarea>
+        </div>
+
         <label>Enviar a</label>
         <select id="m-idioma">
-          <option value="tot">Tots els subscrits</option>
-          <option value="ca">Només català</option>
-          <option value="es">Només castellà</option>
+          <option value="tot">Tots els subscrits (cadascú en el seu idioma)</option>
+          <option value="ca">Només contactes en català</option>
+          <option value="es">Només contactes en castellà</option>
         </select>
 
         <label>Provar abans d'enviar</label>
@@ -175,7 +194,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
       {% for c in campaigns %}
         <tr>
           <td>{{ c.created_at }}</td>
-          <td>{{ c.assumpte }}</td>
+          <td>{{ c.assumpte }}{% if c.assumpte_es %} <span class="tag-min" title="Campanya bilingüe: cada client va rebre la versió del seu idioma">CA+ES</span>{% endif %}</td>
           <td>{{ 'Avís' if c.tipus == 'avis' else 'Campanya' }}</td>
           <td><span class="pill {{ 'pill-sent' if c.estat == 'sent' else 'pill-sending' }}">{{ 'Enviada' if c.estat == 'sent' else 'En curs' }}</span></td>
           <td>{{ c.enviats }} / {{ c.total }}</td>
@@ -219,6 +238,13 @@ function segPick(group,btn){document.querySelectorAll('#'+group+' button').forEa
 function pickTipus(btn){segPick('m-tipus',btn);TIPUS=btn.dataset.v;
   if(TIPUS==='avis'){if(!document.getElementById('m-assumpte').value)document.getElementById('m-assumpte').value='Canvi d\'horari del taller';}
 }
+var LANG_TAB='ca';
+function pickLangTab(btn){segPick('m-lang-tab',btn);LANG_TAB=btn.dataset.v;
+  document.getElementById('lang-pane-ca').style.display=(LANG_TAB==='ca')?'':'none';
+  document.getElementById('lang-pane-es').style.display=(LANG_TAB==='es')?'':'none';
+}
+function esFilled(){return !!(document.getElementById('m-assumpte-es').value.trim()||document.getElementById('m-cos-es').value.trim());}
+function updateEsState(){document.getElementById('es-state').textContent=esFilled()?'(omplert)':'(buit)';}
 function impLang(){var b=document.querySelector('#imp-lang button.on');return b?b.dataset.v:'ca';}
 function jpost(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json().catch(function(){return{ok:false,error:'resposta no vàlida'}})});}
 
@@ -255,11 +281,22 @@ function loadContacts(){
     info.textContent='Mostrant '+d.shown+(d.total>d.shown?' de '+d.total+' (primers 500)':'')+'.';
     body.innerHTML=d.contacts.map(function(c){
       var estat=c.subscrit?'<span class="pill pill-sent">Subscrit</span>':'<span class="tag-min">Baixa</span>';
-      return '<tr><td>'+esc(c.nom||'—')+'</td><td>'+esc(c.email)+'</td><td>'+esc(c.idioma)+'</td>'+
+      var lang=(c.idioma==='es')?'es':'ca';
+      return '<tr><td>'+esc(c.nom||'—')+'</td><td>'+esc(c.email)+'</td>'+
+             '<td><button class="c-lang" data-lang="'+lang+'" onclick="toggleLang('+c.id+',this)" title="Clica per canviar l\'idioma">'+lang.toUpperCase()+'</button></td>'+
              '<td class="tag-min">'+esc(c.origen)+'</td><td>'+estat+'</td>'+
              '<td style="text-align:right"><button class="c-del" onclick="delContact('+c.id+',this)">Esborrar</button></td></tr>';
     }).join('');
   }).catch(function(){document.getElementById('c-info').textContent='Error de xarxa.';});
+}
+function toggleLang(id,btn){
+  var nou=(btn.dataset.lang==='ca')?'es':'ca';
+  btn.disabled=true;
+  jpost('/admin/mailing/contacts/set-lang',{id:id,idioma:nou}).then(function(d){
+    btn.disabled=false;
+    if(!d.ok){toast(d.error||'Error');return;}
+    btn.dataset.lang=d.idioma;btn.textContent=d.idioma.toUpperCase();
+  });
 }
 function delContact(id,btn){
   if(!confirm('Esborrar aquest contacte de la llista de mailing?'))return;
@@ -273,7 +310,8 @@ function delContact(id,btn){
   });
 }
 function preview(){
-  jpost('/admin/mailing/preview',{cos:document.getElementById('m-cos').value}).then(function(d){
+  var cos=(LANG_TAB==='es')?document.getElementById('m-cos-es').value:document.getElementById('m-cos').value;
+  jpost('/admin/mailing/preview',{cos:cos}).then(function(d){
     if(!d.ok){toast('No s\'ha pogut generar la previsualització');return;}
     document.getElementById('prev-frame').srcdoc=d.html;
     document.getElementById('prev-modal').classList.add('show');
@@ -285,18 +323,27 @@ function sendTest(){if(!RESEND_OK){toast('Resend no està configurat');return;}
   var to=document.getElementById('m-test').value.trim();
   if(!to){toast('Posa una adreça de prova');return;}
   var b=document.getElementById('btn-test');b.disabled=true;b.textContent='Enviant…';
-  jpost('/admin/mailing/test',{to:to,assumpte:document.getElementById('m-assumpte').value,cos:document.getElementById('m-cos').value}).then(function(d){
+  jpost('/admin/mailing/test',{to:to,
+    assumpte:document.getElementById('m-assumpte').value,
+    cos:document.getElementById('m-cos').value,
+    assumpte_es:document.getElementById('m-assumpte-es').value,
+    cos_es:document.getElementById('m-cos-es').value
+  }).then(function(d){
     b.disabled=false;b.textContent='Enviar prova';
-    toast(d.ok?'Prova enviada a '+to:'Error: '+(d.error||''));
+    if(d.ok){toast(d.total>1?'Proves enviades a '+to+' (CA i ES)':'Prova enviada a '+to);}
+    else{toast('Error: '+(d.error||'')+(d.sent?' — '+d.sent+'/'+d.total+' enviades':''));}
   });
 }
 
 function openSend(){
   if(!RESEND_OK){toast('Resend no està configurat');return;}
-  if(!document.getElementById('m-assumpte').value.trim()){toast('Falta l\'assumpte');return;}
-  if(!document.getElementById('m-cos').value.trim()){toast('Falta el missatge');return;}
+  if(!document.getElementById('m-assumpte').value.trim()){toast('Falta l\'assumpte en català (és la versió base)');return;}
+  if(!document.getElementById('m-cos').value.trim()){toast('Falta el missatge en català (és la versió base)');return;}
+  var aes=document.getElementById('m-assumpte-es').value.trim(), ces=document.getElementById('m-cos-es').value.trim();
+  if((aes&&!ces)||(!aes&&ces)){toast('La versió en castellà necessita assumpte i cos (o cap dels dos)');return;}
   var seg={tot:'tots els subscrits',ca:'els subscrits en català',es:'els subscrits en castellà'};
-  document.getElementById('confirm-text').textContent='S\'enviarà a '+seg[document.getElementById('m-idioma').value]+'. Has fet una prova abans? Aquesta acció no es pot desfer.';
+  var bil=(aes&&ces)?' Cada client rebrà la versió del seu idioma (CA/ES).':' Tothom rebrà la versió en català.';
+  document.getElementById('confirm-text').textContent='S\'enviarà a '+seg[document.getElementById('m-idioma').value]+'.'+bil+' Has fet una prova abans? Aquesta acció no es pot desfer.';
   document.getElementById('send-modal').classList.add('show');
 }
 function closeSend(){document.getElementById('send-modal').classList.remove('show');}
@@ -309,6 +356,8 @@ function startSend(){
   jpost('/admin/mailing/create',{
     assumpte:document.getElementById('m-assumpte').value,
     cos:document.getElementById('m-cos').value,
+    assumpte_es:document.getElementById('m-assumpte-es').value,
+    cos_es:document.getElementById('m-cos-es').value,
     tipus:TIPUS,idioma:document.getElementById('m-idioma').value
   }).then(function(d){
     if(!d.ok){toast(d.error||'Error');btn.disabled=false;prog.style.display='none';return;}

@@ -11471,6 +11471,28 @@ def _ensure_mailing_schema():
             except Exception:
                 pass
             print(f"[mailing_schema] skip: {str(e)[:120]}")
+    # Columnes afegides despres de la v1 (campanyes bilingues ca/es). A PG
+    # son IF NOT EXISTS; a SQLite l'ALTER duplicat falla i s'ignora en silenci.
+    if USE_PG:
+        alters = [
+            "ALTER TABLE mailing_campaigns ADD COLUMN IF NOT EXISTS assumpte_es VARCHAR(300)",
+            "ALTER TABLE mailing_campaigns ADD COLUMN IF NOT EXISTS cos_html_es TEXT",
+            "ALTER TABLE mailing_sends ADD COLUMN IF NOT EXISTS idioma VARCHAR(5)",
+        ]
+    else:
+        alters = [
+            "ALTER TABLE mailing_campaigns ADD COLUMN assumpte_es TEXT",
+            "ALTER TABLE mailing_campaigns ADD COLUMN cos_html_es TEXT",
+            "ALTER TABLE mailing_sends ADD COLUMN idioma TEXT",
+        ]
+    for s in alters:
+        try:
+            execute(s)
+        except Exception:
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
 
 
 def _mailing_upsert_contact(nom, email, idioma='ca', origen='manual'):
@@ -11624,7 +11646,7 @@ def admin_mailing():
     _ensure_mailing_schema()
     total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
     subs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts WHERE subscrit', one=True), 'n', 0)
-    camps = query('SELECT id, assumpte, tipus, estat, total, enviats, errors, created_at, sent_at '
+    camps = query('SELECT id, assumpte, assumpte_es, tipus, estat, total, enviats, errors, created_at, sent_at '
                   'FROM mailing_campaigns ORDER BY id DESC LIMIT 20') or []
     return render_template(
         'admin_mailing.html',
@@ -11729,21 +11751,46 @@ def admin_mailing_preview():
     return jsonify(ok=True, html=_mailing_render_html(cos, fake))
 
 
+@app.route('/admin/mailing/contacts/set-lang', methods=['POST'])
+@admin_required
+def admin_mailing_contacts_set_lang():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cid = data.get('id')
+    idioma = (data.get('idioma') or '').strip().lower()
+    if not cid or idioma not in ('ca', 'es'):
+        return jsonify(ok=False, error='Falta id o idioma no vàlid'), 400
+    execute('UPDATE mailing_contacts SET idioma=? WHERE id=?', [idioma, cid])
+    return jsonify(ok=True, idioma=idioma)
+
+
 @app.route('/admin/mailing/test', methods=['POST'])
 @admin_required
 def admin_mailing_test():
+    """Envia la prova al correu indicat. Si la campanya té versió en castellà,
+    n'envia dues: [PROVA CA] i [PROVA ES], per revisar-les totes dues d'un clic."""
     _ensure_mailing_schema()
     data = request.get_json(silent=True) or {}
     to = _mailing_valid_email(data.get('to', ''))
     if not to:
         return jsonify(ok=False, error='Adreca de prova no valida'), 400
-    assumpte = (data.get('assumpte') or '').strip() or '(sense assumpte)'
-    cos = _mailing_text_to_html(data.get('cos', ''))
     fake = {'nom': 'prova', 'token': 'PROVA-TOKEN'}
-    html = _mailing_render_html(cos, fake)
     baixa = f"{_mailing_base_url()}/baixa/PROVA-TOKEN"
-    ok, err = _mailing_send_one(to, '[PROVA] ' + assumpte, html, baixa)
-    return jsonify(ok=ok, error=err)
+    versions = [('CA', (data.get('assumpte') or '').strip() or '(sense assumpte)',
+                 data.get('cos', ''))]
+    if (data.get('assumpte_es') or '').strip() or (data.get('cos_es') or '').strip():
+        versions.append(('ES', (data.get('assumpte_es') or '').strip() or '(sense assumpte)',
+                         data.get('cos_es', '')))
+    sent = 0
+    err = ''
+    for tag, assumpte, cos_raw in versions:
+        html = _mailing_render_html(_mailing_text_to_html(cos_raw), fake)
+        ok, e = _mailing_send_one(to, f'[PROVA {tag}] ' + assumpte, html, baixa)
+        if ok:
+            sent += 1
+        else:
+            err = e
+    return jsonify(ok=(sent == len(versions)), sent=sent, total=len(versions), error=err)
 
 
 @app.route('/admin/mailing/create', methods=['POST'])
@@ -11753,32 +11800,40 @@ def admin_mailing_create():
     data = request.get_json(silent=True) or {}
     assumpte = (data.get('assumpte') or '').strip()
     cos_raw = (data.get('cos') or '').strip()
+    # Versio castellana opcional: si s'omple, els contactes amb idioma 'es'
+    # reben aquesta; la resta, la catalana. Si es deixa buida, tothom rep
+    # la catalana (comportament d'abans).
+    assumpte_es = (data.get('assumpte_es') or '').strip()
+    cos_es_raw = (data.get('cos_es') or '').strip()
     tipus = (data.get('tipus') or 'campanya').strip()
     idioma_filtre = (data.get('idioma') or 'tot').strip().lower()
     if idioma_filtre not in ('tot', 'ca', 'es'):
         idioma_filtre = 'tot'
     if not assumpte or not cos_raw:
-        return jsonify(ok=False, error='Cal assumpte i cos'), 400
+        return jsonify(ok=False, error='Cal assumpte i cos en català (és la versió base)'), 400
+    if bool(assumpte_es) != bool(cos_es_raw):
+        return jsonify(ok=False, error='La versió en castellà necessita assumpte i cos (o cap dels dos)'), 400
     cos_html = _mailing_text_to_html(cos_raw)
+    cos_html_es = _mailing_text_to_html(cos_es_raw) if cos_es_raw else ''
     if idioma_filtre == 'tot':
-        contacts = query('SELECT id, nom, email, token FROM mailing_contacts WHERE subscrit') or []
+        contacts = query('SELECT id, nom, email, token, idioma FROM mailing_contacts WHERE subscrit') or []
     else:
-        contacts = query('SELECT id, nom, email, token FROM mailing_contacts '
+        contacts = query('SELECT id, nom, email, token, idioma FROM mailing_contacts '
                          'WHERE subscrit AND idioma=?', [idioma_filtre]) or []
     if not contacts:
         return jsonify(ok=False, error='No hi ha destinataris subscrits per a aquest filtre'), 400
     uid = secrets.token_hex(8)
-    execute('INSERT INTO mailing_campaigns (uid, assumpte, cos_html, tipus, idioma_filtre, estat, total, creat_per) '
-            'VALUES (?,?,?,?,?,?,?,?)',
-            [uid, assumpte, cos_html, tipus, idioma_filtre, 'sending', len(contacts),
+    execute('INSERT INTO mailing_campaigns (uid, assumpte, cos_html, assumpte_es, cos_html_es, tipus, idioma_filtre, estat, total, creat_per) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?)',
+            [uid, assumpte, cos_html, assumpte_es, cos_html_es, tipus, idioma_filtre, 'sending', len(contacts),
              (session.get('nom') or 'admin')])
     camp = query('SELECT id FROM mailing_campaigns WHERE uid=?', [uid], one=True)
     cid = _row_get(camp, 'id')
     for c in contacts:
-        execute('INSERT INTO mailing_sends (campaign_id, contact_id, email, nom, token, estat) '
-                'VALUES (?,?,?,?,?,?)',
+        execute('INSERT INTO mailing_sends (campaign_id, contact_id, email, nom, token, idioma, estat) '
+                'VALUES (?,?,?,?,?,?,?)',
                 [cid, _row_get(c, 'id'), _row_get(c, 'email'), _row_get(c, 'nom', ''),
-                 _row_get(c, 'token', ''), 'pending'])
+                 _row_get(c, 'token', ''), (_row_get(c, 'idioma', 'ca') or 'ca'), 'pending'])
     return jsonify(ok=True, campaign_id=cid, total=len(contacts))
 
 
@@ -11788,18 +11843,22 @@ def admin_mailing_send_chunk():
     _ensure_mailing_schema()
     data = request.get_json(silent=True) or {}
     cid = data.get('campaign_id')
-    camp = query('SELECT id, assumpte, cos_html FROM mailing_campaigns WHERE id=?', [cid], one=True)
+    camp = query('SELECT id, assumpte, cos_html, assumpte_es, cos_html_es FROM mailing_campaigns WHERE id=?', [cid], one=True)
     if not camp:
         return jsonify(ok=False, error='Campanya no trobada'), 404
     assumpte = _row_get(camp, 'assumpte')
     cos_html = _row_get(camp, 'cos_html')
-    pend = query('SELECT id, email, nom, token FROM mailing_sends '
+    assumpte_es = (_row_get(camp, 'assumpte_es', '') or '').strip()
+    cos_html_es = (_row_get(camp, 'cos_html_es', '') or '').strip()
+    bilingue = bool(assumpte_es and cos_html_es)
+    pend = query('SELECT id, email, nom, token, idioma FROM mailing_sends '
                  'WHERE campaign_id=? AND estat=? ORDER BY id LIMIT 20', [cid, 'pending']) or []
     for s in pend:
         contact = {'nom': _row_get(s, 'nom', ''), 'token': _row_get(s, 'token', '')}
-        html = _mailing_render_html(cos_html, contact)
+        es = bilingue and (_row_get(s, 'idioma', 'ca') or 'ca') == 'es'
+        html = _mailing_render_html(cos_html_es if es else cos_html, contact)
         baixa = f"{_mailing_base_url()}/baixa/{_row_get(s, 'token', '')}"
-        ok, err = _mailing_send_one(_row_get(s, 'email'), assumpte, html, baixa)
+        ok, err = _mailing_send_one(_row_get(s, 'email'), assumpte_es if es else assumpte, html, baixa)
         if ok:
             execute('UPDATE mailing_sends SET estat=?, sent_at=? WHERE id=?',
                     ['sent', _mailing_now(), _row_get(s, 'id')])
