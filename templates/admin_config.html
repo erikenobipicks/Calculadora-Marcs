@@ -147,6 +147,14 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <label style="margin-top:.9rem">Adreça de respostes (reply-to)</label>
       <p class="hint">On arriben les respostes dels clients. Útil si el remitent (ex. <code>taller@reusrevela.cat</code>) no té bústia: posa-hi una adreça que llegeixis, com <code>reusrevela@gmail.com</code>. Deixa-ho buit per no fer-ne servir.</p>
       <input type="text" name="resend_reply_to" value="{{ config.get('resend_reply_to', '') }}" placeholder="reusrevela@gmail.com" autocomplete="off">
+
+      <label style="margin-top:.9rem">Marca del mailing</label>
+      <p class="hint">Nom amb què et presentes als clients del taller a la capçalera i el peu dels correus (ex. <code>Reus Revela</code>). Si ho deixes buit, s'usa el nom comercial general ({{ config.get('empresa_nom', '') or 'empresa_nom' }}).</p>
+      <input type="text" name="mailing_marca" value="{{ config.get('mailing_marca', '') }}" placeholder="Reus Revela" autocomplete="off">
+
+      <label style="margin-top:.9rem">Responsable legal del mailing</label>
+      <p class="hint">Nom (normalment el fiscal) que firma el text de protecció de dades al peu del correu (ex. <code>OBJECTIU S.C.P.</code>). Si ho deixes buit, s'usa la marca del mailing.</p>
+      <input type="text" name="mailing_responsable" value="{{ config.get('mailing_responsable', '') }}" placeholder="OBJECTIU S.C.P." autocomplete="off">
     </div>
 
     <div class="section">

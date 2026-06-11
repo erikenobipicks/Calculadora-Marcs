@@ -7123,6 +7123,12 @@ def admin_config():
         rr = request.form.get('resend_reply_to')
         if rr is not None:
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_reply_to', ?)", [rr.strip()])
+        # Marca i responsable legal del mailing (poden diferir d'empresa_nom:
+        # marca de cara al client vs nom fiscal). Buit = fallback a empresa_nom.
+        for clau in ('mailing_marca', 'mailing_responsable'):
+            val = request.form.get(clau)
+            if val is not None:
+                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)', [clau, val.strip()])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)
@@ -11519,22 +11525,27 @@ def _mailing_text_to_html(text):
 
 
 def _mailing_render_html(cos_html, contact):
-    """Embolcalla el cos amb la plantilla de marca + peu RGPD amb enllac de baixa."""
+    """Embolcalla el cos amb la plantilla de marca + peu RGPD amb enllac de baixa.
+    La marca de cara al client (mailing_marca, p. ex. "Reus Revela") pot ser
+    diferent del nom comercial general (empresa_nom) i del nom fiscal que firma
+    el text legal (mailing_responsable, p. ex. "OBJECTIU S.C.P.")."""
     empresa = (get_config_value('empresa_nom', 'Reus Revela') or 'Reus Revela').strip()
+    marca = (get_config_value('mailing_marca', '') or '').strip() or empresa
+    responsable = (get_config_value('mailing_responsable', '') or '').strip() or marca
     adreca = (get_config_value('empresa_adreca', '') or '').strip()
     tel = (get_config_value('empresa_tel', '') or '').strip()
     nom = (_row_get(contact, 'nom', '') or '').strip()
     token = _row_get(contact, 'token', '') or ''
     body = (cos_html or '').replace('{nom}', nom or 'hola')
     baixa_url = f"{_mailing_base_url()}/baixa/{token}"
-    peu = ' &middot; '.join([x for x in [empresa, adreca, tel] if x])
+    peu = ' &middot; '.join([x for x in [marca, adreca, tel] if x])
     return (
         '<!DOCTYPE html><html lang="ca"><body style="margin:0;background:#f6f3ee;'
         'padding:24px 12px;font-family:\'Helvetica Neue\',Arial,sans-serif">'
         '<div style="max-width:580px;margin:0 auto;background:#fff;border:1px solid #e5ded2;'
         'border-radius:14px;overflow:hidden">'
         f'<div style="background:#1A6B45;padding:18px 24px;color:#fff;font-size:18px;'
-        f'font-weight:700">{empresa}</div>'
+        f'font-weight:700">{marca}</div>'
         f'<div style="padding:24px;color:#1d1b18;font-size:15px;line-height:1.7">{body}</div>'
         '<div style="padding:18px 24px;border-top:1px solid #eee;color:#8d877d;'
         'font-size:12px;line-height:1.6">'
@@ -11542,7 +11553,7 @@ def _mailing_render_html(cos_html, contact):
         f'Si no en vols rebre m&eacute;s, pots <a href="{baixa_url}" '
         'style="color:#1A6B45">donar-te de baixa aqu&iacute;</a>.'
         '<br><br>'
-        f'<span style="color:#a9a299">Responsable del tractament: {empresa}. '
+        f'<span style="color:#a9a299">Responsable del tractament: {responsable}. '
         'Tractem les teves dades nom&eacute;s per enviar-te comunicacions del taller, '
         'sobre la base del nostre inter&eacute;s leg&iacute;tim com a client. Pots exercir els teus '
         'drets d\'acc&eacute;s, rectificaci&oacute;, supressi&oacute; i oposici&oacute; responent a aquest '
