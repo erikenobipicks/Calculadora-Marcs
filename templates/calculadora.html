@@ -901,6 +901,7 @@ body.has-sticky-bar{padding-bottom:78px}
       <span class="sb-label">Reus Revela</span>
     </button>
     {% if session.is_admin %}
+    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pres" onclick="crearAlbaraFD('pvp','pressupost')" title="Generar pressupost (estimate) a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Pressupost </span>FD</span></button>
     <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVP</span></button>
     <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVD</span></button>
     {% endif %}
