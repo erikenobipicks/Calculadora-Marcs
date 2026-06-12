@@ -57,6 +57,43 @@ _COOKIE_DOMAIN = os.environ.get('SESSION_COOKIE_DOMAIN', '').strip() or None
 if _COOKIE_DOMAIN:
     app.config['SESSION_COOKIE_DOMAIN'] = _COOKIE_DOMAIN
 
+
+# Capcaleres de seguretat + noindex global. Aquesta eina es interna (login),
+# no s'ha d'indexar mai; i afegim defensa-en-profunditat contra clickjacking,
+# MIME-sniffing i downgrade a HTTP. La CSP permet 'unsafe-inline' perque les
+# plantilles tenen JS/CSS inline i handlers onclick (no es pot endurir sense
+# refactoritzar-les); tot i aixi restringeix l'origen dels recursos.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com data:; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self'; "
+    "form-action 'self'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    resp.headers.setdefault('Content-Security-Policy', _CSP)
+    # Eina interna amb login: mai indexable per cap cercador.
+    resp.headers.setdefault('X-Robots-Tag', 'noindex, nofollow')
+    return resp
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    from flask import Response
+    return Response("User-agent: *\nDisallow: /\n", mimetype='text/plain')
+
+
 MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 MOLDURA_COLOR_FILTERS = [
     ('daurat', 'Daurades'),
