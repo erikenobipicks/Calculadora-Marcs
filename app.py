@@ -7330,6 +7330,32 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     return _fd_post('deliveryNotes', {'content': {'type': 'deliveryNote', 'main': main}})
 
 
+def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
+    """Crea un PRESSUPOST (estimate) a FacturaDirecta. Mateix patro que
+    l'albara pero amb type/endpoint 'estimate'/'estimates'. No es forca cap
+    serie de docNumber: FacturaDirecta assigna la serie de pressupost per
+    defecte (evita errors de 'serie inexistent')."""
+    if not data_doc:
+        data_doc = datetime.now().strftime('%Y-%m-%d')
+    main = {
+        'contact':  contact_id,
+        'currency': 'EUR',
+        'date':     data_doc,
+        'lines':    linies,
+    }
+    if notes:
+        main['notes'] = notes
+    return _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+
+
+def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
+    """Despatxa segons el tipus de document FD demanat:
+    'pressupost' -> estimate · qualsevol altre (per defecte) -> albara."""
+    if str(doc_type).strip().lower() in ('pressupost', 'estimate', 'presupuesto'):
+        return _fd_crear_estimate(contact_id, linies, notes=notes, data_doc=data_doc)
+    return _fd_crear_albara(contact_id, linies, notes=notes, data_doc=data_doc)
+
+
 def _fd_extract_contacts_list(r):
     """FD pot retornar la llista en diverses claus. Aquesta funció és
     una variant de _fd_extract_contact_id però per a llistes."""
@@ -8603,23 +8629,33 @@ def api_crear_albara():
             notes_parts.append('Enviament a: ' + ', '.join(str(x) for x in dest))
     notes = ' | '.join(notes_parts)
 
-    albara = _fd_crear_albara(contact_id, linies, notes=notes)
-    if '_error' in (albara or {}):
-        return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
+    # doc_type: 'albara' (per defecte) crea un albarà i descompta stock;
+    # 'pressupost' crea un estimate a FD i NO toca stock ni marca fd_albara.
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
 
-    num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+
+    if es_pressupost:
+        return jsonify({'ok': True, 'doc_type': 'pressupost', 'pressupost': num_doc,
+                        'numero': num_doc, 'contact': nom_fd, 'avisos_stock': []})
 
     # Descompte automàtic d'stock de marcs (best-effort: no fa fallar l'albarà).
     avisos_stock = []
     try:
         pre_marc = (d.get('pre_marc') or '').strip()
         avisos_stock = _descompta_stock_albara(
-            marc, pre_marc, final_w, final_h, quantitat, num_albara, session.get('user_id'))
+            marc, pre_marc, final_w, final_h, quantitat, num_doc, session.get('user_id'))
     except Exception as e:
         print('descompte stock albarà err:', e)
 
-    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd,
-                    'avisos_stock': avisos_stock})
+    return jsonify({'ok': True, 'doc_type': 'albara', 'albara': num_doc, 'numero': num_doc,
+                    'contact': nom_fd, 'avisos_stock': avisos_stock})
 
 
 @app.route('/api/albara-de-comanda', methods=['POST'])

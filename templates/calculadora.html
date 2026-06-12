@@ -201,6 +201,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .albara-btn{padding:8px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
 .albara-pvp{background:var(--amber-l);color:var(--amber);border:1px solid color-mix(in srgb, var(--amber) 34%, white)}.albara-pvp:hover{filter:brightness(.95)}
 .albara-cost{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}.albara-cost:hover{filter:brightness(.95)}
+.albara-pres{background:var(--green-l);color:var(--green);border:1px solid color-mix(in srgb, var(--green) 34%, white)}.albara-pres:hover{filter:brightness(.97)}
 .btn-o{background:transparent;border:1px solid #D4D0C8;color:var(--muted)}.btn-o:hover{background:var(--bg)}
 .btn-wa,.btn-wa2{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}
 .btn-wa:hover,.btn-wa2:hover{background:#ddeee5}
@@ -3421,8 +3422,11 @@ function recalcEnviament(){
   }).catch(function(){ errBox.style.display='block'; errBox.textContent='Error de connexió'; window._enviament=null; });
 }
 
-function crearAlbaraFD(modePreu){
-  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de generar l\'albarà.', 'err'); return; }
+function crearAlbaraFD(modePreu, docType){
+  docType = docType || 'albara';
+  var esPres = docType === 'pressupost';
+  var docNom = esPres ? 'pressupost' : 'albarà';
+  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de generar el ' + docNom + '.', 'err'); return; }
   var c = window._c || {};
   var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
   var grp = document.getElementById('albara-btns');
@@ -3456,6 +3460,7 @@ function crearAlbaraFD(modePreu){
     alcada:         parseFloat(document.getElementById('alcada').value)||0,
     revers_peu:     reversPeu,
     mode_preu:      modePreu,
+    doc_type:       docType,
     enviament:      (document.getElementById('env-actiu') && document.getElementById('env-actiu').checked) ? (window._enviament || null) : null,
   };
 
@@ -3466,8 +3471,10 @@ function crearAlbaraFD(modePreu){
   }).then(function(r){return r.json();}).then(function(d){
     if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
     if(d.ok){
-      if(grp) grp.innerHTML = '<span style="padding:8px 14px;border-radius:7px;background:var(--green-l);color:var(--green);border:1px solid var(--green);font-size:12px;font-weight:600">✓ Albarà ' + d.albara + ' (' + label + ')</span>';
-      showAlert('Albarà ' + d.albara + ' creat a Factura Directa (' + label + ') per ' + d.contact, 'ok');
+      var num = d.numero || d.albara || d.pressupost || '';
+      var Doc = esPres ? 'Pressupost' : 'Albarà';
+      if(grp) grp.innerHTML = '<span style="padding:8px 14px;border-radius:7px;background:var(--green-l);color:var(--green);border:1px solid var(--green);font-size:12px;font-weight:600">✓ ' + Doc + ' ' + num + ' (' + label + ')</span>';
+      showAlert(Doc + ' ' + num + ' creat a Factura Directa (' + label + ') per ' + d.contact, 'ok');
       // Avisos d'stock baix de marcs (només admin, des del backend).
       if(d.avisos_stock && d.avisos_stock.length){
         var parts = d.avisos_stock.map(function(a){
@@ -4032,7 +4039,7 @@ recalcMides();
     </div>
     <div style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
       <button type="button" id="mail-btn-copiar" onclick="copiarMailText()" style="padding:8px 16px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">Copiar text</button>
-      {% if session.is_admin %}<span id="albara-btns" style="display:inline-flex;gap:4px"><button type="button" onclick="crearAlbaraFD('pvp')" class="albara-btn albara-pvp">Albarà PVP</button><button type="button" onclick="crearAlbaraFD('cost')" class="albara-btn albara-cost">Albarà Cost</button></span>{% endif %}
+      {% if session.is_admin %}<span id="albara-btns" style="display:inline-flex;gap:4px"><button type="button" onclick="crearAlbaraFD('pvp','pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa, PVP al client">Pressupost FD</button><button type="button" onclick="crearAlbaraFD('pvp')" class="albara-btn albara-pvp">Albarà PVP</button><button type="button" onclick="crearAlbaraFD('cost')" class="albara-btn albara-cost">Albarà Cost</button></span>{% endif %}
       <button type="button" onclick="obrirMailClient()" style="padding:8px 18px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Obrir gestor de correu →</button>
     </div>
   </div>
