@@ -7330,6 +7330,84 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     return _fd_post('deliveryNotes', {'content': {'type': 'deliveryNote', 'main': main}})
 
 
+def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
+    """Crea un PRESSUPOST (estimate) a FacturaDirecta. Mateix patro que
+    l'albara pero amb type/endpoint 'estimate'/'estimates'. No es forca cap
+    serie de docNumber: FacturaDirecta assigna la serie de pressupost per
+    defecte (evita errors de 'serie inexistent')."""
+    if not data_doc:
+        data_doc = datetime.now().strftime('%Y-%m-%d')
+    main = {
+        'contact':  contact_id,
+        'currency': 'EUR',
+        'date':     data_doc,
+        'lines':    linies,
+    }
+    if notes:
+        main['notes'] = notes
+    return _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+
+
+def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
+    """Despatxa segons el tipus de document FD demanat:
+    'pressupost' -> estimate · qualsevol altre (per defecte) -> albara."""
+    if str(doc_type).strip().lower() in ('pressupost', 'estimate', 'presupuesto'):
+        return _fd_crear_estimate(contact_id, linies, notes=notes, data_doc=data_doc)
+    return _fd_crear_albara(contact_id, linies, notes=notes, data_doc=data_doc)
+
+
+def _fd_linies_de_comandes(comandes):
+    """Construeix les linies FD (a cost de produccio, una per fila de comanda)
+    i les notes a partir d'una llista de files de `comandes`. Compartit per
+    l'albara de sessio i pel document conjunt de diversos pressupostos."""
+    linies = []
+    notes_parts = []
+    for com in comandes:
+        marc         = (_row_get(com, 'marc_principal', '') or '').strip()
+        pre_marc     = (_row_get(com, 'pre_marc', '') or '').strip()
+        passpartout  = (_row_get(com, 'passpartout', '') or '').strip()
+        vidre        = (_row_get(com, 'vidre', '') or '').strip()
+        opcio_nom    = (_row_get(com, 'opcio_nom', '') or '').strip()
+        num_pres     = (_row_get(com, 'num_pressupost', '') or '').strip()
+        observacions = (_row_get(com, 'observacions', '') or '').strip()
+        quantitat    = int(_row_get(com, 'quantitat', 1) or 1)
+        cost_prod    = float(_row_get(com, 'cost_produccio', 0) or 0)
+        client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
+
+        revers_peu   = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+        encolat      = (_row_get(com, 'encolat', '') or '').strip()
+        impressio    = (_row_get(com, 'impressio', '') or '').strip()
+
+        parts_opc = []
+        if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
+        if vidre:                                parts_opc.append(vidre)
+        if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
+        if encolat and encolat != '-':           parts_opc.append(encolat)
+        if revers_peu:                           parts_opc.append('Revers amb peu')
+        if impressio and impressio != '-':       parts_opc.append(impressio)
+        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+        if parts_opc:
+            desc_marc += f' · {", ".join(parts_opc)}'
+        if opcio_nom and opcio_nom != 'Opció A':
+            desc_marc += f' ({opcio_nom})'
+        if client_nom:
+            desc_marc = f'[{client_nom}] ' + desc_marc
+
+        # cost_produccio és el total de totes les unitats; el dividim per qty.
+        unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
+        linies.append({
+            'text':      desc_marc,
+            'quantity':  float(quantitat),
+            'unitPrice': unit_cost,
+            'tax':       ['S_IVA_21'],
+        })
+        if num_pres and num_pres not in notes_parts:
+            notes_parts.append(f'Pressupost: {num_pres}')
+        if observacions:
+            notes_parts.append(f'Obs: {observacions}')
+    return linies, notes_parts
+
+
 def _fd_extract_contacts_list(r):
     """FD pot retornar la llista en diverses claus. Aquesta funció és
     una variant de _fd_extract_contact_id però per a llistes."""
@@ -8603,23 +8681,33 @@ def api_crear_albara():
             notes_parts.append('Enviament a: ' + ', '.join(str(x) for x in dest))
     notes = ' | '.join(notes_parts)
 
-    albara = _fd_crear_albara(contact_id, linies, notes=notes)
-    if '_error' in (albara or {}):
-        return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
+    # doc_type: 'albara' (per defecte) crea un albarà i descompta stock;
+    # 'pressupost' crea un estimate a FD i NO toca stock ni marca fd_albara.
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
 
-    num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+
+    if es_pressupost:
+        return jsonify({'ok': True, 'doc_type': 'pressupost', 'pressupost': num_doc,
+                        'numero': num_doc, 'contact': nom_fd, 'avisos_stock': []})
 
     # Descompte automàtic d'stock de marcs (best-effort: no fa fallar l'albarà).
     avisos_stock = []
     try:
         pre_marc = (d.get('pre_marc') or '').strip()
         avisos_stock = _descompta_stock_albara(
-            marc, pre_marc, final_w, final_h, quantitat, num_albara, session.get('user_id'))
+            marc, pre_marc, final_w, final_h, quantitat, num_doc, session.get('user_id'))
     except Exception as e:
         print('descompte stock albarà err:', e)
 
-    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd,
-                    'avisos_stock': avisos_stock})
+    return jsonify({'ok': True, 'doc_type': 'albara', 'albara': num_doc, 'numero': num_doc,
+                    'contact': nom_fd, 'avisos_stock': avisos_stock})
 
 
 @app.route('/api/albara-de-comanda', methods=['POST'])
@@ -8678,53 +8766,8 @@ def api_albara_de_comanda():
     else:
         print(f"[albara_de_comanda] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
 
-    # Build albaran lines — one per comanda row
-    linies = []
-    notes_parts = []
-    for com in comandes:
-        marc         = (_row_get(com, 'marc_principal', '') or '').strip()
-        pre_marc     = (_row_get(com, 'pre_marc', '') or '').strip()
-        passpartout  = (_row_get(com, 'passpartout', '') or '').strip()
-        vidre        = (_row_get(com, 'vidre', '') or '').strip()
-        opcio_nom    = (_row_get(com, 'opcio_nom', '') or '').strip()
-        num_pres     = (_row_get(com, 'num_pressupost', '') or '').strip()
-        observacions = (_row_get(com, 'observacions', '') or '').strip()
-        quantitat    = int(_row_get(com, 'quantitat', 1) or 1)
-        cost_prod    = float(_row_get(com, 'cost_produccio', 0) or 0)
-        client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
-
-        revers_peu   = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
-        encolat      = (_row_get(com, 'encolat', '') or '').strip()
-        impressio    = (_row_get(com, 'impressio', '') or '').strip()
-
-        parts_opc = []
-        if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
-        if vidre:                                parts_opc.append(vidre)
-        if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
-        if encolat and encolat != '-':           parts_opc.append(encolat)
-        if revers_peu:                           parts_opc.append('Revers amb peu')
-        if impressio and impressio != '-':       parts_opc.append(impressio)
-        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
-        if parts_opc:
-            desc_marc += f' · {", ".join(parts_opc)}'
-        if opcio_nom and opcio_nom != 'Opció A':
-            desc_marc += f' ({opcio_nom})'
-        if client_nom:
-            desc_marc = f'[{client_nom}] ' + desc_marc
-
-        # cost_produccio is total for all units (cTot*qty), divide by qty for unit price
-        unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
-        linies.append({
-            'text':      desc_marc,
-            'quantity':  float(quantitat),
-            'unitPrice': unit_cost,
-            'tax':       ['S_IVA_21'],
-        })
-        if num_pres and num_pres not in notes_parts:
-            notes_parts.append(f'Pressupost: {num_pres}')
-        if observacions:
-            notes_parts.append(f'Obs: {observacions}')
-
+    # Build albaran lines — one per comanda row (helper compartit)
+    linies, notes_parts = _fd_linies_de_comandes(comandes)
     notes = ' | '.join(notes_parts)
 
     albara = _fd_crear_albara(contact_id, linies, notes=notes)
@@ -8737,6 +8780,74 @@ def api_albara_de_comanda():
     execute("UPDATE comandes SET fd_albara=? WHERE sessio_id=?", [str(num_albara), sessio_id])
 
     return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+
+@app.route('/api/crear-doc-conjunt', methods=['POST'])
+@admin_required
+def api_crear_doc_conjunt():
+    """Crea UN sol albara o pressupost a FacturaDirecta amb les linies de
+    DIVERSOS pressupostos (sessions) del MATEIX client, seleccionats a
+    /historial. doc_type: 'albara' (per defecte) o 'pressupost'."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+
+    d = request.get_json(force=True) or {}
+    sessio_ids = d.get('sessio_ids')
+    sessio_ids = [str(s).strip() for s in sessio_ids if str(s).strip()] if isinstance(sessio_ids, list) else []
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
+    if not sessio_ids:
+        return jsonify({'ok': False, 'error': 'Cap pressupost seleccionat.'}), 400
+
+    ph = ','.join(['?'] * len(sessio_ids))
+    comandes = query(
+        f'''SELECT c.*, u.nom as usuari_nom, u.nom_empresa, u.nom_fiscal, u.fiscal_id, u.empresa_tel
+            FROM comandes c JOIN usuaris u ON c.user_id=u.id
+            WHERE c.sessio_id IN ({ph}) ORDER BY c.client_nom, c.id''', sessio_ids) or []
+    if not comandes:
+        return jsonify({'ok': False, 'error': 'Pressupostos no trobats.'}), 404
+
+    # Tots han de ser del mateix client (per client extern enllacat o, si no,
+    # pel nom del client). Si n'hi ha de barrejats, parem.
+    def _client_key(c):
+        cei = _row_get(c, 'client_extern_id')
+        return ('ext', cei) if cei else ('nom', (_row_get(c, 'client_nom', '') or '').strip().lower())
+    if len({_client_key(c) for c in comandes}) > 1:
+        return jsonify({'ok': False, 'error': 'Els pressupostos seleccionats no son tots del mateix client. Filtra per client o selecciona nomes els d\'un mateix client.'}), 400
+
+    c0 = comandes[0]
+    # Contacte FD: client extern enllacat -> contacte cached; si no, crear/
+    # cercar per nom del client final.
+    client_extern_id = _row_get(c0, 'client_extern_id')
+    contact_id, nom_fd = _resolve_client_extern_fd_id(client_extern_id)
+    nom_fd = nom_fd or ''
+    if not contact_id:
+        nom_fd = (_row_get(c0, 'client_nom', '') or '').strip()
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'Els pressupostos no tenen nom de client per crear el contacte a FD.'}), 400
+        contacte = _fd_crear_contacte(nom_fd)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            return jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500
+
+    linies, notes_parts = _fd_linies_de_comandes(comandes)
+    notes = ' | '.join(notes_parts)
+
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+
+    # Nomes l'albara marca les sessions com a albarades.
+    if not es_pressupost:
+        execute(f"UPDATE comandes SET fd_albara=? WHERE sessio_id IN ({ph})",
+                [str(num_doc)] + sessio_ids)
+
+    return jsonify({'ok': True, 'doc_type': 'pressupost' if es_pressupost else 'albara',
+                    'numero': num_doc, 'contact': nom_fd, 'n_pressupostos': len(sessio_ids)})
 
 
 @app.route('/api/albara-individual', methods=['POST'])
