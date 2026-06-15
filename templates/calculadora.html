@@ -4213,6 +4213,39 @@ recalcMides();
   </div>
 </div>
 
+<!-- ── Novetats (what's new) ───────────────────────────────────────────── -->
+{% if novetats_pendents %}
+<div id="novetats-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--paper,#fff);border-radius:18px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto;padding:1.6rem 1.7rem;box-shadow:0 16px 60px rgba(0,0,0,.25);font-family:var(--sans,'DM Sans',sans-serif)">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent,#a67843);margin-bottom:.6rem">🆕 {% if novetats_pendents|length > 1 %}Novetats{% else %}Novetat{% endif %}</div>
+    {% for n in novetats_pendents %}
+    <div style="{% if not loop.first %}margin-top:1.4rem;padding-top:1.4rem;border-top:1px solid var(--border,#ddd){% endif %}">
+      <h2 style="margin:0 0 .5rem;font-family:var(--serif,'Cormorant Garamond',serif);font-size:23px;line-height:1.15">{{ n.titol }}</h2>
+      {% if n.intro %}<p style="margin:0 0 .7rem;color:var(--ink-muted,#5c564c);line-height:1.55;font-size:14px">{{ n.intro }}</p>{% endif %}
+      <ul style="margin:0;padding-left:1.2rem;color:var(--ink-muted,#5c564c);font-size:13.5px;line-height:1.7">
+        {% for p in n.punts %}<li>{{ p }}</li>{% endfor %}
+        {% if session.is_admin and n.punts_admin %}{% for p in n.punts_admin %}<li style="color:var(--accent,#a67843)">{{ p }}</li>{% endfor %}{% endif %}
+      </ul>
+    </div>
+    {% endfor %}
+    <div style="display:flex;justify-content:flex-end;margin-top:1.4rem">
+      <button onclick="tancarNovetats()" style="padding:9px 20px;border:none;border-radius:8px;background:var(--success,#1c6a4b);color:#fff;font-size:13px;font-weight:600;cursor:pointer">Entesos →</button>
+    </div>
+  </div>
+</div>
+<script>
+window._NOVETATS_IDS = {{ novetats_ids | tojson }};
+function tancarNovetats(){
+  var ids = window._NOVETATS_IDS || [];
+  var m = document.getElementById('novetats-modal');
+  if(m) m.style.display = 'none';
+  if(ids.length){
+    fetch('/api/novetats/vist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:ids})}).catch(function(){});
+  }
+}
+</script>
+{% endif %}
+
 {% include '_feedback_widget.html' %}
 
 {% if not mr_trams_vist %}
