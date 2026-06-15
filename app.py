@@ -3358,6 +3358,72 @@ def index():
     return redirect(url_for('calculadora'))
 
 
+# ── Sistema de novetats (what's new) ───────────────────────────────────────
+# Registre reutilitzable: per anunciar una novetat nova, afegeix-hi una entrada.
+# Cada usuari veu les novetats que encara no ha tancat (guardades a
+# usuaris.novetats_vistes, llista d'ids separada per comes). 'audiencia':
+# 'tots' | 'admin' (només Reus Revela) | 'usuaris' (només professionals).
+# 'punts_admin' són punts extra que només veuen els admins.
+NOVETATS = [
+    {
+        'id': 'pressupost-multimarc',
+        'data': '15/06/2026',
+        'titol': 'Pressupost amb diversos marcs',
+        'audiencia': 'tots',
+        'intro': 'Ara pots ajuntar diversos marcs en un sol pressupost per al mateix client.',
+        'punts': [
+            'Calcula un marc i prem «+ Pressupost» a la barra inferior per afegir-lo.',
+            'Repeteix amb tants marcs com vulguis: el botó flotant 🛒 mostra el total.',
+            'Obre la cistella i descarrega el PDF del pressupost amb tots els marcs i el total.',
+        ],
+        'punts_admin': [
+            'Com a admin, a més del PDF pots enviar-ho directament a Factura Directa com a Pressupost o Albarà (PVP del client o cost de taller).',
+        ],
+    },
+]
+
+
+def _novetats_pendents(vistes_raw, is_admin):
+    """Retorna les novetats que aquest usuari encara no ha tancat, segons
+    audiència i la llista d'ids ja vistos (text separat per comes)."""
+    vistes = {x.strip() for x in (vistes_raw or '').split(',') if x.strip()}
+    out = []
+    for n in NOVETATS:
+        aud = n.get('audiencia', 'tots')
+        if aud == 'admin' and not is_admin:
+            continue
+        if aud == 'usuaris' and is_admin:
+            continue
+        if n['id'] in vistes:
+            continue
+        out.append(n)
+    return out
+
+
+@app.route('/api/novetats/vist', methods=['POST'])
+@login_required
+def api_novetats_vist():
+    """Marca una o més novetats com a vistes per a l'usuari actual."""
+    d = request.get_json(silent=True) or {}
+    ids = d.get('ids') or []
+    if not isinstance(ids, list):
+        ids = []
+    ids = [str(i).strip() for i in ids if str(i).strip()][:50]
+    if not ids:
+        return jsonify({'ok': True})
+    try:
+        row = query('SELECT novetats_vistes FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        vistes = {x.strip() for x in (_row_get(row, 'novetats_vistes', '') or '').split(',') if x.strip()}
+        vistes.update(ids)
+        valid = {n['id'] for n in NOVETATS}
+        vistes = {v for v in vistes if v in valid}  # no deixem créixer amb ids obsolets
+        execute('UPDATE usuaris SET novetats_vistes=? WHERE id=?',
+                [','.join(sorted(vistes)), session['user_id']])
+    except Exception as e:
+        print(f'[novetats] marcar vist error: {e}')
+    return jsonify({'ok': True})
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3400,6 +3466,14 @@ def calculadora():
         'tram3_pct':   float(_row_get(user, 'mr_tram3_pct') if _row_get(user, 'mr_tram3_pct') is not None else fb) if marge_pro_actiu else 0.0,
         'defaults_recomanats': get_mr_recomendats(marge_actual_user),
     }
+    # Novetats pendents (tolerant si la columna encara no s'ha migrat)
+    novetats_pendents = []
+    try:
+        nrow = query('SELECT novetats_vistes FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        novetats_pendents = _novetats_pendents(_row_get(nrow, 'novetats_vistes', '') or '',
+                                                bool(session.get('is_admin')))
+    except Exception as e:
+        print(f'[novetats] lectura pendents skip: {e}')
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
@@ -3413,6 +3487,8 @@ def calculadora():
                            is_admin=1 if session.get('is_admin') else 0,
                            mr_trams=mr_trams,
                            mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)),
+                           novetats_pendents=novetats_pendents,
+                           novetats_ids=[n['id'] for n in novetats_pendents],
                            extras=get_extras_list(),
                            user_has_email=user_has_email)
 
@@ -11187,6 +11263,8 @@ def init_db():
                 ('usuaris','mr_trams_vist','INTEGER DEFAULT 0'),
                 # Paper Hahnemühle Photo Rag Baryta — activació per usuari
                 ('usuaris','baryta_actiu','INTEGER DEFAULT 0'),
+                # Novetats (what's new) ja vistes per l'usuari (ids per comes)
+                ('usuaris','novetats_vistes','TEXT DEFAULT \'\''),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -11518,6 +11596,8 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN mr_trams_vist INTEGER DEFAULT 0",
                 # Paper Hahnemühle Photo Rag Baryta — activació per usuari
                 "ALTER TABLE usuaris ADD COLUMN baryta_actiu INTEGER DEFAULT 0",
+                # Novetats (what's new) ja vistes per l'usuari (ids per comes)
+                "ALTER TABLE usuaris ADD COLUMN novetats_vistes TEXT DEFAULT ''",
             ]:
                 try:
                     db.execute(sql)
