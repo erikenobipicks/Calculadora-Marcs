@@ -3501,21 +3501,32 @@ function crearAlbaraFD(modePreu, docType){
 // Permet acumular diversos marcs en un sol pressupost/albarà per a un client.
 var _cistella = [];
 
+// Format: "Marc {amplada}x{alçada} - Ref {ref} + {acabat} [+ Passpartú N cm] + Fotografia Impresa"
+function _gNum(n){ return (Math.round((parseFloat(n)||0)*100)/100).toString(); }
+function _optLabel(name){
+  var sel = document.querySelector('input[name="'+name+'"]:checked');
+  if(!sel || !sel.value) return '';
+  var lbl = sel.closest('.opt-btn');
+  var txt = lbl ? lbl.querySelector('.opt-text') : null;
+  return txt ? (txt.textContent||'').trim() : '';
+}
 function _descripcioMarcActual(){
-  var ref = (document.getElementById('marc_principal')||{}).value || '';
+  var ref = ((document.getElementById('marc_principal')||{}).value || '').trim();
   var w = parseFloat((document.getElementById('marc-w')||{}).value)||0;
   var h = parseFloat((document.getElementById('marc-h')||{}).value)||0;
-  var txt = ref ? ('Marc ' + ref) : 'Emmarcació';
-  if(w && h) txt += ' ' + w + 'x' + h + ' cm';
-  var opc = [];
-  var inte=(document.querySelector('input[name="interior"]:checked')||{}).value||'';
-  var prot=(document.querySelector('input[name="proteccio"]:checked')||{}).value||'';
-  var munt=(document.querySelector('input[name="muntatge"]:checked')||{}).value||'';
-  if(inte) opc.push(inte);
-  if(prot) opc.push(prot);
-  if(munt) opc.push(munt);
-  if(opc.length) txt += ' · ' + opc.join(', ');
-  return txt;
+  var cap = 'Marc' + ((w && h) ? (' ' + _gNum(w) + 'x' + _gNum(h)) : '');
+  if(ref) cap += ' - Ref ' + ref;
+  var parts = [];
+  var munt = _optLabel('muntatge'); if(munt) parts.push(munt);
+  var prot = _optLabel('proteccio'); if(prot) parts.push(prot);
+  var inte = _optLabel('interior');
+  if(inte){
+    var cm = parseFloat((document.getElementById('cm-passpartu')||{}).value)||0;
+    parts.push(cm>0 ? (inte + ' ' + _gNum(cm) + ' cm') : inte);
+  }
+  var imp = document.getElementById('chk-impressio');
+  if(imp && imp.checked) parts.push('Fotografia Impresa');
+  return cap + (parts.length ? (' + ' + parts.join(' + ')) : '');
 }
 
 function afegirACistella(){
