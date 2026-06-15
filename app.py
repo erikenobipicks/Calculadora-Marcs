@@ -10148,9 +10148,11 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
 
 
 @app.route('/api/pdf-marcs', methods=['POST'])
-@admin_required
+@login_required
 def api_pdf_marcs():
-    """Genera el PDF d'un pressupost multi-marc (cistella) per a un client."""
+    """Genera el PDF d'un pressupost multi-marc (cistella) per a un client.
+    Disponible per a tots els usuaris (al seu PVP); el mode 'cost'/PVD només
+    el pot fer servir l'admin, perquè és preu intern de taller."""
     d = request.get_json(force=True) or {}
     items = d.get('items')
     if not isinstance(items, list) or not items:
@@ -10161,6 +10163,9 @@ def api_pdf_marcs():
         'nif': (d.get('client_nif') or '').strip(),
     }
     mode = (d.get('mode_preu') or 'pvp').strip().lower()
+    # Els usuaris no-admin sempre generen el PDF a PVP (mai a cost de taller).
+    if mode != 'pvp' and not session.get('is_admin'):
+        mode = 'pvp'
     try:
         pdf = crear_pdf_marcs(items, client, mode=mode,
                               num_pressupost=(d.get('num_pressupost') or '').strip(),
