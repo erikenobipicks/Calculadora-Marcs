@@ -8850,6 +8850,92 @@ def api_crear_doc_conjunt():
                     'numero': num_doc, 'contact': nom_fd, 'n_pressupostos': len(sessio_ids)})
 
 
+def _resolve_fd_contact_for_request(d):
+    """Resol el contacte FD per a un client de la calculadora a partir del
+    payload (client_extern_id enllaçat -> contacte cached; si no, cercar per
+    NIF o crear pel nom). Retorna (contact_id, nom_fd, error_response_or_None)."""
+    client_extern_id = (d.get('client_extern_id') or '').strip() or None
+    nif_client = (d.get('client_nif') or '').strip()
+    client_tel = (d.get('client_tel') or '').strip()
+    nom_fd = (d.get('client_nom') or '').strip()
+
+    contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
+    if contact_id:
+        return contact_id, (fd_nom or nom_fd), None
+    if not nom_fd:
+        return None, '', (jsonify({'ok': False, 'error': 'Cal omplir el nom del client.'}), 400)
+    contacte = _fd_cerca_contacte(nif=nif_client) if nif_client else None
+    if not contacte:
+        contacte = _fd_crear_contacte(nom_fd, nif=nif_client or None, telefon=client_tel or None)
+    if '_error' in (contacte or {}):
+        return None, '', (jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500)
+    cid = _fd_extract_contact_id(contacte)
+    if not cid:
+        return None, '', (jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500)
+    return cid, nom_fd, None
+
+
+def _linies_de_cistella(items, mode_preu):
+    """Construeix les linies FD a partir de la cistella de marcs del pressupost
+    multi-marc. Cada item: {text, quantity, preu_net, cost_produccio}. Segons
+    mode_preu fa servir el PVP net o el cost de produccio."""
+    linies = []
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        text = (str(it.get('text') or 'Emmarcació')).strip()[:300]
+        try:
+            qty = float(it.get('quantity') or 1) or 1
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            base = float(it.get('preu_net') or 0) if mode_preu == 'pvp' else float(it.get('cost_produccio') or 0)
+        except (TypeError, ValueError):
+            base = 0.0
+        unit = round(base / qty, 2) if qty > 0 else round(base, 2)
+        linies.append({'text': text, 'quantity': qty, 'unitPrice': unit, 'tax': ['S_IVA_21']})
+    return linies
+
+
+@app.route('/api/crear-doc-marcs', methods=['POST'])
+@admin_required
+def api_crear_doc_marcs():
+    """Crea UN sol document a FacturaDirecta (albara o pressupost) amb DIVERSOS
+    marcs (cistella del pressupost multi-marc), per a un mateix client."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+    d = request.get_json(force=True) or {}
+    items = d.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'El pressupost no té cap marc.'}), 400
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
+    mode_preu = (d.get('mode_preu') or 'pvp').strip().lower()
+
+    contact_id, nom_fd, err = _resolve_fd_contact_for_request(d)
+    if err is not None:
+        return err
+
+    linies = _linies_de_cistella(items, mode_preu)
+    if not linies:
+        return jsonify({'ok': False, 'error': 'No s\'han pogut construir les línies del pressupost.'}), 400
+
+    notes_parts = []
+    if (d.get('num_pressupost') or '').strip():
+        notes_parts.append(f"Pressupost: {d.get('num_pressupost').strip()}")
+    if (d.get('observacions') or '').strip():
+        notes_parts.append(f"Obs: {d.get('observacions').strip()}")
+    notes = ' | '.join(notes_parts)
+
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+    return jsonify({'ok': True, 'doc_type': 'pressupost' if es_pressupost else 'albara',
+                    'numero': num_doc, 'contact': nom_fd, 'n_marcs': len(linies)})
+
+
 @app.route('/api/albara-individual', methods=['POST'])
 @admin_required
 def api_albara_individual():
@@ -9884,6 +9970,206 @@ def crear_pdf(c, mode=''):
     buf.seek(0)
     return buf
 
+
+def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='', user_id=0):
+    """PDF d'un pressupost amb DIVERSOS marcs (cistella multi-marc) per a un
+    mateix client. `items` = [{text, quantity, preu_net, cost_produccio}].
+    `mode` = 'pvp' (preu de venda) o 'pvd' (preu taller/cost)."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            rightMargin=15*mm, leftMargin=15*mm,
+                            topMargin=12*mm, bottomMargin=15*mm)
+    W = A4[0] - 30*mm
+    DARK  = colors.HexColor("#1C1B18")
+    LIG   = colors.HexColor("#F5F6FA")
+    BRD   = colors.HexColor("#E5E2DB")
+    WHITE = colors.white
+
+    def p(txt, bold=False, size=10, color=DARK, align='LEFT'):
+        st = ParagraphStyle('x', fontName='DejaVu-Bold' if bold else 'DejaVu',
+                            fontSize=size, textColor=color,
+                            alignment={'LEFT':0,'CENTER':1,'RIGHT':2}[align],
+                            leading=size*1.4)
+        return Paragraph(str(txt) if txt not in (None, '') else '—', st)
+
+    story = []
+
+    # ── Capçalera + dades empresa ─────────────────────────────────────────
+    u_data = query('SELECT nom_empresa, empresa_adreca, brand_color FROM usuaris WHERE id=?',
+                   [user_id or 0], one=True)
+    nom_empresa = (_row_get(u_data, 'nom_empresa', '') or '') if u_data else ''
+    green_hex = _normalize_hex_color(_row_get(u_data, 'brand_color', DEFAULT_BRAND_COLOR) if u_data else DEFAULT_BRAND_COLOR)
+    if not nom_empresa:
+        _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+        nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
+    adreca = (_row_get(u_data, 'empresa_adreca', '') or '') if u_data else ''
+    if not adreca:
+        r_adr = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
+        adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
+    GREEN = colors.HexColor(green_hex)
+
+    header = Table([[
+        p('Pressupost', bold=True, size=20, color=WHITE),
+        p(nom_empresa + '\n' + adreca, size=8,
+          color=colors.HexColor("#9E9B94"), align='RIGHT')
+    ]], colWidths=[W*0.55, W*0.45])
+    header.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1), DARK),
+        ('TOPPADDING',(0,0),(-1,-1),14),('BOTTOMPADDING',(0,0),(-1,-1),14),
+        ('LEFTPADDING',(0,0),(-1,-1),14),('RIGHTPADDING',(0,0),(-1,-1),14),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 3*mm))
+
+    # ── Logo (si existeix) ────────────────────────────────────────────────
+    try:
+        u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [user_id or 0], one=True)
+        logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
+        if logo_data_url and logo_data_url.startswith('data:'):
+            import base64 as _b64
+            from reportlab.platypus import Image as RLImg2
+            from PIL import Image as PILImg
+            import io as _io2
+            _, b64data = logo_data_url.split(',', 1)
+            img_data = _b64.b64decode(b64data)
+            pil = PILImg.open(_io2.BytesIO(img_data))
+            orig_w, orig_h = pil.size
+            ratio = min(60*mm / orig_w, 25*mm / orig_h)
+            logo_img = RLImg2(io.BytesIO(img_data), width=orig_w*ratio, height=orig_h*ratio)
+            logo_img.hAlign = 'CENTER'
+            story.append(Spacer(1, 3*mm)); story.append(logo_img); story.append(Spacer(1, 3*mm))
+    except Exception as _e:
+        print(f"Logo PDF marcs error: {_e}")
+
+    # ── Dades client ──────────────────────────────────────────────────────
+    def fila(lbl, val, color_val=None):
+        return [p(lbl, bold=True, size=9, color=colors.HexColor("#6B6860")),
+                p(str(val) if val not in (None, '', '-') else '—', size=10, color=color_val or DARK)]
+    cli_rows = []
+    if (num_pressupost or '').strip():
+        cli_rows.append(fila('Núm.:', num_pressupost, color_val=GREEN))
+    cli_rows.append(fila('Client:', (client or {}).get('nom') or '—'))
+    if (client or {}).get('tel'):
+        cli_rows.append(fila('Telèfon:', client.get('tel')))
+    if (client or {}).get('nif'):
+        cli_rows.append(fila('NIF/DNI:', client.get('nif')))
+    cli_rows.append(fila('Data:', datetime.now().strftime('%d/%m/%Y')))
+    t1 = Table(cli_rows, colWidths=[W*0.25, W*0.75])
+    t1.setStyle(TableStyle([
+        ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, WHITE]),
+        ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+        ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+    ]))
+    story.append(t1)
+    story.append(Spacer(1, 5*mm))
+
+    # ── Taula de marcs ────────────────────────────────────────────────────
+    es_pvd = (mode == 'pvd' or mode == 'cost')
+    head = [p('Concepte', bold=True, size=9, color=WHITE),
+            p('Unitats', bold=True, size=9, color=WHITE, align='CENTER'),
+            p('Preu/u', bold=True, size=9, color=WHITE, align='RIGHT'),
+            p('Import', bold=True, size=9, color=WHITE, align='RIGHT')]
+    rows = [head]
+    subtotal = 0.0
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        text = (str(it.get('text') or 'Emmarcació')).strip()
+        try:
+            qty = float(it.get('quantity') or 1) or 1
+        except Exception:
+            qty = 1
+        try:
+            base = float(it.get('cost_produccio') or 0) if es_pvd else float(it.get('preu_net') or 0)
+        except Exception:
+            base = 0.0
+        unit = round(base / qty, 2) if qty > 0 else round(base, 2)
+        import_linia = round(unit * qty, 2)
+        subtotal += import_linia
+        qty_txt = str(int(qty)) if float(qty).is_integer() else f'{qty:g}'
+        rows.append([
+            p(text, size=9),
+            p(qty_txt, size=9, align='CENTER'),
+            p(f'{unit:.2f} €', size=9, align='RIGHT'),
+            p(f'{import_linia:.2f} €', size=9, align='RIGHT'),
+        ])
+    tmarcs = Table(rows, colWidths=[W*0.52, W*0.14, W*0.16, W*0.18])
+    tmarcs.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,0), DARK),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[WHITE, LIG]),
+        ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+        ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+    ]))
+    story.append(tmarcs)
+    story.append(Spacer(1, 5*mm))
+
+    # ── Totals ────────────────────────────────────────────────────────────
+    iva = round(subtotal * 0.21, 2)
+    total = round(subtotal + iva, 2)
+    tot_rows = [
+        [p('Subtotal (sense IVA)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+         p(f'{subtotal:.2f} €', size=10, align='RIGHT')],
+        [p('IVA 21%', bold=True, size=9, color=colors.HexColor("#6B6860")),
+         p(f'{iva:.2f} €', size=10, align='RIGHT')],
+        [p('TOTAL amb IVA', bold=True, size=11, color=GREEN),
+         p(f'{total:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
+    ]
+    ttot = Table(tot_rows, colWidths=[W*0.62, W*0.38])
+    ttot.setStyle(TableStyle([
+        ('BACKGROUND',(0,2),(-1,2), colors.HexColor("#E8F3EE")),
+        ('ROWBACKGROUNDS',(0,0),(-1,1),[LIG, WHITE]),
+        ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+        ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+        ('LINEABOVE',(0,2),(-1,2),1.5,GREEN),
+    ]))
+    story.append(ttot)
+
+    if (observacions or '').strip():
+        story.append(Spacer(1, 5*mm))
+        story.append(p('Observacions', bold=True, size=9, color=colors.HexColor("#6B6860")))
+        story.append(Spacer(1, 1*mm))
+        story.append(p(observacions, size=9))
+
+    story.append(Spacer(1, 6*mm))
+    story.append(HRFlowable(width=W, thickness=0.5, color=BRD))
+    story.append(Spacer(1, 2*mm))
+    story.append(p(f'{nom_empresa} · {adreca}', size=8,
+                   color=colors.HexColor("#636E72"), align='CENTER'))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+@app.route('/api/pdf-marcs', methods=['POST'])
+@admin_required
+def api_pdf_marcs():
+    """Genera el PDF d'un pressupost multi-marc (cistella) per a un client."""
+    d = request.get_json(force=True) or {}
+    items = d.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'El pressupost no té cap marc.'}), 400
+    client = {
+        'nom': (d.get('client_nom') or '').strip(),
+        'tel': (d.get('client_tel') or '').strip(),
+        'nif': (d.get('client_nif') or '').strip(),
+    }
+    mode = (d.get('mode_preu') or 'pvp').strip().lower()
+    try:
+        pdf = crear_pdf_marcs(items, client, mode=mode,
+                              num_pressupost=(d.get('num_pressupost') or '').strip(),
+                              observacions=(d.get('observacions') or '').strip(),
+                              user_id=session.get('user_id', 0))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Error generant PDF: {e}'}), 500
+    nom_fitxer = (client['nom'] or 'pressupost').replace(' ', '_')[:40]
+    return send_file(pdf, mimetype='application/pdf', as_attachment=True,
+                     download_name=f"pressupost_marcs_{nom_fitxer}.pdf")
 
 
 @app.route('/ajustos')
