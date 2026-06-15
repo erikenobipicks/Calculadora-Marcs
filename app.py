@@ -7338,10 +7338,11 @@ def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
     if not data_doc:
         data_doc = datetime.now().strftime('%Y-%m-%d')
     main = {
-        'contact':  contact_id,
-        'currency': 'EUR',
-        'date':     data_doc,
-        'lines':    linies,
+        'contact':   contact_id,
+        'currency':  'EUR',
+        'baseState': 'pending',  # estat inicial del pressupost (requerit per l'API)
+        'date':      data_doc,
+        'lines':     linies,
     }
     if notes:
         main['notes'] = notes
