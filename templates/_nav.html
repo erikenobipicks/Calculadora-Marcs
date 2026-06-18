@@ -1,23 +1,20 @@
-{# Shared nav. Filosofia: nav minimal homogeni; els admins veuen els
-   mateixos enllaços que els no-admin més 2 ítems extra (Pendents
-   albarà i accés al panell /admin). Tot el detall d'eines admin
-   està a /admin com a cards. #}
+{# Nav compartida de les pàgines d'administració (markup .links, que
+   conserva el seu CSS i ordre). El menú per entitat i els enllaços
+   d'admin viuen a _nav_admin_links.html (un sol lloc per a tot). #}
 <nav class="site-nav">
   <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
-  <span class="brand">OBJECTIU{% if session.is_admin %} — Admin{% endif %}</span>
+  <span class="brand"><a href="/inici" style="color:inherit;text-decoration:none">OBJECTIU{% if session.is_admin %} — Admin{% endif %}</a></span>
   <div class="links">
-    <a href="/calculadora">Calculadora</a>
-    <a href="/historial">Pressupostos</a>
-    <a href="/cataleg">Catàleg</a>
+    <a href="/inici" {% if request.path == '/inici' %}class="active"{% endif %}>Inici</a>
+    <a href="/calculadora" {% if request.path == '/calculadora' %}class="active"{% endif %}>Calculadora</a>
+    <a href="/historial" {% if request.path == '/historial' %}class="active"{% endif %}>Pressupostos</a>
+    <a href="/cataleg" {% if request.path == '/cataleg' %}class="active"{% endif %}>Catàleg</a>
     <a href="https://reusrevela.cat/area-privada/lienzos" target="_blank" rel="noopener noreferrer">Llenços ↗</a>
     {% if not session.is_admin %}
-      <a href="/ajustos">Ajustos</a>
-      <a href="/ajuda">Ajuda</a>
+      <a href="/ajustos" {% if request.path == '/ajustos' %}class="active"{% endif %}>Ajustos</a>
+      <a href="/ajuda" {% if request.path == '/ajuda' %}class="active"{% endif %}>Ajuda</a>
     {% endif %}
-    {% if session.is_admin %}
-      <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">⏳ Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
-      <a href="/admin">⚙️ Admin</a>
-    {% endif %}
+    {% include '_nav_admin_links.html' %}
     <a href="/logout">Sortir</a>
   </div>
 </nav>
