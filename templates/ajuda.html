@@ -1,15 +1,6 @@
-﻿<!DOCTYPE html>
-<html lang="ca">
-<head>
-<meta name="theme-color" content="{{ nav_color|default('#1A6B45') }}">
-<link rel="shortcut icon" href="https://reusrevela.cat/static/img/favicon.ico">
-<link rel="icon" type="image/svg+xml" href="https://reusrevela.cat/static/img/favicon-rr.svg">
-<link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/apple-touch-icon.png">
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reus Revela — Ajuda</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='private_whatsapp.css') }}">
+﻿{% extends "base.html" %}
+{% block title %}Reus Revela — Ajuda{% endblock %}
+{% block head %}
 <style>
 :root{
   --bg:#f6f3ee;
@@ -427,36 +418,8 @@ nav{
   }
 }
 </style>
-<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
-</head>
-<body>
-<nav class="site-nav">
-  <a class="brand" href="/">{{ session.get('empresa_nom', 'Calculadora') }}</a>
-  <button class="nav-toggle" type="button" aria-label="Obrir menu" onclick="toggleMobileNav(this)">&#9776;</button>
-  <div class="nav-right">
-    <span class="nav-user">{{ session.nom }}</span>
-    <a href="/calculadora">Calculadora</a>
-    <a href="/historial">Pressupostos</a>
-    <a href="/cataleg">Cat&agrave;leg</a>
-    <a href="https://reusrevela.cat/area-privada/lienzos" target="_blank" rel="noopener noreferrer">Llen&ccedil;os &#8599;</a>
-    {% if not session.is_admin %}
-    <a href="/">Inici</a>
-    <a href="/ajustos">Ajustos</a>
-    {% endif %}
-    {% include '_nav_admin_links.html' %}
-    <a href="/logout">Sortir</a>
-  </div>
-</nav>
-{% if session.is_admin %}
-<style>
-.nav-pendents{position:relative}
-.nav-badge{background:var(--amber,#f59e0b);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;min-width:16px;text-align:center;display:inline-block;line-height:15px}
-</style>
-<script>
-(function(){var b=document.getElementById('nav-pendents-badge');if(!b)return;function u(){fetch('/api/pendents-albara').then(r=>r.json()).then(d=>{b.textContent=d.n;b.style.display=d.n?'inline-block':'none'}).catch(()=>{})}setInterval(u,60000)})();
-</script>
-{% endif %}
-
+{% endblock %}
+{% block content %}
 <main class="page">
   <section class="hero">
     <div>
@@ -898,17 +861,9 @@ nav{
     </section>
   </div>
 </main>
-
+{% endblock %}
+{% block scripts %}
 <script>
-function toggleMobileNav(btn){
-  var nav = btn.closest('nav');
-  if(nav) nav.classList.toggle('nav-open');
-}
-document.addEventListener('click', function(ev){
-  document.querySelectorAll('nav.nav-open').forEach(function(nav){
-    if(!nav.contains(ev.target)) nav.classList.remove('nav-open');
-  });
-});
 const searchInput = document.getElementById('help-search');
 const sectionCards = Array.from(document.querySelectorAll('.help-section'));
 const filterButtons = Array.from(document.querySelectorAll('.pill'));
@@ -968,8 +923,4 @@ document.querySelectorAll('.item').forEach((item, index) => {
 searchInput.addEventListener('input', updateSections);
 updateSections();
 </script>
-{% include '_private_whatsapp_widget.html' %}
-<script src="{{ url_for('static', filename='private_whatsapp.js') }}"></script>
-{% include '_feedback_widget.html' %}
-</body>
-</html>
+{% endblock %}
