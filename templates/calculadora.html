@@ -2,10 +2,10 @@
 <html lang="ca">
 <head>
 <meta name="theme-color" content="{{ nav_color|default('#1A6B45') }}">
-<link rel="shortcut icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
-<link rel="icon" type="image/png" sizes="32x32" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
-<link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
-<meta property="og:image" content="https://reusrevela.cat/static/img/logo-reusrevela.png">
+<link rel="shortcut icon" href="https://reusrevela.cat/static/img/favicon.ico">
+<link rel="icon" type="image/svg+xml" href="https://reusrevela.cat/static/img/favicon-rr.svg">
+<link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/apple-touch-icon.png">
+<meta property="og:image" content="https://reusrevela.cat/static/img/logo-rr-1024.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reus Revela — Calculadora de marcs</title>
@@ -201,6 +201,7 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .albara-btn{padding:8px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
 .albara-pvp{background:var(--amber-l);color:var(--amber);border:1px solid color-mix(in srgb, var(--amber) 34%, white)}.albara-pvp:hover{filter:brightness(.95)}
 .albara-cost{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}.albara-cost:hover{filter:brightness(.95)}
+.albara-pres{background:var(--green-l);color:var(--green);border:1px solid color-mix(in srgb, var(--green) 34%, white)}.albara-pres:hover{filter:brightness(.97)}
 .btn-o{background:transparent;border:1px solid #D4D0C8;color:var(--muted)}.btn-o:hover{background:var(--bg)}
 .btn-wa,.btn-wa2{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}
 .btn-wa:hover,.btn-wa2:hover{background:#ddeee5}
@@ -255,6 +256,8 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .sb-albara:hover{background:rgba(122,184,148,.16)}
 #sb-albara-pvp{margin-left:6px;position:relative}
 #sb-albara-pvp::before{content:'';position:absolute;left:-6px;top:7px;bottom:7px;width:1px;background:rgba(255,255,255,.14)}
+.sb-cistella{background:rgba(214,158,77,.16);color:#f2cf94;border:1px solid rgba(214,158,77,.6)}
+.sb-cistella:hover{background:rgba(214,158,77,.28)}
 .sticky-bar-cta svg{display:block;flex-shrink:0}
 body.has-sticky-bar{padding-bottom:78px}
 @media (max-width:640px){
@@ -268,6 +271,7 @@ body.has-sticky-bar{padding-bottom:78px}
   /* Albarà PVP/PVD: en mòbil amaguem el prefix "Albarà " i deixem només
      PVP/PVD, perquè la barra (admin) no es desbordi lateralment. */
   .sb-albara .sb-prefix{display:none}
+  .sb-cistella .sb-prefix{display:none}
   body.has-sticky-bar{padding-bottom:66px}
 }
 </style>
@@ -901,9 +905,11 @@ body.has-sticky-bar{padding-bottom:78px}
       <span class="sb-label">Reus Revela</span>
     </button>
     {% if session.is_admin %}
+    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pres" onclick="crearAlbaraFD('pvp','pressupost')" title="Generar pressupost (estimate) a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Pressupost </span>FD</span></button>
     <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVP</span></button>
     <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVD</span></button>
     {% endif %}
+    <button type="button" class="sticky-bar-cta sb-cistella" id="sb-cistella-add" onclick="afegirACistella()" title="Afegir aquest marc a un pressupost amb diversos marcs"><span class="sb-label">+ <span class="sb-prefix">Pressupost</span></span></button>
     <button type="button" class="sticky-bar-cta sb-secondary" id="sb-nou" onclick="novaComanda()" title="Nou càlcul de marc">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span class="sb-label">Nou</span>
@@ -3422,8 +3428,11 @@ function recalcEnviament(){
   }).catch(function(){ errBox.style.display='block'; errBox.textContent='Error de connexió'; window._enviament=null; });
 }
 
-function crearAlbaraFD(modePreu){
-  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de generar l\'albarà.', 'err'); return; }
+function crearAlbaraFD(modePreu, docType){
+  docType = docType || 'albara';
+  var esPres = docType === 'pressupost';
+  var docNom = esPres ? 'pressupost' : 'albarà';
+  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de generar el ' + docNom + '.', 'err'); return; }
   var c = window._c || {};
   var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
   var grp = document.getElementById('albara-btns');
@@ -3457,6 +3466,7 @@ function crearAlbaraFD(modePreu){
     alcada:         parseFloat(document.getElementById('alcada').value)||0,
     revers_peu:     reversPeu,
     mode_preu:      modePreu,
+    doc_type:       docType,
     enviament:      (document.getElementById('env-actiu') && document.getElementById('env-actiu').checked) ? (window._enviament || null) : null,
   };
 
@@ -3467,8 +3477,10 @@ function crearAlbaraFD(modePreu){
   }).then(function(r){return r.json();}).then(function(d){
     if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
     if(d.ok){
-      if(grp) grp.innerHTML = '<span style="padding:8px 14px;border-radius:7px;background:var(--green-l);color:var(--green);border:1px solid var(--green);font-size:12px;font-weight:600">✓ Albarà ' + d.albara + ' (' + label + ')</span>';
-      showAlert('Albarà ' + d.albara + ' creat a Factura Directa (' + label + ') per ' + d.contact, 'ok');
+      var num = d.numero || d.albara || d.pressupost || '';
+      var Doc = esPres ? 'Pressupost' : 'Albarà';
+      if(grp) grp.innerHTML = '<span style="padding:8px 14px;border-radius:7px;background:var(--green-l);color:var(--green);border:1px solid var(--green);font-size:12px;font-weight:600">✓ ' + Doc + ' ' + num + ' (' + label + ')</span>';
+      showAlert(Doc + ' ' + num + ' creat a Factura Directa (' + label + ') per ' + d.contact, 'ok');
       // Avisos d'stock baix de marcs (només admin, des del backend).
       if(d.avisos_stock && d.avisos_stock.length){
         var parts = d.avisos_stock.map(function(a){
@@ -3484,6 +3496,131 @@ function crearAlbaraFD(modePreu){
     if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
     showAlert('Error de connexió amb Factura Directa', 'err');
   });
+}
+
+// ── Cistella pressupost multi-marc ─────────────────────────────────────────
+// Permet acumular diversos marcs en un sol pressupost/albarà per a un client.
+var _cistella = [];
+
+// Format: "Marc {amplada}x{alçada} - Ref {ref} + {acabat} [+ Passpartú N cm] + Fotografia Impresa"
+function _gNum(n){ return (Math.round((parseFloat(n)||0)*100)/100).toString(); }
+function _optLabel(name){
+  var sel = document.querySelector('input[name="'+name+'"]:checked');
+  if(!sel || !sel.value) return '';
+  var lbl = sel.closest('.opt-btn');
+  var txt = lbl ? lbl.querySelector('.opt-text') : null;
+  return txt ? (txt.textContent||'').trim() : '';
+}
+function _descripcioMarcActual(){
+  var ref = ((document.getElementById('marc_principal')||{}).value || '').trim();
+  var w = parseFloat((document.getElementById('marc-w')||{}).value)||0;
+  var h = parseFloat((document.getElementById('marc-h')||{}).value)||0;
+  var cap = 'Marc' + ((w && h) ? (' ' + _gNum(w) + 'x' + _gNum(h)) : '');
+  if(ref) cap += ' - Ref ' + ref;
+  var parts = [];
+  var munt = _optLabel('muntatge'); if(munt) parts.push(munt);
+  var prot = _optLabel('proteccio'); if(prot) parts.push(prot);
+  var inte = _optLabel('interior');
+  if(inte){
+    var cm = parseFloat((document.getElementById('cm-passpartu')||{}).value)||0;
+    parts.push(cm>0 ? (inte + ' ' + _gNum(cm) + ' cm') : inte);
+  }
+  var imp = document.getElementById('chk-impressio');
+  if(imp && imp.checked) parts.push('Fotografia Impresa');
+  return cap + (parts.length ? (' + ' + parts.join(' + ')) : '');
+}
+
+function afegirACistella(){
+  if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans d\'afegir-lo al pressupost.', 'err'); return; }
+  var c = window._c;
+  if(!c || !((c.preu_net||0)>0 || (c.cost_produccio||0)>0)){ showAlert('Calcula un marc abans d\'afegir-lo al pressupost.', 'err'); return; }
+  var qty = parseFloat((document.getElementById('quantitat')||{}).value)||1;
+  _cistella.push({
+    text: _descripcioMarcActual(),
+    quantity: qty,
+    preu_net: c.preu_net||0,
+    cost_produccio: c.cost_produccio||0
+  });
+  renderCistella();
+  showAlert('Marc afegit al pressupost (' + _cistella.length + ' en total).', 'ok');
+}
+
+function eliminarDeCistella(i){ _cistella.splice(i,1); renderCistella(); }
+
+function renderCistella(){
+  var n = _cistella.length;
+  var fab = document.getElementById('cistella-fab');
+  var cnt = document.getElementById('cistella-count');
+  if(cnt) cnt.textContent = n;
+  if(fab) fab.style.display = n>0 ? 'inline-flex' : 'none';
+  var cont = document.getElementById('cistella-items');
+  if(cont){
+    if(!n){
+      cont.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:1.5rem 0">El pressupost és buit.<br>Calcula un marc i prem «+ Pressupost».</p>';
+    } else {
+      cont.innerHTML = _cistella.map(function(it,i){
+        var pvp=(it.preu_net||0), pvd=(it.cost_produccio||0);
+        var meta = it.quantity+' u · PVP '+pvp.toFixed(2)+' €';
+        if(IS_ADMIN) meta += ' · cost '+pvd.toFixed(2)+' €';
+        return '<div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--border)">'+
+          '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;line-height:1.3">'+escapeHtml(it.text)+'</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+meta+'</div></div>'+
+          '<button type="button" onclick="eliminarDeCistella('+i+')" title="Treure" style="background:none;border:none;color:#B84040;cursor:pointer;font-size:20px;line-height:1;padding:0 4px">×</button>'+
+        '</div>';
+      }).join('');
+    }
+  }
+  var totPvp=_cistella.reduce(function(s,it){return s+(it.preu_net||0);},0);
+  var totPvd=_cistella.reduce(function(s,it){return s+(it.cost_produccio||0);},0);
+  var elPvp=document.getElementById('cistella-tot-pvp');
+  var elPvd=document.getElementById('cistella-tot-pvd');
+  if(elPvp) elPvp.textContent = totPvp.toFixed(2)+' € + IVA';
+  if(elPvd) elPvd.textContent = totPvd.toFixed(2)+' €';
+}
+
+function obrirCistella(){ renderCistella(); var m=document.getElementById('cistella-modal'); if(m) m.style.display='flex'; }
+function tancarCistella(){ var m=document.getElementById('cistella-modal'); if(m) m.style.display='none'; }
+
+function _cistellaPayloadBase(){
+  return {
+    items: _cistella,
+    client_nom: (document.getElementById('client_nom')||{}).value||'',
+    client_tel: (document.getElementById('client_tel')||{}).value||'',
+    client_extern_id: (document.getElementById('client_extern_id')||{}).value||'',
+    num_pressupost: window._numPressupost||'',
+    observacions: (document.getElementById('observacions')||{}).value||''
+  };
+}
+
+function cistellaPDF(mode){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  var payload=_cistellaPayloadBase(); payload.mode_preu=mode||'pvp';
+  fetch('/api/pdf-marcs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ if(!r.ok) return r.json().then(function(d){throw new Error(d.error||'Error');}); return r.blob(); })
+    .then(function(blob){
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download='pressupost_marcs.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(url);},1500);
+    }).catch(function(e){ showAlert('Error PDF: '+e.message, 'err'); });
+}
+
+function cistellaFD(docType, mode){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  if(!(document.getElementById('client_nom')||{}).value && !(document.getElementById('client_extern_id')||{}).value){
+    showAlert('Omple el nom del client abans de generar el document a Factura Directa.', 'err'); return;
+  }
+  var payload=_cistellaPayloadBase(); payload.doc_type=docType; payload.mode_preu=mode||'pvp';
+  var btns=document.querySelectorAll('#cistella-actions button');
+  btns.forEach(function(b){b.disabled=true;});
+  fetch('/api/crear-doc-marcs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){return r.json();}).then(function(d){
+      btns.forEach(function(b){b.disabled=false;});
+      if(d.ok){
+        var Doc = d.doc_type==='pressupost' ? 'Pressupost' : 'Albarà';
+        showAlert(Doc+' '+d.numero+' creat a Factura Directa amb '+d.n_marcs+' marcs per '+d.contact+'.', 'ok');
+      } else { showAlert('Error FD: '+(d.error||'desconegut'), 'err'); }
+    }).catch(function(e){ btns.forEach(function(b){b.disabled=false;}); showAlert('Error de connexió amb Factura Directa', 'err'); });
 }
 
 // ── Pestanyes ─────────────────────────────────────────────────────────────
@@ -4033,11 +4170,82 @@ recalcMides();
     </div>
     <div style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end">
       <button type="button" id="mail-btn-copiar" onclick="copiarMailText()" style="padding:8px 16px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">Copiar text</button>
-      {% if session.is_admin %}<span id="albara-btns" style="display:inline-flex;gap:4px"><button type="button" onclick="crearAlbaraFD('pvp')" class="albara-btn albara-pvp">Albarà PVP</button><button type="button" onclick="crearAlbaraFD('cost')" class="albara-btn albara-cost">Albarà Cost</button></span>{% endif %}
+      {% if session.is_admin %}<span id="albara-btns" style="display:inline-flex;gap:4px"><button type="button" onclick="crearAlbaraFD('pvp','pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa, PVP al client">Pressupost FD</button><button type="button" onclick="crearAlbaraFD('pvp')" class="albara-btn albara-pvp">Albarà PVP</button><button type="button" onclick="crearAlbaraFD('cost')" class="albara-btn albara-cost">Albarà Cost</button></span>{% endif %}
       <button type="button" onclick="obrirMailClient()" style="padding:8px 18px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Obrir gestor de correu →</button>
     </div>
   </div>
 </div>
+
+<!-- ── Cistella pressupost multi-marc ──────────────────────────────────── -->
+<button type="button" id="cistella-fab" onclick="obrirCistella()" style="display:none;position:fixed;left:18px;bottom:88px;z-index:7000;align-items:center;gap:7px;padding:11px 16px;border:none;border-radius:30px;background:#A67843;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 6px 20px rgba(166,120,67,.4)">
+  🛒 Pressupost <span id="cistella-count" style="background:#fff;color:#A67843;border-radius:11px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0 5px">0</span>
+</button>
+
+<div id="cistella-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9100;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+    <div style="padding:1.2rem 1.4rem .8rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <strong style="font-size:15px">🛒 Pressupost amb diversos marcs</strong>
+        <p style="font-size:12px;color:var(--muted);margin-top:2px">Tots els marcs aniran a un sol pressupost per al client del formulari.</p>
+      </div>
+      <button type="button" onclick="tancarCistella()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1">×</button>
+    </div>
+    <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
+      <div id="cistella-items"></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:1rem;padding-top:.8rem;border-top:2px solid var(--border)">
+        <span style="font-size:13px;font-weight:600;color:var(--muted)">Total PVP (client)</span>
+        <strong id="cistella-tot-pvp" style="font-size:18px;color:var(--green,#1A6B45)">0.00 € + IVA</strong>
+      </div>
+      {% if session.is_admin %}
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:.35rem">
+        <span style="font-size:12px;color:var(--muted)">Total cost producció (taller)</span>
+        <span id="cistella-tot-pvd" style="font-size:13px;color:var(--muted)">0.00 €</span>
+      </div>
+      {% endif %}
+    </div>
+    <div id="cistella-actions" style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end">
+      <button type="button" onclick="cistellaPDF('pvp')" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">📄 PDF</button>
+      {% if session.is_admin %}
+      <button type="button" onclick="cistellaFD('pressupost','pvp')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa, PVP al client">Pressupost FD</button>
+      <button type="button" onclick="cistellaFD('albara','pvp')" class="albara-btn albara-pvp">Albarà PVP</button>
+      <button type="button" onclick="cistellaFD('albara','cost')" class="albara-btn albara-cost">Albarà Cost</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Novetats (what's new) ───────────────────────────────────────────── -->
+{% if novetats_pendents %}
+<div id="novetats-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--paper,#fff);border-radius:18px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto;padding:1.6rem 1.7rem;box-shadow:0 16px 60px rgba(0,0,0,.25);font-family:var(--sans,'DM Sans',sans-serif)">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent,#a67843);margin-bottom:.6rem">🆕 {% if novetats_pendents|length > 1 %}Novetats{% else %}Novetat{% endif %}</div>
+    {% for n in novetats_pendents %}
+    <div style="{% if not loop.first %}margin-top:1.4rem;padding-top:1.4rem;border-top:1px solid var(--border,#ddd){% endif %}">
+      <h2 style="margin:0 0 .5rem;font-family:var(--serif,'Cormorant Garamond',serif);font-size:23px;line-height:1.15">{{ n.titol }}</h2>
+      {% if n.intro %}<p style="margin:0 0 .7rem;color:var(--ink-muted,#5c564c);line-height:1.55;font-size:14px">{{ n.intro }}</p>{% endif %}
+      <ul style="margin:0;padding-left:1.2rem;color:var(--ink-muted,#5c564c);font-size:13.5px;line-height:1.7">
+        {% for p in n.punts %}<li>{{ p }}</li>{% endfor %}
+        {% if session.is_admin and n.punts_admin %}{% for p in n.punts_admin %}<li style="color:var(--accent,#a67843)">{{ p }}</li>{% endfor %}{% endif %}
+      </ul>
+    </div>
+    {% endfor %}
+    <div style="display:flex;justify-content:flex-end;margin-top:1.4rem">
+      <button onclick="tancarNovetats()" style="padding:9px 20px;border:none;border-radius:8px;background:var(--success,#1c6a4b);color:#fff;font-size:13px;font-weight:600;cursor:pointer">Entesos →</button>
+    </div>
+  </div>
+</div>
+<script>
+window._NOVETATS_IDS = {{ novetats_ids | tojson }};
+function tancarNovetats(){
+  var ids = window._NOVETATS_IDS || [];
+  var m = document.getElementById('novetats-modal');
+  if(m) m.style.display = 'none';
+  if(ids.length){
+    fetch('/api/novetats/vist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:ids})}).catch(function(){});
+  }
+}
+</script>
+{% endif %}
 
 {% include '_feedback_widget.html' %}
 

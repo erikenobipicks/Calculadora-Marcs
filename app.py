@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math
+import base64, hashlib, hmac, secrets, os, json, re, time, unicodedata, math, ipaddress
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file, g, has_request_context)
 from datetime import datetime, timedelta
@@ -56,6 +56,43 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 _COOKIE_DOMAIN = os.environ.get('SESSION_COOKIE_DOMAIN', '').strip() or None
 if _COOKIE_DOMAIN:
     app.config['SESSION_COOKIE_DOMAIN'] = _COOKIE_DOMAIN
+
+
+# Capcaleres de seguretat + noindex global. Aquesta eina es interna (login),
+# no s'ha d'indexar mai; i afegim defensa-en-profunditat contra clickjacking,
+# MIME-sniffing i downgrade a HTTP. La CSP permet 'unsafe-inline' perque les
+# plantilles tenen JS/CSS inline i handlers onclick (no es pot endurir sense
+# refactoritzar-les); tot i aixi restringeix l'origen dels recursos.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com data:; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self'; "
+    "form-action 'self'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    resp.headers.setdefault('Content-Security-Policy', _CSP)
+    # Eina interna amb login: mai indexable per cap cercador.
+    resp.headers.setdefault('X-Robots-Tag', 'noindex, nofollow')
+    return resp
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    from flask import Response
+    return Response("User-agent: *\nDisallow: /\n", mimetype='text/plain')
+
 
 MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 MOLDURA_COLOR_FILTERS = [
@@ -806,6 +843,55 @@ def _bridge_signing_secret():
     return os.environ.get('BRIDGE_LOGIN_SECRET', '').strip() or _bridge_api_token()
 
 
+def _bridge_tokens_valids():
+    """Tokens de bridge acceptats per als endpoints /api/public/*. Suporta
+    rotació sense downtime: durant una rotació es defineix
+    PUBLIC_BRIDGE_TOKEN_NEXT amb el valor nou mentre el vell
+    (PUBLIC_BRIDGE_TOKEN) encara és vàlid; quan la web ja envia el nou, es
+    promou NEXT → principal i s'esborra NEXT. Si NEXT no està definit, el
+    comportament és idèntic al d'abans (un sol token vàlid)."""
+    toks = [
+        os.environ.get('PUBLIC_BRIDGE_TOKEN', '').strip(),
+        os.environ.get('PUBLIC_BRIDGE_TOKEN_NEXT', '').strip(),
+    ]
+    return [t for t in toks if t]
+
+
+def _bridge_token_ok(provided):
+    """Compara el token rebut amb els vàlids en temps constant
+    (hmac.compare_digest) per evitar el canal lateral de temporització que
+    tenia la comparació '!=' anterior. Retorna False si no hi ha cap token
+    configurat o si el rebut és buit."""
+    provided = (provided or '').strip()
+    if not provided:
+        return False
+    return any(hmac.compare_digest(provided, t) for t in _bridge_tokens_valids())
+
+
+def _bridge_ip_allowed():
+    """Allowlist d'IPs opcional per als endpoints /api/public/*. Si
+    BRIDGE_ALLOWED_IPS no està definida (cas per defecte), no restringeix res
+    i és totalment retrocompatible. Quan es defineix (CSV d'IPs o xarxes
+    CIDR), només es permeten peticions des d'aquestes adreces. request.remote_addr
+    ja és la IP real del client gràcies a ProxyFix (x_for=1)."""
+    allow = os.environ.get('BRIDGE_ALLOWED_IPS', '').strip()
+    if not allow:
+        return True
+    try:
+        client = ipaddress.ip_address((request.remote_addr or '').strip())
+    except ValueError:
+        return False
+    for net in (n.strip() for n in allow.split(',')):
+        if not net:
+            continue
+        try:
+            if client in ipaddress.ip_network(net, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _main_site_url():
     return os.environ.get('MAIN_SITE_URL', 'https://reusrevela.cat').strip().rstrip('/')
 
@@ -1176,7 +1262,7 @@ def _build_bridge_token(data):
     return f'{payload}.{signature}'
 
 
-def _read_bridge_token(token, max_age=120):
+def _read_bridge_token(token, max_age=45):
     secret = _bridge_signing_secret()
     if not secret or '.' not in str(token or ''):
         return None
@@ -2048,7 +2134,7 @@ def public_professional_signup():
     expected_token = os.environ.get('PUBLIC_SIGNUP_TOKEN', '').strip()
     provided_token = request.headers.get('X-Signup-Token', '').strip()
 
-    if not expected_token or provided_token != expected_token:
+    if not expected_token or not hmac.compare_digest(provided_token, expected_token):
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2289,6 +2375,9 @@ def _send_welcome_email(username, password, nom, to_addr=None):
     base_url = 'https://calculadora.reusrevela.cat'
     html = f"""\
 <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#1C1B18;padding:24px;background:#FBFAF7">
+  <div style="text-align:center;margin:0 0 16px">
+    <img src="https://reusrevela.cat/static/img/logo-reusrevela.png" alt="Reus Revela" width="56" height="56" style="border:0">
+  </div>
   <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:10px;margin:0 0 18px">
     Et donem la benvinguda
   </h2>
@@ -2465,10 +2554,9 @@ def _send_user_activation_email(name, email, temp_password):
 
 @app.route('/api/public/bridge-login', methods=['POST'])
 def public_bridge_login():
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
 
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2524,9 +2612,8 @@ def public_bridge_refresh():
     calculadora des de l'àrea privada passats els 120s de vida del token
     original) sense demanar la contrasenya una altra vegada.
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2565,10 +2652,9 @@ def public_bridge_refresh():
 @app.route('/api/public/professional-summary', methods=['POST'])
 def public_professional_summary():
     try:
-        expected_token = _bridge_api_token()
         provided_token = request.headers.get('X-Bridge-Token', '').strip()
 
-        if not expected_token or provided_token != expected_token:
+        if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
             return jsonify({'ok': False, 'error': 'unauthorized'}), 401
 
         data = request.get_json(silent=True) or {}
@@ -2680,9 +2766,8 @@ def public_professional_summary():
 
 @app.route('/api/public/commercial-settings-sync', methods=['POST'])
 def public_commercial_settings_sync():
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -2721,9 +2806,8 @@ def public_pricing():
       laminate_only — preus de laminat sol per mida (ref, preu)
       encolat_pro   — preus de muntatge encolat i protter per mida (ref, preu, tipus)
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     # Còpies fotogràfiques
@@ -2803,9 +2887,8 @@ def public_impressio_price():
     Autenticació: X-Bridge-Token.
     Params: w, h (cm), paper (lustre|silk|baryta, default lustre).
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     w = float(request.args.get('w', 0))
@@ -2833,9 +2916,8 @@ def public_impressio_price():
 def public_clients_habituals():
     """Llista de clients habituals actius per a consum des de reusrevela-web.
     Autenticació: X-Bridge-Token."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     rows = query("""
         SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
@@ -2868,9 +2950,8 @@ def public_clients_habituals_save():
     """Crea o actualitza un client habitual (clients_externs) des de la web.
     Auth: X-Bridge-Token. Body: {nom/name, email, telefon/phone, nif, tipus,
     client_id (opcional)}. Dedup soft per email."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     data = request.get_json(silent=True) or {}
     nom = (data.get('nom') or data.get('name') or '').strip()
@@ -2969,9 +3050,8 @@ def public_pro_clients_save():
                  source, last_order_ref, client_id (opcional per update) }
     Cal almenys un de {name, email, phone} no buit.
     Retorna: { ok, client: {...} } o { ok: false, error: <code> }."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -3053,9 +3133,8 @@ def public_pro_clients_save():
 def public_pro_clients_list():
     """Llista els clients privats d'un distribuïdor (ordenats per
     updated_at DESC). Auth: X-Bridge-Token. Query: ?username=&limit=."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     username = (request.args.get('username') or '').strip()
@@ -3084,9 +3163,8 @@ def public_pro_clients_list():
 def public_pro_clients_get(client_id):
     """Obté un client privat (només si pertany al distribuïdor).
     Auth: X-Bridge-Token. Query: ?username=."""
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     username = (request.args.get('username') or '').strip()
@@ -3120,9 +3198,8 @@ def public_compute():
 
     Resposta: {ok, kind, width_cm, height_cm, base_price, vat_rate, breakdown}
     """
-    expected_token = _bridge_api_token()
     provided_token = request.headers.get('X-Bridge-Token', '').strip()
-    if not expected_token or provided_token != expected_token:
+    if not _bridge_token_ok(provided_token) or not _bridge_ip_allowed():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     kind = (request.args.get('kind') or '').strip().lower()
@@ -3369,6 +3446,72 @@ def inici():
     return render_template('inici.html', counts=counts)
 
 
+# ── Sistema de novetats (what's new) ───────────────────────────────────────
+# Registre reutilitzable: per anunciar una novetat nova, afegeix-hi una entrada.
+# Cada usuari veu les novetats que encara no ha tancat (guardades a
+# usuaris.novetats_vistes, llista d'ids separada per comes). 'audiencia':
+# 'tots' | 'admin' (només Reus Revela) | 'usuaris' (només professionals).
+# 'punts_admin' són punts extra que només veuen els admins.
+NOVETATS = [
+    {
+        'id': 'pressupost-multimarc',
+        'data': '15/06/2026',
+        'titol': 'Pressupost amb diversos marcs',
+        'audiencia': 'tots',
+        'intro': 'Ara pots ajuntar diversos marcs en un sol pressupost per al mateix client.',
+        'punts': [
+            'Calcula un marc i prem «+ Pressupost» a la barra inferior per afegir-lo.',
+            'Repeteix amb tants marcs com vulguis: el botó flotant 🛒 mostra el total.',
+            'Obre la cistella i descarrega el PDF del pressupost amb tots els marcs i el total.',
+        ],
+        'punts_admin': [
+            'Com a admin, a més del PDF pots enviar-ho directament a Factura Directa com a Pressupost o Albarà (PVP del client o cost de taller).',
+        ],
+    },
+]
+
+
+def _novetats_pendents(vistes_raw, is_admin):
+    """Retorna les novetats que aquest usuari encara no ha tancat, segons
+    audiència i la llista d'ids ja vistos (text separat per comes)."""
+    vistes = {x.strip() for x in (vistes_raw or '').split(',') if x.strip()}
+    out = []
+    for n in NOVETATS:
+        aud = n.get('audiencia', 'tots')
+        if aud == 'admin' and not is_admin:
+            continue
+        if aud == 'usuaris' and is_admin:
+            continue
+        if n['id'] in vistes:
+            continue
+        out.append(n)
+    return out
+
+
+@app.route('/api/novetats/vist', methods=['POST'])
+@login_required
+def api_novetats_vist():
+    """Marca una o més novetats com a vistes per a l'usuari actual."""
+    d = request.get_json(silent=True) or {}
+    ids = d.get('ids') or []
+    if not isinstance(ids, list):
+        ids = []
+    ids = [str(i).strip() for i in ids if str(i).strip()][:50]
+    if not ids:
+        return jsonify({'ok': True})
+    try:
+        row = query('SELECT novetats_vistes FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        vistes = {x.strip() for x in (_row_get(row, 'novetats_vistes', '') or '').split(',') if x.strip()}
+        vistes.update(ids)
+        valid = {n['id'] for n in NOVETATS}
+        vistes = {v for v in vistes if v in valid}  # no deixem créixer amb ids obsolets
+        execute('UPDATE usuaris SET novetats_vistes=? WHERE id=?',
+                [','.join(sorted(vistes)), session['user_id']])
+    except Exception as e:
+        print(f'[novetats] marcar vist error: {e}')
+    return jsonify({'ok': True})
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3411,6 +3554,14 @@ def calculadora():
         'tram3_pct':   float(_row_get(user, 'mr_tram3_pct') if _row_get(user, 'mr_tram3_pct') is not None else fb) if marge_pro_actiu else 0.0,
         'defaults_recomanats': get_mr_recomendats(marge_actual_user),
     }
+    # Novetats pendents (tolerant si la columna encara no s'ha migrat)
+    novetats_pendents = []
+    try:
+        nrow = query('SELECT novetats_vistes FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        novetats_pendents = _novetats_pendents(_row_get(nrow, 'novetats_vistes', '') or '',
+                                                bool(session.get('is_admin')))
+    except Exception as e:
+        print(f'[novetats] lectura pendents skip: {e}')
     return render_template('calculadora.html',
                            web_return_url=_current_web_return_url(),
                            web_order_url=_current_web_order_url(),
@@ -3424,6 +3575,8 @@ def calculadora():
                            is_admin=1 if session.get('is_admin') else 0,
                            mr_trams=mr_trams,
                            mr_trams_vist=bool(_row_get(user, 'mr_trams_vist', 0)),
+                           novetats_pendents=novetats_pendents,
+                           novetats_ids=[n['id'] for n in novetats_pendents],
                            extras=get_extras_list(),
                            user_has_email=user_has_email)
 
@@ -7169,6 +7322,17 @@ def admin_config():
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_api_key', ?)", [rk])
         if rf:
             execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_from', ?)", [rf])
+        # Adreça de respostes (reply-to). Es desa sempre que el camp arribi,
+        # perquè es pugui també esborrar deixant-lo buit.
+        rr = request.form.get('resend_reply_to')
+        if rr is not None:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('resend_reply_to', ?)", [rr.strip()])
+        # Marca i responsable legal del mailing (poden diferir d'empresa_nom:
+        # marca de cara al client vs nom fiscal). Buit = fallback a empresa_nom.
+        for clau in ('mailing_marca', 'mailing_responsable'):
+            val = request.form.get(clau)
+            if val is not None:
+                execute('INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)', [clau, val.strip()])
         # Laboratori d'impressió (Fase 1: només email).
         for clau in ('lab_email_dest', 'lab_canal_default', 'lab_assumpte_template', 'lab_cos_template'):
             val = request.form.get(clau)
@@ -7328,6 +7492,85 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
     if notes:
         main['notes'] = notes
     return _fd_post('deliveryNotes', {'content': {'type': 'deliveryNote', 'main': main}})
+
+
+def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
+    """Crea un PRESSUPOST (estimate) a FacturaDirecta. Mateix patro que
+    l'albara pero amb type/endpoint 'estimate'/'estimates'. No es forca cap
+    serie de docNumber: FacturaDirecta assigna la serie de pressupost per
+    defecte (evita errors de 'serie inexistent')."""
+    if not data_doc:
+        data_doc = datetime.now().strftime('%Y-%m-%d')
+    main = {
+        'contact':   contact_id,
+        'currency':  'EUR',
+        'baseState': 'pending',  # estat inicial del pressupost (requerit per l'API)
+        'date':      data_doc,
+        'lines':     linies,
+    }
+    if notes:
+        main['notes'] = notes
+    return _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+
+
+def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
+    """Despatxa segons el tipus de document FD demanat:
+    'pressupost' -> estimate · qualsevol altre (per defecte) -> albara."""
+    if str(doc_type).strip().lower() in ('pressupost', 'estimate', 'presupuesto'):
+        return _fd_crear_estimate(contact_id, linies, notes=notes, data_doc=data_doc)
+    return _fd_crear_albara(contact_id, linies, notes=notes, data_doc=data_doc)
+
+
+def _fd_linies_de_comandes(comandes):
+    """Construeix les linies FD (a cost de produccio, una per fila de comanda)
+    i les notes a partir d'una llista de files de `comandes`. Compartit per
+    l'albara de sessio i pel document conjunt de diversos pressupostos."""
+    linies = []
+    notes_parts = []
+    for com in comandes:
+        marc         = (_row_get(com, 'marc_principal', '') or '').strip()
+        pre_marc     = (_row_get(com, 'pre_marc', '') or '').strip()
+        passpartout  = (_row_get(com, 'passpartout', '') or '').strip()
+        vidre        = (_row_get(com, 'vidre', '') or '').strip()
+        opcio_nom    = (_row_get(com, 'opcio_nom', '') or '').strip()
+        num_pres     = (_row_get(com, 'num_pressupost', '') or '').strip()
+        observacions = (_row_get(com, 'observacions', '') or '').strip()
+        quantitat    = int(_row_get(com, 'quantitat', 1) or 1)
+        cost_prod    = float(_row_get(com, 'cost_produccio', 0) or 0)
+        client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
+
+        revers_peu   = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+        encolat      = (_row_get(com, 'encolat', '') or '').strip()
+        impressio    = (_row_get(com, 'impressio', '') or '').strip()
+
+        parts_opc = []
+        if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
+        if vidre:                                parts_opc.append(vidre)
+        if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
+        if encolat and encolat != '-':           parts_opc.append(encolat)
+        if revers_peu:                           parts_opc.append('Revers amb peu')
+        if impressio and impressio != '-':       parts_opc.append(impressio)
+        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+        if parts_opc:
+            desc_marc += f' · {", ".join(parts_opc)}'
+        if opcio_nom and opcio_nom != 'Opció A':
+            desc_marc += f' ({opcio_nom})'
+        if client_nom:
+            desc_marc = f'[{client_nom}] ' + desc_marc
+
+        # cost_produccio és el total de totes les unitats; el dividim per qty.
+        unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
+        linies.append({
+            'text':      desc_marc,
+            'quantity':  float(quantitat),
+            'unitPrice': unit_cost,
+            'tax':       ['S_IVA_21'],
+        })
+        if num_pres and num_pres not in notes_parts:
+            notes_parts.append(f'Pressupost: {num_pres}')
+        if observacions:
+            notes_parts.append(f'Obs: {observacions}')
+    return linies, notes_parts
 
 
 def _fd_extract_contacts_list(r):
@@ -8603,23 +8846,33 @@ def api_crear_albara():
             notes_parts.append('Enviament a: ' + ', '.join(str(x) for x in dest))
     notes = ' | '.join(notes_parts)
 
-    albara = _fd_crear_albara(contact_id, linies, notes=notes)
-    if '_error' in (albara or {}):
-        return jsonify({'ok': False, 'error': f'Error albarà FD {albara.get("_error")}: {albara.get("_msg","")}'}), 500
+    # doc_type: 'albara' (per defecte) crea un albarà i descompta stock;
+    # 'pressupost' crea un estimate a FD i NO toca stock ni marca fd_albara.
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
 
-    num_albara = albara.get('number') or albara.get('documentNumber') or albara.get('id', '—')
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+
+    if es_pressupost:
+        return jsonify({'ok': True, 'doc_type': 'pressupost', 'pressupost': num_doc,
+                        'numero': num_doc, 'contact': nom_fd, 'avisos_stock': []})
 
     # Descompte automàtic d'stock de marcs (best-effort: no fa fallar l'albarà).
     avisos_stock = []
     try:
         pre_marc = (d.get('pre_marc') or '').strip()
         avisos_stock = _descompta_stock_albara(
-            marc, pre_marc, final_w, final_h, quantitat, num_albara, session.get('user_id'))
+            marc, pre_marc, final_w, final_h, quantitat, num_doc, session.get('user_id'))
     except Exception as e:
         print('descompte stock albarà err:', e)
 
-    return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd,
-                    'avisos_stock': avisos_stock})
+    return jsonify({'ok': True, 'doc_type': 'albara', 'albara': num_doc, 'numero': num_doc,
+                    'contact': nom_fd, 'avisos_stock': avisos_stock})
 
 
 @app.route('/api/albara-de-comanda', methods=['POST'])
@@ -8678,53 +8931,8 @@ def api_albara_de_comanda():
     else:
         print(f"[albara_de_comanda] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
 
-    # Build albaran lines — one per comanda row
-    linies = []
-    notes_parts = []
-    for com in comandes:
-        marc         = (_row_get(com, 'marc_principal', '') or '').strip()
-        pre_marc     = (_row_get(com, 'pre_marc', '') or '').strip()
-        passpartout  = (_row_get(com, 'passpartout', '') or '').strip()
-        vidre        = (_row_get(com, 'vidre', '') or '').strip()
-        opcio_nom    = (_row_get(com, 'opcio_nom', '') or '').strip()
-        num_pres     = (_row_get(com, 'num_pressupost', '') or '').strip()
-        observacions = (_row_get(com, 'observacions', '') or '').strip()
-        quantitat    = int(_row_get(com, 'quantitat', 1) or 1)
-        cost_prod    = float(_row_get(com, 'cost_produccio', 0) or 0)
-        client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
-
-        revers_peu   = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
-        encolat      = (_row_get(com, 'encolat', '') or '').strip()
-        impressio    = (_row_get(com, 'impressio', '') or '').strip()
-
-        parts_opc = []
-        if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
-        if vidre:                                parts_opc.append(vidre)
-        if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
-        if encolat and encolat != '-':           parts_opc.append(encolat)
-        if revers_peu:                           parts_opc.append('Revers amb peu')
-        if impressio and impressio != '-':       parts_opc.append(impressio)
-        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
-        if parts_opc:
-            desc_marc += f' · {", ".join(parts_opc)}'
-        if opcio_nom and opcio_nom != 'Opció A':
-            desc_marc += f' ({opcio_nom})'
-        if client_nom:
-            desc_marc = f'[{client_nom}] ' + desc_marc
-
-        # cost_produccio is total for all units (cTot*qty), divide by qty for unit price
-        unit_cost = round(cost_prod / quantitat, 2) if quantitat > 0 else round(cost_prod, 2)
-        linies.append({
-            'text':      desc_marc,
-            'quantity':  float(quantitat),
-            'unitPrice': unit_cost,
-            'tax':       ['S_IVA_21'],
-        })
-        if num_pres and num_pres not in notes_parts:
-            notes_parts.append(f'Pressupost: {num_pres}')
-        if observacions:
-            notes_parts.append(f'Obs: {observacions}')
-
+    # Build albaran lines — one per comanda row (helper compartit)
+    linies, notes_parts = _fd_linies_de_comandes(comandes)
     notes = ' | '.join(notes_parts)
 
     albara = _fd_crear_albara(contact_id, linies, notes=notes)
@@ -8737,6 +8945,160 @@ def api_albara_de_comanda():
     execute("UPDATE comandes SET fd_albara=? WHERE sessio_id=?", [str(num_albara), sessio_id])
 
     return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+
+@app.route('/api/crear-doc-conjunt', methods=['POST'])
+@admin_required
+def api_crear_doc_conjunt():
+    """Crea UN sol albara o pressupost a FacturaDirecta amb les linies de
+    DIVERSOS pressupostos (sessions) del MATEIX client, seleccionats a
+    /historial. doc_type: 'albara' (per defecte) o 'pressupost'."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+
+    d = request.get_json(force=True) or {}
+    sessio_ids = d.get('sessio_ids')
+    sessio_ids = [str(s).strip() for s in sessio_ids if str(s).strip()] if isinstance(sessio_ids, list) else []
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
+    if not sessio_ids:
+        return jsonify({'ok': False, 'error': 'Cap pressupost seleccionat.'}), 400
+
+    ph = ','.join(['?'] * len(sessio_ids))
+    comandes = query(
+        f'''SELECT c.*, u.nom as usuari_nom, u.nom_empresa, u.nom_fiscal, u.fiscal_id, u.empresa_tel
+            FROM comandes c JOIN usuaris u ON c.user_id=u.id
+            WHERE c.sessio_id IN ({ph}) ORDER BY c.client_nom, c.id''', sessio_ids) or []
+    if not comandes:
+        return jsonify({'ok': False, 'error': 'Pressupostos no trobats.'}), 404
+
+    # Tots han de ser del mateix client (per client extern enllacat o, si no,
+    # pel nom del client). Si n'hi ha de barrejats, parem.
+    def _client_key(c):
+        cei = _row_get(c, 'client_extern_id')
+        return ('ext', cei) if cei else ('nom', (_row_get(c, 'client_nom', '') or '').strip().lower())
+    if len({_client_key(c) for c in comandes}) > 1:
+        return jsonify({'ok': False, 'error': 'Els pressupostos seleccionats no son tots del mateix client. Filtra per client o selecciona nomes els d\'un mateix client.'}), 400
+
+    c0 = comandes[0]
+    # Contacte FD: client extern enllacat -> contacte cached; si no, crear/
+    # cercar per nom del client final.
+    client_extern_id = _row_get(c0, 'client_extern_id')
+    contact_id, nom_fd = _resolve_client_extern_fd_id(client_extern_id)
+    nom_fd = nom_fd or ''
+    if not contact_id:
+        nom_fd = (_row_get(c0, 'client_nom', '') or '').strip()
+        if not nom_fd:
+            return jsonify({'ok': False, 'error': 'Els pressupostos no tenen nom de client per crear el contacte a FD.'}), 400
+        contacte = _fd_crear_contacte(nom_fd)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+        contact_id = _fd_extract_contact_id(contacte)
+        if not contact_id:
+            return jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500
+
+    linies, notes_parts = _fd_linies_de_comandes(comandes)
+    notes = ' | '.join(notes_parts)
+
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+
+    # Nomes l'albara marca les sessions com a albarades.
+    if not es_pressupost:
+        execute(f"UPDATE comandes SET fd_albara=? WHERE sessio_id IN ({ph})",
+                [str(num_doc)] + sessio_ids)
+
+    return jsonify({'ok': True, 'doc_type': 'pressupost' if es_pressupost else 'albara',
+                    'numero': num_doc, 'contact': nom_fd, 'n_pressupostos': len(sessio_ids)})
+
+
+def _resolve_fd_contact_for_request(d):
+    """Resol el contacte FD per a un client de la calculadora a partir del
+    payload (client_extern_id enllaçat -> contacte cached; si no, cercar per
+    NIF o crear pel nom). Retorna (contact_id, nom_fd, error_response_or_None)."""
+    client_extern_id = (d.get('client_extern_id') or '').strip() or None
+    nif_client = (d.get('client_nif') or '').strip()
+    client_tel = (d.get('client_tel') or '').strip()
+    nom_fd = (d.get('client_nom') or '').strip()
+
+    contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
+    if contact_id:
+        return contact_id, (fd_nom or nom_fd), None
+    if not nom_fd:
+        return None, '', (jsonify({'ok': False, 'error': 'Cal omplir el nom del client.'}), 400)
+    contacte = _fd_cerca_contacte(nif=nif_client) if nif_client else None
+    if not contacte:
+        contacte = _fd_crear_contacte(nom_fd, nif=nif_client or None, telefon=client_tel or None)
+    if '_error' in (contacte or {}):
+        return None, '', (jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500)
+    cid = _fd_extract_contact_id(contacte)
+    if not cid:
+        return None, '', (jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500)
+    return cid, nom_fd, None
+
+
+def _linies_de_cistella(items, mode_preu):
+    """Construeix les linies FD a partir de la cistella de marcs del pressupost
+    multi-marc. Cada item: {text, quantity, preu_net, cost_produccio}. Segons
+    mode_preu fa servir el PVP net o el cost de produccio."""
+    linies = []
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        text = (str(it.get('text') or 'Emmarcació')).strip()[:300]
+        try:
+            qty = float(it.get('quantity') or 1) or 1
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            base = float(it.get('preu_net') or 0) if mode_preu == 'pvp' else float(it.get('cost_produccio') or 0)
+        except (TypeError, ValueError):
+            base = 0.0
+        unit = round(base / qty, 2) if qty > 0 else round(base, 2)
+        linies.append({'text': text, 'quantity': qty, 'unitPrice': unit, 'tax': ['S_IVA_21']})
+    return linies
+
+
+@app.route('/api/crear-doc-marcs', methods=['POST'])
+@admin_required
+def api_crear_doc_marcs():
+    """Crea UN sol document a FacturaDirecta (albara o pressupost) amb DIVERSOS
+    marcs (cistella del pressupost multi-marc), per a un mateix client."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+    d = request.get_json(force=True) or {}
+    items = d.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'El pressupost no té cap marc.'}), 400
+    doc_type = (d.get('doc_type') or 'albara').strip().lower()
+    es_pressupost = doc_type in ('pressupost', 'estimate', 'presupuesto')
+    mode_preu = (d.get('mode_preu') or 'pvp').strip().lower()
+
+    contact_id, nom_fd, err = _resolve_fd_contact_for_request(d)
+    if err is not None:
+        return err
+
+    linies = _linies_de_cistella(items, mode_preu)
+    if not linies:
+        return jsonify({'ok': False, 'error': 'No s\'han pogut construir les línies del pressupost.'}), 400
+
+    notes_parts = []
+    if (d.get('num_pressupost') or '').strip():
+        notes_parts.append(f"Pressupost: {d.get('num_pressupost').strip()}")
+    if (d.get('observacions') or '').strip():
+        notes_parts.append(f"Obs: {d.get('observacions').strip()}")
+    notes = ' | '.join(notes_parts)
+
+    doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    if '_error' in (doc or {}):
+        etiqueta = 'pressupost' if es_pressupost else 'albarà'
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+    num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
+    return jsonify({'ok': True, 'doc_type': 'pressupost' if es_pressupost else 'albara',
+                    'numero': num_doc, 'contact': nom_fd, 'n_marcs': len(linies)})
 
 
 @app.route('/api/albara-individual', methods=['POST'])
@@ -9774,6 +10136,211 @@ def crear_pdf(c, mode=''):
     return buf
 
 
+def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='', user_id=0):
+    """PDF d'un pressupost amb DIVERSOS marcs (cistella multi-marc) per a un
+    mateix client. `items` = [{text, quantity, preu_net, cost_produccio}].
+    `mode` = 'pvp' (preu de venda) o 'pvd' (preu taller/cost)."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            rightMargin=15*mm, leftMargin=15*mm,
+                            topMargin=12*mm, bottomMargin=15*mm)
+    W = A4[0] - 30*mm
+    DARK  = colors.HexColor("#1C1B18")
+    LIG   = colors.HexColor("#F5F6FA")
+    BRD   = colors.HexColor("#E5E2DB")
+    WHITE = colors.white
+
+    def p(txt, bold=False, size=10, color=DARK, align='LEFT'):
+        st = ParagraphStyle('x', fontName='DejaVu-Bold' if bold else 'DejaVu',
+                            fontSize=size, textColor=color,
+                            alignment={'LEFT':0,'CENTER':1,'RIGHT':2}[align],
+                            leading=size*1.4)
+        return Paragraph(str(txt) if txt not in (None, '') else '—', st)
+
+    story = []
+
+    # ── Capçalera + dades empresa ─────────────────────────────────────────
+    u_data = query('SELECT nom_empresa, empresa_adreca, brand_color FROM usuaris WHERE id=?',
+                   [user_id or 0], one=True)
+    nom_empresa = (_row_get(u_data, 'nom_empresa', '') or '') if u_data else ''
+    green_hex = _normalize_hex_color(_row_get(u_data, 'brand_color', DEFAULT_BRAND_COLOR) if u_data else DEFAULT_BRAND_COLOR)
+    if not nom_empresa:
+        _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+        nom_empresa = (_r['valor'] if _r else '') or 'Reus Revela'
+    adreca = (_row_get(u_data, 'empresa_adreca', '') or '') if u_data else ''
+    if not adreca:
+        r_adr = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
+        adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
+    GREEN = colors.HexColor(green_hex)
+
+    header = Table([[
+        p('Pressupost', bold=True, size=20, color=WHITE),
+        p(nom_empresa + '\n' + adreca, size=8,
+          color=colors.HexColor("#9E9B94"), align='RIGHT')
+    ]], colWidths=[W*0.55, W*0.45])
+    header.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1), DARK),
+        ('TOPPADDING',(0,0),(-1,-1),14),('BOTTOMPADDING',(0,0),(-1,-1),14),
+        ('LEFTPADDING',(0,0),(-1,-1),14),('RIGHTPADDING',(0,0),(-1,-1),14),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 3*mm))
+
+    # ── Logo (si existeix) ────────────────────────────────────────────────
+    try:
+        u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [user_id or 0], one=True)
+        logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
+        if logo_data_url and logo_data_url.startswith('data:'):
+            import base64 as _b64
+            from reportlab.platypus import Image as RLImg2
+            from PIL import Image as PILImg
+            import io as _io2
+            _, b64data = logo_data_url.split(',', 1)
+            img_data = _b64.b64decode(b64data)
+            pil = PILImg.open(_io2.BytesIO(img_data))
+            orig_w, orig_h = pil.size
+            ratio = min(60*mm / orig_w, 25*mm / orig_h)
+            logo_img = RLImg2(io.BytesIO(img_data), width=orig_w*ratio, height=orig_h*ratio)
+            logo_img.hAlign = 'CENTER'
+            story.append(Spacer(1, 3*mm)); story.append(logo_img); story.append(Spacer(1, 3*mm))
+    except Exception as _e:
+        print(f"Logo PDF marcs error: {_e}")
+
+    # ── Dades client ──────────────────────────────────────────────────────
+    def fila(lbl, val, color_val=None):
+        return [p(lbl, bold=True, size=9, color=colors.HexColor("#6B6860")),
+                p(str(val) if val not in (None, '', '-') else '—', size=10, color=color_val or DARK)]
+    cli_rows = []
+    if (num_pressupost or '').strip():
+        cli_rows.append(fila('Núm.:', num_pressupost, color_val=GREEN))
+    cli_rows.append(fila('Client:', (client or {}).get('nom') or '—'))
+    if (client or {}).get('tel'):
+        cli_rows.append(fila('Telèfon:', client.get('tel')))
+    if (client or {}).get('nif'):
+        cli_rows.append(fila('NIF/DNI:', client.get('nif')))
+    cli_rows.append(fila('Data:', datetime.now().strftime('%d/%m/%Y')))
+    t1 = Table(cli_rows, colWidths=[W*0.25, W*0.75])
+    t1.setStyle(TableStyle([
+        ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, WHITE]),
+        ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+        ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+    ]))
+    story.append(t1)
+    story.append(Spacer(1, 5*mm))
+
+    # ── Taula de marcs ────────────────────────────────────────────────────
+    es_pvd = (mode == 'pvd' or mode == 'cost')
+    head = [p('Concepte', bold=True, size=9, color=WHITE),
+            p('Unitats', bold=True, size=9, color=WHITE, align='CENTER'),
+            p('Preu/u', bold=True, size=9, color=WHITE, align='RIGHT'),
+            p('Import', bold=True, size=9, color=WHITE, align='RIGHT')]
+    rows = [head]
+    subtotal = 0.0
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        text = (str(it.get('text') or 'Emmarcació')).strip()
+        try:
+            qty = float(it.get('quantity') or 1) or 1
+        except Exception:
+            qty = 1
+        try:
+            base = float(it.get('cost_produccio') or 0) if es_pvd else float(it.get('preu_net') or 0)
+        except Exception:
+            base = 0.0
+        unit = round(base / qty, 2) if qty > 0 else round(base, 2)
+        import_linia = round(unit * qty, 2)
+        subtotal += import_linia
+        qty_txt = str(int(qty)) if float(qty).is_integer() else f'{qty:g}'
+        rows.append([
+            p(text, size=9),
+            p(qty_txt, size=9, align='CENTER'),
+            p(f'{unit:.2f} €', size=9, align='RIGHT'),
+            p(f'{import_linia:.2f} €', size=9, align='RIGHT'),
+        ])
+    tmarcs = Table(rows, colWidths=[W*0.52, W*0.14, W*0.16, W*0.18])
+    tmarcs.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,0), DARK),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[WHITE, LIG]),
+        ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+        ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+    ]))
+    story.append(tmarcs)
+    story.append(Spacer(1, 5*mm))
+
+    # ── Totals ────────────────────────────────────────────────────────────
+    iva = round(subtotal * 0.21, 2)
+    total = round(subtotal + iva, 2)
+    tot_rows = [
+        [p('Subtotal (sense IVA)', bold=True, size=9, color=colors.HexColor("#6B6860")),
+         p(f'{subtotal:.2f} €', size=10, align='RIGHT')],
+        [p('IVA 21%', bold=True, size=9, color=colors.HexColor("#6B6860")),
+         p(f'{iva:.2f} €', size=10, align='RIGHT')],
+        [p('TOTAL amb IVA', bold=True, size=11, color=GREEN),
+         p(f'{total:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
+    ]
+    ttot = Table(tot_rows, colWidths=[W*0.62, W*0.38])
+    ttot.setStyle(TableStyle([
+        ('BACKGROUND',(0,2),(-1,2), colors.HexColor("#E8F3EE")),
+        ('ROWBACKGROUNDS',(0,0),(-1,1),[LIG, WHITE]),
+        ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+        ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+        ('LINEABOVE',(0,2),(-1,2),1.5,GREEN),
+    ]))
+    story.append(ttot)
+
+    if (observacions or '').strip():
+        story.append(Spacer(1, 5*mm))
+        story.append(p('Observacions', bold=True, size=9, color=colors.HexColor("#6B6860")))
+        story.append(Spacer(1, 1*mm))
+        story.append(p(observacions, size=9))
+
+    story.append(Spacer(1, 6*mm))
+    story.append(HRFlowable(width=W, thickness=0.5, color=BRD))
+    story.append(Spacer(1, 2*mm))
+    story.append(p(f'{nom_empresa} · {adreca}', size=8,
+                   color=colors.HexColor("#636E72"), align='CENTER'))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+@app.route('/api/pdf-marcs', methods=['POST'])
+@login_required
+def api_pdf_marcs():
+    """Genera el PDF d'un pressupost multi-marc (cistella) per a un client.
+    Disponible per a tots els usuaris (al seu PVP); el mode 'cost'/PVD només
+    el pot fer servir l'admin, perquè és preu intern de taller."""
+    d = request.get_json(force=True) or {}
+    items = d.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'El pressupost no té cap marc.'}), 400
+    client = {
+        'nom': (d.get('client_nom') or '').strip(),
+        'tel': (d.get('client_tel') or '').strip(),
+        'nif': (d.get('client_nif') or '').strip(),
+    }
+    mode = (d.get('mode_preu') or 'pvp').strip().lower()
+    # Els usuaris no-admin sempre generen el PDF a PVP (mai a cost de taller).
+    if mode != 'pvp' and not session.get('is_admin'):
+        mode = 'pvp'
+    try:
+        pdf = crear_pdf_marcs(items, client, mode=mode,
+                              num_pressupost=(d.get('num_pressupost') or '').strip(),
+                              observacions=(d.get('observacions') or '').strip(),
+                              user_id=session.get('user_id', 0))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Error generant PDF: {e}'}), 500
+    nom_fitxer = (client['nom'] or 'pressupost').replace(' ', '_')[:40]
+    return send_file(pdf, mimetype='application/pdf', as_attachment=True,
+                     download_name=f"pressupost_marcs_{nom_fitxer}.pdf")
+
 
 @app.route('/ajustos')
 @login_required
@@ -10784,6 +11351,8 @@ def init_db():
                 ('usuaris','mr_trams_vist','INTEGER DEFAULT 0'),
                 # Paper Hahnemühle Photo Rag Baryta — activació per usuari
                 ('usuaris','baryta_actiu','INTEGER DEFAULT 0'),
+                # Novetats (what's new) ja vistes per l'usuari (ids per comes)
+                ('usuaris','novetats_vistes','TEXT DEFAULT \'\''),
             ]:
                 try:
                     ddl_cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -11115,6 +11684,8 @@ def init_db():
                 "ALTER TABLE usuaris ADD COLUMN mr_trams_vist INTEGER DEFAULT 0",
                 # Paper Hahnemühle Photo Rag Baryta — activació per usuari
                 "ALTER TABLE usuaris ADD COLUMN baryta_actiu INTEGER DEFAULT 0",
+                # Novetats (what's new) ja vistes per l'usuari (ids per comes)
+                "ALTER TABLE usuaris ADD COLUMN novetats_vistes TEXT DEFAULT ''",
             ]:
                 try:
                     db.execute(sql)
@@ -11387,6 +11958,574 @@ def _run_v2_price_backfill(db):
 # des de /admin/run-migrations perquè els workers arranquin sempre sense tocar BD
 # (evita penjades d'arrencada a PG). Cal visitar /admin/run-migrations com a admin
 # després de cada deploy amb canvis d'schema.
+
+# ============================================================================
+#  MAILING ALS CLIENTS DEL TALLER  (campanyes + avisos d'horari/vacances)
+#  - Llista de marqueting propia (mailing_contacts), separada de clients_externs
+#  - Importacio per enganxat/CSV + sync des de clients_externs
+#  - Enviament per Resend en lots (guiat des del client) amb prova previa
+#  - Baixa RGPD tokenitzada (/baixa/<token>) + llista de supressio
+# ============================================================================
+
+_MAILING_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _mailing_base_url():
+    return (os.environ.get('CALC_BASE_URL', '').strip().rstrip('/')
+            or 'https://calculadora.reusrevela.cat')
+
+
+def _mailing_now():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _mailing_valid_email(e):
+    e = (e or '').strip().lower()
+    return e if _MAILING_EMAIL_RE.match(e) else ''
+
+
+def _ensure_mailing_schema():
+    """Crea les taules de mailing si no existeixen (idempotent i dialecte-aware).
+    Es crida a l'inici de cada ruta de mailing perque el panell funcioni sense
+    dependre d'una migracio manual."""
+    if USE_PG:
+        stmts = [
+            """CREATE TABLE IF NOT EXISTS mailing_contacts (
+                id SERIAL PRIMARY KEY,
+                nom VARCHAR(255),
+                email VARCHAR(255) NOT NULL UNIQUE,
+                idioma VARCHAR(5) DEFAULT 'ca',
+                origen VARCHAR(20) DEFAULT 'manual',
+                subscrit BOOLEAN DEFAULT TRUE,
+                token VARCHAR(64) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                unsubscribed_at TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_campaigns (
+                id SERIAL PRIMARY KEY,
+                uid VARCHAR(32) NOT NULL UNIQUE,
+                assumpte VARCHAR(300) NOT NULL,
+                cos_html TEXT NOT NULL,
+                tipus VARCHAR(20) DEFAULT 'campanya',
+                idioma_filtre VARCHAR(5) DEFAULT 'tot',
+                estat VARCHAR(20) DEFAULT 'sending',
+                total INTEGER DEFAULT 0,
+                enviats INTEGER DEFAULT 0,
+                errors INTEGER DEFAULT 0,
+                creat_per VARCHAR(120),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_at TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_sends (
+                id SERIAL PRIMARY KEY,
+                campaign_id INTEGER NOT NULL,
+                contact_id INTEGER,
+                email VARCHAR(255) NOT NULL,
+                nom VARCHAR(255),
+                token VARCHAR(64),
+                estat VARCHAR(20) DEFAULT 'pending',
+                error TEXT,
+                sent_at TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_mailing_sends_campaign ON mailing_sends(campaign_id, estat)",
+        ]
+    else:
+        stmts = [
+            """CREATE TABLE IF NOT EXISTS mailing_contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT,
+                email TEXT NOT NULL UNIQUE,
+                idioma TEXT DEFAULT 'ca',
+                origen TEXT DEFAULT 'manual',
+                subscrit INTEGER DEFAULT 1,
+                token TEXT NOT NULL UNIQUE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                unsubscribed_at TEXT
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uid TEXT NOT NULL UNIQUE,
+                assumpte TEXT NOT NULL,
+                cos_html TEXT NOT NULL,
+                tipus TEXT DEFAULT 'campanya',
+                idioma_filtre TEXT DEFAULT 'tot',
+                estat TEXT DEFAULT 'sending',
+                total INTEGER DEFAULT 0,
+                enviats INTEGER DEFAULT 0,
+                errors INTEGER DEFAULT 0,
+                creat_per TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                sent_at TEXT
+            )""",
+            """CREATE TABLE IF NOT EXISTS mailing_sends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id INTEGER NOT NULL,
+                contact_id INTEGER,
+                email TEXT NOT NULL,
+                nom TEXT,
+                token TEXT,
+                estat TEXT DEFAULT 'pending',
+                error TEXT,
+                sent_at TEXT
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_mailing_sends_campaign ON mailing_sends(campaign_id, estat)",
+        ]
+    for s in stmts:
+        try:
+            execute(s)
+        except Exception as e:
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
+            print(f"[mailing_schema] skip: {str(e)[:120]}")
+    # Columnes afegides despres de la v1 (campanyes bilingues ca/es). A PG
+    # son IF NOT EXISTS; a SQLite l'ALTER duplicat falla i s'ignora en silenci.
+    if USE_PG:
+        alters = [
+            "ALTER TABLE mailing_campaigns ADD COLUMN IF NOT EXISTS assumpte_es VARCHAR(300)",
+            "ALTER TABLE mailing_campaigns ADD COLUMN IF NOT EXISTS cos_html_es TEXT",
+            "ALTER TABLE mailing_sends ADD COLUMN IF NOT EXISTS idioma VARCHAR(5)",
+        ]
+    else:
+        alters = [
+            "ALTER TABLE mailing_campaigns ADD COLUMN assumpte_es TEXT",
+            "ALTER TABLE mailing_campaigns ADD COLUMN cos_html_es TEXT",
+            "ALTER TABLE mailing_sends ADD COLUMN idioma TEXT",
+        ]
+    for s in alters:
+        try:
+            execute(s)
+        except Exception:
+            try:
+                get_db().rollback()
+            except Exception:
+                pass
+
+
+def _mailing_upsert_contact(nom, email, idioma='ca', origen='manual'):
+    """Insereix o actualitza un contacte. MAI reactiva una baixa (no toca
+    subscrit). Retorna 'added' | 'updated' | 'skipped'."""
+    email = _mailing_valid_email(email)
+    if not email:
+        return 'skipped'
+    existing = query('SELECT id, nom FROM mailing_contacts WHERE email=?', [email], one=True)
+    if existing:
+        if (nom or '').strip() and not (_row_get(existing, 'nom', '') or '').strip():
+            execute('UPDATE mailing_contacts SET nom=? WHERE id=?', [nom.strip(), _row_get(existing, 'id')])
+            return 'updated'
+        return 'skipped'
+    token = secrets.token_urlsafe(24)
+    execute('INSERT INTO mailing_contacts (nom, email, idioma, origen, token) VALUES (?,?,?,?,?)',
+            [(nom or '').strip(), email, (idioma or 'ca'), origen, token])
+    return 'added'
+
+
+def _mailing_parse_lines(text):
+    """Parseja text enganxat: una linia per contacte. Accepta 'email',
+    'nom,email', 'nom;email', 'nom <email>' o 'email,nom'. Retorna [(nom,email)]."""
+    out = []
+    for raw in (text or '').replace('\r', '').split('\n'):
+        line = raw.strip().strip(',;').strip()
+        if not line:
+            continue
+        parts = [p.strip() for p in re.split(r'[,;\t]', line) if p.strip()]
+        email = ''
+        name_parts = []
+        for p in parts:
+            m = re.search(r'<([^<>@\s]+@[^<>@\s]+)>', p)
+            if m:
+                email = m.group(1)
+                rest = p.replace(m.group(0), '').strip()
+                if rest:
+                    name_parts.append(rest)
+            elif '@' in p and not email:
+                email = p
+            else:
+                name_parts.append(p)
+        if email:
+            out.append((' '.join(name_parts).strip(), email))
+    return out
+
+
+def _mailing_text_to_html(text):
+    """Converteix el text pla que escriu l'admin en HTML segur: escapa,
+    paragrafs per linia en blanc, salts simples en <br>."""
+    import html as _html
+    safe = _html.escape((text or '').strip())
+    paras = [p.strip().replace('\n', '<br>') for p in re.split(r'\n\s*\n', safe) if p.strip()]
+    return ''.join(f'<p style="margin:0 0 14px">{p}</p>' for p in paras)
+
+
+def _mailing_render_html(cos_html, contact):
+    """Embolcalla el cos amb la plantilla de marca + peu RGPD amb enllac de baixa.
+    La marca de cara al client (mailing_marca, p. ex. "Reus Revela") pot ser
+    diferent del nom comercial general (empresa_nom) i del nom fiscal que firma
+    el text legal (mailing_responsable, p. ex. "OBJECTIU S.C.P.")."""
+    empresa = (get_config_value('empresa_nom', 'Reus Revela') or 'Reus Revela').strip()
+    marca = (get_config_value('mailing_marca', '') or '').strip() or empresa
+    responsable = (get_config_value('mailing_responsable', '') or '').strip() or marca
+    adreca = (get_config_value('empresa_adreca', '') or '').strip()
+    tel = (get_config_value('empresa_tel', '') or '').strip()
+    nom = (_row_get(contact, 'nom', '') or '').strip()
+    token = _row_get(contact, 'token', '') or ''
+    # {nom} amb contacte sense nom: s'elimina el marcador i l'espai previ,
+    # perque "Hola {nom}," quedi "Hola," i no "Hola hola,".
+    if nom:
+        body = (cos_html or '').replace('{nom}', nom)
+    else:
+        body = re.sub(r'[ \t]*\{nom\}', '', cos_html or '')
+    baixa_url = f"{_mailing_base_url()}/baixa/{token}"
+    peu = ' &middot; '.join([x for x in [marca, adreca, tel] if x])
+    return (
+        '<!DOCTYPE html><html lang="ca"><body style="margin:0;background:#f6f3ee;'
+        'padding:24px 12px;font-family:\'Helvetica Neue\',Arial,sans-serif">'
+        '<div style="max-width:580px;margin:0 auto;background:#fff;border:1px solid #DDD3C4;'
+        'overflow:hidden">'
+        # Capcalera segons manual de marca: logo simbol + nom en serif sobre
+        # fons blanc amb separador Linia — sense bandes de color.
+        '<div style="padding:18px 24px;background:#FFFFFF;border-bottom:1px solid #DDD3C4">'
+        '<img src="https://reusrevela.cat/static/img/logo-reusrevela.png" alt="" '
+        'width="44" height="44" style="vertical-align:middle;border:0">'
+        f'<span style="font-family:Georgia,\'Times New Roman\',serif;font-size:21px;'
+        f'color:#12100C;margin-left:12px;vertical-align:middle">{marca}</span></div>'
+        f'<div style="padding:24px;color:#1d1b18;font-size:15px;line-height:1.7">{body}</div>'
+        '<div style="padding:18px 24px;border-top:1px solid #eee;color:#8d877d;'
+        'font-size:12px;line-height:1.6">'
+        f'{peu}<br>Reps aquest correu perqu&egrave; ets client del taller. '
+        f'Si no en vols rebre m&eacute;s, pots <a href="{baixa_url}" '
+        'style="color:#A67843">donar-te de baixa aqu&iacute;</a>.'
+        '<br><br>'
+        f'<span style="color:#a9a299">Responsable del tractament: {responsable}. '
+        'Tractem les teves dades nom&eacute;s per enviar-te comunicacions del taller, '
+        'sobre la base del nostre inter&eacute;s leg&iacute;tim com a client. Pots exercir els teus '
+        'drets d\'acc&eacute;s, rectificaci&oacute;, supressi&oacute; i oposici&oacute; responent a aquest '
+        'correu o donant-te de baixa. M&eacute;s informaci&oacute; a la '
+        '<a href="https://reusrevela.cat/politica-de-privacitat" '
+        'style="color:#8d877d;text-decoration:underline">Pol&iacute;tica de Privacitat</a>.</span>'
+        '</div></div></body></html>'
+    )
+
+
+def _mailing_send_one(to_addr, subject, html, baixa_url):
+    """Envia un correu via Resend amb capcalera List-Unsubscribe (deliverability).
+    Retorna (ok, error)."""
+    api_key = (get_config_value('resend_api_key', '') or '').strip()
+    if not api_key:
+        return False, 'resend_api_key no configurat'
+    from_addr = (get_config_value('resend_from', '') or '').strip() or 'onboarding@resend.dev'
+    payload_dict = {
+        'from': from_addr,
+        'to': [to_addr],
+        'subject': subject,
+        'html': html,
+        'headers': {
+            'List-Unsubscribe': f'<{baixa_url}>',
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+    }
+    # Reply-to opcional: les respostes dels clients van on de debò es llegeix
+    # el correu (p. ex. reusrevela@gmail.com), no a la adreca remitent sense bustia.
+    reply_to = (get_config_value('resend_reply_to', '') or '').strip()
+    if reply_to:
+        payload_dict['reply_to'] = reply_to
+    payload = json.dumps(payload_dict).encode('utf-8')
+    req = urllib_request.Request(
+        'https://api.resend.com/emails', data=payload,
+        headers={
+            'Authorization': 'Bearer ' + api_key,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Calculadora-Marcs/1.0 (+https://calculadora.reusrevela.cat)',
+            'Accept': 'application/json',
+        }, method='POST')
+    try:
+        with urllib_request.urlopen(req, timeout=12) as resp:
+            resp.read()
+        return True, ''
+    except urllib_error.HTTPError as e:
+        body = ''
+        try:
+            body = e.read().decode('utf-8', errors='replace')[:200]
+        except Exception:
+            pass
+        return False, f'HTTP {e.code}: {body}'
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+@app.route('/admin/mailing')
+@admin_required
+def admin_mailing():
+    _ensure_mailing_schema()
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    subs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts WHERE subscrit', one=True), 'n', 0)
+    camps = query('SELECT id, assumpte, assumpte_es, tipus, estat, total, enviats, errors, created_at, sent_at '
+                  'FROM mailing_campaigns ORDER BY id DESC LIMIT 20') or []
+    return render_template(
+        'admin_mailing.html',
+        total=total, subscrits=subs, baixes=(total - subs), campaigns=camps,
+        resend_ok=_resend_is_configured(),
+        resend_from=(get_config_value('resend_from', '') or ''),
+    )
+
+
+@app.route('/admin/mailing/sync-clients', methods=['POST'])
+@admin_required
+def admin_mailing_sync_clients():
+    _ensure_mailing_schema()
+    rows = query("SELECT nom, email FROM clients_externs "
+                 "WHERE actiu AND email IS NOT NULL AND email <> ''") or []
+    added = updated = 0
+    for r in rows:
+        res = _mailing_upsert_contact(_row_get(r, 'nom', ''), _row_get(r, 'email', ''), origen='clients')
+        if res == 'added':
+            added += 1
+        elif res == 'updated':
+            updated += 1
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    return jsonify(ok=True, added=added, updated=updated, total=total)
+
+
+@app.route('/admin/mailing/import', methods=['POST'])
+@admin_required
+def admin_mailing_import():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    idioma = (data.get('idioma') or 'ca').strip().lower()
+    if idioma not in ('ca', 'es'):
+        idioma = 'ca'
+    parsed = _mailing_parse_lines(data.get('text', ''))
+    added = skipped = invalid = 0
+    seen = set()
+    for nom, email in parsed:
+        ve = _mailing_valid_email(email)
+        if not ve:
+            invalid += 1
+            continue
+        if ve in seen:
+            skipped += 1
+            continue
+        seen.add(ve)
+        res = _mailing_upsert_contact(nom, ve, idioma=idioma, origen='import')
+        if res == 'added':
+            added += 1
+        else:
+            skipped += 1
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    return jsonify(ok=True, added=added, skipped=skipped, invalid=invalid, total=total)
+
+
+@app.route('/admin/mailing/contacts')
+@admin_required
+def admin_mailing_contacts():
+    _ensure_mailing_schema()
+    q = (request.args.get('q') or '').strip().lower()
+    if q:
+        like = f'%{q}%'
+        rows = query("SELECT id, nom, email, idioma, origen, subscrit FROM mailing_contacts "
+                     "WHERE LOWER(email) LIKE ? OR LOWER(COALESCE(nom,'')) LIKE ? "
+                     "ORDER BY id DESC LIMIT 500", [like, like]) or []
+    else:
+        rows = query("SELECT id, nom, email, idioma, origen, subscrit FROM mailing_contacts "
+                     "ORDER BY id DESC LIMIT 500") or []
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    items = [{
+        'id': _row_get(r, 'id'),
+        'nom': _row_get(r, 'nom', '') or '',
+        'email': _row_get(r, 'email', ''),
+        'idioma': _row_get(r, 'idioma', 'ca'),
+        'origen': _row_get(r, 'origen', ''),
+        'subscrit': bool(_row_get(r, 'subscrit')),
+    } for r in rows]
+    return jsonify(ok=True, contacts=items, shown=len(items), total=total)
+
+
+@app.route('/admin/mailing/contacts/delete', methods=['POST'])
+@admin_required
+def admin_mailing_contacts_delete():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cid = data.get('id')
+    if not cid:
+        return jsonify(ok=False, error='Falta id'), 400
+    execute('DELETE FROM mailing_contacts WHERE id=?', [cid])
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    subs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts WHERE subscrit', one=True), 'n', 0)
+    return jsonify(ok=True, total=total, subscrits=subs, baixes=(total - subs))
+
+
+@app.route('/admin/mailing/preview', methods=['POST'])
+@admin_required
+def admin_mailing_preview():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cos = _mailing_text_to_html(data.get('cos', ''))
+    fake = {'nom': 'Nom del client', 'token': 'PREVISUALITZACIO'}
+    return jsonify(ok=True, html=_mailing_render_html(cos, fake))
+
+
+@app.route('/admin/mailing/contacts/set-lang', methods=['POST'])
+@admin_required
+def admin_mailing_contacts_set_lang():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cid = data.get('id')
+    idioma = (data.get('idioma') or '').strip().lower()
+    if not cid or idioma not in ('ca', 'es'):
+        return jsonify(ok=False, error='Falta id o idioma no vàlid'), 400
+    execute('UPDATE mailing_contacts SET idioma=? WHERE id=?', [idioma, cid])
+    return jsonify(ok=True, idioma=idioma)
+
+
+@app.route('/admin/mailing/test', methods=['POST'])
+@admin_required
+def admin_mailing_test():
+    """Envia la prova al correu indicat. Si la campanya té versió en castellà,
+    n'envia dues: [PROVA CA] i [PROVA ES], per revisar-les totes dues d'un clic."""
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    to = _mailing_valid_email(data.get('to', ''))
+    if not to:
+        return jsonify(ok=False, error='Adreca de prova no valida'), 400
+    fake = {'nom': 'prova', 'token': 'PROVA-TOKEN'}
+    baixa = f"{_mailing_base_url()}/baixa/PROVA-TOKEN"
+    versions = [('CA', (data.get('assumpte') or '').strip() or '(sense assumpte)',
+                 data.get('cos', ''))]
+    if (data.get('assumpte_es') or '').strip() or (data.get('cos_es') or '').strip():
+        versions.append(('ES', (data.get('assumpte_es') or '').strip() or '(sense assumpte)',
+                         data.get('cos_es', '')))
+    sent = 0
+    err = ''
+    for tag, assumpte, cos_raw in versions:
+        html = _mailing_render_html(_mailing_text_to_html(cos_raw), fake)
+        ok, e = _mailing_send_one(to, f'[PROVA {tag}] ' + assumpte, html, baixa)
+        if ok:
+            sent += 1
+        else:
+            err = e
+    return jsonify(ok=(sent == len(versions)), sent=sent, total=len(versions), error=err)
+
+
+@app.route('/admin/mailing/create', methods=['POST'])
+@admin_required
+def admin_mailing_create():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    assumpte = (data.get('assumpte') or '').strip()
+    cos_raw = (data.get('cos') or '').strip()
+    # Versio castellana opcional: si s'omple, els contactes amb idioma 'es'
+    # reben aquesta; la resta, la catalana. Si es deixa buida, tothom rep
+    # la catalana (comportament d'abans).
+    assumpte_es = (data.get('assumpte_es') or '').strip()
+    cos_es_raw = (data.get('cos_es') or '').strip()
+    tipus = (data.get('tipus') or 'campanya').strip()
+    idioma_filtre = (data.get('idioma') or 'tot').strip().lower()
+    if idioma_filtre not in ('tot', 'ca', 'es'):
+        idioma_filtre = 'tot'
+    if not assumpte or not cos_raw:
+        return jsonify(ok=False, error='Cal assumpte i cos en català (és la versió base)'), 400
+    if bool(assumpte_es) != bool(cos_es_raw):
+        return jsonify(ok=False, error='La versió en castellà necessita assumpte i cos (o cap dels dos)'), 400
+    cos_html = _mailing_text_to_html(cos_raw)
+    cos_html_es = _mailing_text_to_html(cos_es_raw) if cos_es_raw else ''
+    if idioma_filtre == 'tot':
+        contacts = query('SELECT id, nom, email, token, idioma FROM mailing_contacts WHERE subscrit') or []
+    else:
+        contacts = query('SELECT id, nom, email, token, idioma FROM mailing_contacts '
+                         'WHERE subscrit AND idioma=?', [idioma_filtre]) or []
+    if not contacts:
+        return jsonify(ok=False, error='No hi ha destinataris subscrits per a aquest filtre'), 400
+    uid = secrets.token_hex(8)
+    execute('INSERT INTO mailing_campaigns (uid, assumpte, cos_html, assumpte_es, cos_html_es, tipus, idioma_filtre, estat, total, creat_per) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?)',
+            [uid, assumpte, cos_html, assumpte_es, cos_html_es, tipus, idioma_filtre, 'sending', len(contacts),
+             (session.get('nom') or 'admin')])
+    camp = query('SELECT id FROM mailing_campaigns WHERE uid=?', [uid], one=True)
+    cid = _row_get(camp, 'id')
+    for c in contacts:
+        execute('INSERT INTO mailing_sends (campaign_id, contact_id, email, nom, token, idioma, estat) '
+                'VALUES (?,?,?,?,?,?,?)',
+                [cid, _row_get(c, 'id'), _row_get(c, 'email'), _row_get(c, 'nom', ''),
+                 _row_get(c, 'token', ''), (_row_get(c, 'idioma', 'ca') or 'ca'), 'pending'])
+    return jsonify(ok=True, campaign_id=cid, total=len(contacts))
+
+
+@app.route('/admin/mailing/send-chunk', methods=['POST'])
+@admin_required
+def admin_mailing_send_chunk():
+    _ensure_mailing_schema()
+    data = request.get_json(silent=True) or {}
+    cid = data.get('campaign_id')
+    camp = query('SELECT id, assumpte, cos_html, assumpte_es, cos_html_es FROM mailing_campaigns WHERE id=?', [cid], one=True)
+    if not camp:
+        return jsonify(ok=False, error='Campanya no trobada'), 404
+    assumpte = _row_get(camp, 'assumpte')
+    cos_html = _row_get(camp, 'cos_html')
+    assumpte_es = (_row_get(camp, 'assumpte_es', '') or '').strip()
+    cos_html_es = (_row_get(camp, 'cos_html_es', '') or '').strip()
+    bilingue = bool(assumpte_es and cos_html_es)
+    pend = query('SELECT id, email, nom, token, idioma FROM mailing_sends '
+                 'WHERE campaign_id=? AND estat=? ORDER BY id LIMIT 20', [cid, 'pending']) or []
+    for s in pend:
+        contact = {'nom': _row_get(s, 'nom', ''), 'token': _row_get(s, 'token', '')}
+        es = bilingue and (_row_get(s, 'idioma', 'ca') or 'ca') == 'es'
+        html = _mailing_render_html(cos_html_es if es else cos_html, contact)
+        baixa = f"{_mailing_base_url()}/baixa/{_row_get(s, 'token', '')}"
+        ok, err = _mailing_send_one(_row_get(s, 'email'), assumpte_es if es else assumpte, html, baixa)
+        if ok:
+            execute('UPDATE mailing_sends SET estat=?, sent_at=? WHERE id=?',
+                    ['sent', _mailing_now(), _row_get(s, 'id')])
+        else:
+            execute('UPDATE mailing_sends SET estat=?, error=? WHERE id=?',
+                    ['failed', err, _row_get(s, 'id')])
+        time.sleep(0.08)
+    enviats = _row_get(query('SELECT COUNT(*) AS n FROM mailing_sends WHERE campaign_id=? AND estat=?',
+                             [cid, 'sent'], one=True), 'n', 0)
+    errs = _row_get(query('SELECT COUNT(*) AS n FROM mailing_sends WHERE campaign_id=? AND estat=?',
+                          [cid, 'failed'], one=True), 'n', 0)
+    remaining = _row_get(query('SELECT COUNT(*) AS n FROM mailing_sends WHERE campaign_id=? AND estat=?',
+                               [cid, 'pending'], one=True), 'n', 0)
+    done = (remaining == 0)
+    if done:
+        execute('UPDATE mailing_campaigns SET estat=?, enviats=?, errors=?, sent_at=? WHERE id=?',
+                ['sent', enviats, errs, _mailing_now(), cid])
+    else:
+        execute('UPDATE mailing_campaigns SET enviats=?, errors=? WHERE id=?', [enviats, errs, cid])
+    return jsonify(ok=True, enviats=enviats, errors=errs, remaining=remaining, done=done)
+
+
+@app.route('/admin/mailing/campaign/<int:cid>')
+@admin_required
+def admin_mailing_campaign(cid):
+    _ensure_mailing_schema()
+    camp = query('SELECT * FROM mailing_campaigns WHERE id=?', [cid], one=True)
+    if not camp:
+        return jsonify(ok=False), 404
+    fails = query('SELECT email, error FROM mailing_sends WHERE campaign_id=? AND estat=? '
+                  'ORDER BY id LIMIT 100', [cid, 'failed']) or []
+    return jsonify(
+        ok=True,
+        campaign={k: _row_get(camp, k) for k in
+                  ['id', 'assumpte', 'tipus', 'estat', 'total', 'enviats', 'errors']},
+        failures=[{'email': _row_get(f, 'email'), 'error': _row_get(f, 'error')} for f in fails],
+    )
+
+
+@app.route('/baixa/<token>', methods=['GET', 'POST'])
+def mailing_unsubscribe(token):
+    _ensure_mailing_schema()
+    c = query('SELECT id, email, subscrit FROM mailing_contacts WHERE token=?', [token], one=True)
+    if not c:
+        if request.method == 'POST':
+            return ('', 200)
+        return render_template('baixa.html', estat='no_trobat'), 404
+    if _row_get(c, 'subscrit'):
+        execute('UPDATE mailing_contacts SET subscrit=?, unsubscribed_at=? WHERE id=?',
+                [(False if USE_PG else 0), _mailing_now(), _row_get(c, 'id')])
+    if request.method == 'POST':
+        return ('', 200)
+    return render_template('baixa.html', estat='ok', email=_row_get(c, 'email'))
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

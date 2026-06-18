@@ -2,9 +2,9 @@
 <html lang="ca">
 <head>
 <meta name="theme-color" content="{{ nav_color|default('#1A6B45') }}">
-<link rel="shortcut icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
-<link rel="icon" type="image/png" sizes="32x32" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
-<link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/logo-reusrevela.png">
+<link rel="shortcut icon" href="https://reusrevela.cat/static/img/favicon.ico">
+<link rel="icon" type="image/svg+xml" href="https://reusrevela.cat/static/img/favicon-rr.svg">
+<link rel="apple-touch-icon" href="https://reusrevela.cat/static/img/apple-touch-icon.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reus Revela — Historial</title>
@@ -148,8 +148,12 @@ tr:hover td{background:#FAFAF8}
     <a href="/historial" style="color:var(--green);font-weight:600;text-decoration:none">× Treure filtre</a>
   </div>
   {% endif %}
-  <div id="barra-seleccio" style="display:none;align-items:center;gap:.75rem;margin-bottom:1rem;padding:.65rem 1rem;background:var(--red-l);border:1px solid #E8B4B4;border-radius:var(--r)">
-    <span style="font-size:13px;font-weight:600;color:var(--red)"><span id="sel-count">0</span> seleccionats</span>
+  <div id="barra-seleccio" style="display:none;align-items:center;gap:.75rem;margin-bottom:1rem;padding:.65rem 1rem;background:var(--green-l);border:1px solid #B8DCC9;border-radius:var(--r);flex-wrap:wrap">
+    <span style="font-size:13px;font-weight:600;color:var(--green)"><span id="sel-count">0</span> seleccionats</span>
+    <button id="btn-albara-conjunt" onclick="crearDocConjunt('albara')" class="btn-sm" style="display:none;background:var(--amber-l,#FFF7ED);color:var(--amber,#C2410C);border:1px solid #FED7AA;font-weight:600">Albarà conjunt a FD</button>
+    <button id="btn-pres-conjunt" onclick="crearDocConjunt('pressupost')" class="btn-sm" style="display:none;background:#fff;color:var(--green);border:1px solid #B8DCC9;font-weight:600">Pressupost conjunt a FD</button>
+    <span id="conjunt-hint" style="display:none;font-size:11px;color:var(--muted)">Tots del mateix client. Millor si són clients habituals enllaçats amb FD.</span>
+    <span style="flex:1"></span>
     <button id="btn-elim-sel" onclick="eliminarSeleccio()" class="btn-sm btn-del" style="display:none">Eliminar seleccionats</button>
   </div>
   {% endif %}
@@ -438,6 +442,33 @@ function updateSeleccio(){
   if(barra) barra.style.display = n ? 'flex' : 'none';
   if(document.getElementById('sel-count')) document.getElementById('sel-count').textContent = n;
   if(btnEl) btnEl.style.display = n ? 'inline-flex' : 'none';
+  // Document conjunt: a partir de 2 pressupostos seleccionats.
+  ['btn-albara-conjunt','btn-pres-conjunt','conjunt-hint'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = n >= 2 ? 'inline-flex' : 'none';
+  });
+}
+
+function crearDocConjunt(docType){
+  var chks = document.querySelectorAll('.sessio-chk:checked');
+  if(chks.length < 2){ alert('Selecciona com a mínim 2 pressupostos.'); return; }
+  var sids = Array.from(chks).map(function(c){return c.dataset.sid;});
+  var nom = docType === 'pressupost' ? 'pressupost' : 'albarà';
+  if(!confirm('Crear un ' + nom + ' conjunt a Factura Directa amb ' + sids.length + ' pressupostos? (han de ser del mateix client)')) return;
+  var btns = document.querySelectorAll('#barra-seleccio button');
+  btns.forEach(function(b){ b.disabled = true; });
+  fetch('/api/crear-doc-conjunt', {method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({sessio_ids: sids, doc_type: docType})
+  }).then(function(r){return r.json();}).then(function(d){
+    btns.forEach(function(b){ b.disabled = false; });
+    if(d.ok){
+      var Doc = d.doc_type === 'pressupost' ? 'Pressupost' : 'Albarà';
+      alert(Doc + ' ' + d.numero + ' creat a Factura Directa per ' + d.contact + ' (' + d.n_pressupostos + ' pressupostos).');
+      if(d.doc_type !== 'pressupost') location.reload();
+    } else {
+      alert('Error: ' + (d.error || 'desconegut'));
+    }
+  }).catch(function(){ btns.forEach(function(b){ b.disabled = false; }); alert('Error de connexió amb Factura Directa.'); });
 }
 
 function eliminarSeleccio(){
