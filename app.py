@@ -70,7 +70,7 @@ _CSP = (
     "font-src 'self' https://fonts.gstatic.com data:; "
     "img-src 'self' data: https:; "
     "connect-src 'self'; "
-    "form-action 'self'; "
+    "form-action 'self' https://reusrevela.cat https://reusrevela.es; "
     "base-uri 'self'; "
     "frame-ancestors 'none'"
 )
