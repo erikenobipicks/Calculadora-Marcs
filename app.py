@@ -3281,6 +3281,94 @@ def index():
     return redirect(url_for('calculadora'))
 
 
+def _parse_comanda_date(value):
+    """Interpreta el camp `data` (text lliure) com a data; None si no es pot."""
+    s = str(value or '').strip()
+    if not s:
+        return None
+    s = s.split(' ')[0].split('T')[0]
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%d/%m/%y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(s).date()
+    except ValueError:
+        return None
+
+
+def _dashboard_counts(urgent_days=21):
+    """Comptadors del tauler derivats de l'estat EXISTENT de `comandes`
+    (marcador [ACCEPTAT] a observacions, flags pagat/entregat, fd_albara).
+    NOMÉS lectura: no modifica ni el model ni les dades. Agrupa per
+    sessio_id (un pressupost/comanda lògic, encara que tingui opcions A/B)."""
+    is_admin = _is_admin_session()
+    sql = "SELECT sessio_id, id, observacions, pagat, entregat, fd_albara, data FROM comandes"
+    args = []
+    if not is_admin:
+        sql += " WHERE user_id=?"
+        args.append(session.get('user_id'))
+    rows = query(sql, args) or []
+    today = datetime.now().date()
+    groups = {}
+    for r in rows:
+        sid = _row_get(r, 'sessio_id') or ('id:' + str(_row_get(r, 'id')))
+        g = groups.get(sid)
+        if g is None:
+            g = {'accept': False, 'pagat': False, 'entregat': False, 'albara': False, 'date': None}
+            groups[sid] = g
+        if '[ACCEPTAT]' in str(_row_get(r, 'observacions', '') or ''):
+            g['accept'] = True
+        if _row_get(r, 'pagat', 0):
+            g['pagat'] = True
+        if _row_get(r, 'entregat', 0):
+            g['entregat'] = True
+        if str(_row_get(r, 'fd_albara', '') or '').strip():
+            g['albara'] = True
+        d = _parse_comanda_date(_row_get(r, 'data'))
+        if d and (g['date'] is None or d < g['date']):
+            g['date'] = d
+    c = {'pressupostos': 0, 'comandes': 0, 'pendents_albara': 0,
+         'pendents_cobrament': 0, 'pendents_entrega': 0, 'entregats': 0, 'urgents': 0}
+    for g in groups.values():
+        if not g['accept']:
+            c['pressupostos'] += 1
+            continue
+        c['comandes'] += 1
+        if not g['albara']:
+            c['pendents_albara'] += 1
+        if not g['pagat']:
+            c['pendents_cobrament'] += 1
+        if not g['entregat']:
+            c['pendents_entrega'] += 1
+            if g['date'] and (today - g['date']).days >= urgent_days:
+                c['urgents'] += 1
+        else:
+            c['entregats'] += 1
+    return c
+
+
+@app.route('/inici')
+@login_required
+def inici():
+    """Tauler d'inici: accessos ràpids + comptadors de pedidos/pressupostos
+    per estat. NOMÉS lectura (F1)."""
+    try:
+        u = query('SELECT setup_done FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        if u and not bool(_row_get(u, 'setup_done', 0)):
+            return redirect(url_for('setup'))
+    except Exception:
+        pass
+    try:
+        counts = _dashboard_counts()
+    except Exception:
+        app.logger.exception('dashboard_counts_failed')
+        counts = {'pressupostos': 0, 'comandes': 0, 'pendents_albara': 0,
+                  'pendents_cobrament': 0, 'pendents_entrega': 0, 'entregats': 0, 'urgents': 0}
+    return render_template('inici.html', counts=counts)
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():

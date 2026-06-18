@@ -1,9 +1,9 @@
-{# Shared admin-only links, included inside each page's <nav>.
-   Filosofia: nav minimal i homogeni per a tots. Els admins només veuen
-   2 ítems extra (Pendents albarà amb badge + accés al panell /admin).
-   La resta de eines admin (Clients, Tarifes, Catàleg, Configuració…)
-   viuen com a cards al panell /admin. #}
+{# Enllaços d'administració (entitats de gestió), inclosos dins el <nav>
+   de cada pàgina. Un sol lloc per a tots: el menú per entitat queda
+   coherent a base.html i a totes les pàgines que l'inclouen. #}
 {% if session.is_admin %}
-  <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">⏳ Pendents albarà<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
-  <a href="/admin">⚙️ Admin</a>
+  <a href="/admin/clients-externs" {% if request.path.startswith('/admin/clients-externs') %}class="active"{% endif %}>Clients</a>
+  <a href="/admin/cataleg" {% if request.path.startswith('/admin/cataleg') %}class="active"{% endif %}>Cat&agrave;leg admin</a>
+  <a href="/historial?albara=pendent" id="nav-pendents" class="nav-pendents">⏳ Pendents albar&agrave;<span id="nav-pendents-badge" class="nav-badge" {% if not nav_pendents_albara %}style="display:none"{% endif %}>{{ nav_pendents_albara or '' }}</span></a>
+  <a href="/admin" {% if request.endpoint == 'admin' %}class="active"{% endif %}>⚙️ Configuraci&oacute;</a>
 {% endif %}

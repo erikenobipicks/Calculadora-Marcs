@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Reus Revela — Inici{% endblock %}
+{% block head %}
+<style>
+  .dash-head{margin-bottom:1.5rem}
+  .dash-head h1{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;letter-spacing:-.4px}
+  .dash-head p{font-size:14px;color:var(--muted);margin-top:.35rem}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-bottom:2rem}
+  .kpi{display:block;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1.3rem;text-decoration:none;color:inherit;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+  .kpi:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(28,27,24,.08);border-color:#cfc7b7}
+  .kpi .n{font-family:'DM Serif Display',serif;font-size:34px;line-height:1;color:var(--text)}
+  .kpi .l{display:block;margin-top:.55rem;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .kpi.is-green .n{color:var(--green)}
+  .kpi.is-amber .n{color:var(--amber)}
+  .kpi.is-red .n{color:var(--red)}
+  .kpi.is-muted .n{color:var(--muted)}
+  .sec-title{font-family:'DM Serif Display',serif;font-size:20px;font-weight:400;margin:.5rem 0 1rem}
+  .qa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}
+  .qa{display:flex;align-items:center;gap:.85rem;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.05rem 1.2rem;text-decoration:none;color:inherit;transition:border-color .15s ease,transform .15s ease}
+  .qa:hover{border-color:var(--green);transform:translateY(-2px)}
+  .qa .ic{width:40px;height:40px;flex-shrink:0;border-radius:11px;background:var(--green-l);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:20px}
+  .qa .t{font-size:14px;font-weight:700;color:var(--text)}
+  .qa .d{font-size:12px;color:var(--muted);margin-top:.15rem}
+</style>
+{% endblock %}
+{% block content %}
+<div class="wrap">
+  <div class="dash-head">
+    <h1>Hola{% if session.nom %}, {{ session.nom }}{% endif %}</h1>
+    <p>Resum de l'activitat i accessos r&agrave;pids del taller.</p>
+  </div>
+
+  <div class="kpi-grid">
+    <a class="kpi is-green" href="/historial">
+      <span class="n">{{ counts.comandes }}</span>
+      <span class="l">Comandes acceptades</span>
+    </a>
+    <a class="kpi" href="/historial">
+      <span class="n">{{ counts.pressupostos }}</span>
+      <span class="l">Pressupostos oberts</span>
+    </a>
+    {% if session.is_admin %}
+    <a class="kpi is-amber" href="/historial?albara=pendent">
+      <span class="n">{{ counts.pendents_albara }}</span>
+      <span class="l">Pendents albar&agrave;</span>
+    </a>
+    {% endif %}
+    <a class="kpi is-amber" href="/historial">
+      <span class="n">{{ counts.pendents_cobrament }}</span>
+      <span class="l">Pendents de cobrament</span>
+    </a>
+    <a class="kpi is-amber" href="/historial">
+      <span class="n">{{ counts.pendents_entrega }}</span>
+      <span class="l">Pendents d'entrega</span>
+    </a>
+    <a class="kpi is-red" href="/historial">
+      <span class="n">{{ counts.urgents }}</span>
+      <span class="l">Urgents (&gt;21 dies)</span>
+    </a>
+    <a class="kpi is-muted" href="/historial">
+      <span class="n">{{ counts.entregats }}</span>
+      <span class="l">Entregades</span>
+    </a>
+  </div>
+
+  <div class="sec-title">Accessos r&agrave;pids</div>
+  <div class="qa-grid">
+    <a class="qa" href="/calculadora">
+      <div class="ic">&#10010;</div>
+      <div><div class="t">Nou pressupost</div><div class="d">Calculadora de marcs</div></div>
+    </a>
+    <a class="qa" href="/historial">
+      <div class="ic">&#128203;</div>
+      <div><div class="t">Pressupostos i comandes</div><div class="d">Historial complet</div></div>
+    </a>
+    <a class="qa" href="/cataleg">
+      <div class="ic">&#127991;</div>
+      <div><div class="t">Cat&agrave;leg de motllures</div><div class="d">Consulta refer&egrave;ncies</div></div>
+    </a>
+    {% if session.is_admin %}
+    <a class="qa" href="/admin/clients-externs">
+      <div class="ic">&#128100;</div>
+      <div><div class="t">Clients</div><div class="d">Fitxes de client</div></div>
+    </a>
+    <a class="qa" href="/admin">
+      <div class="ic">&#9881;</div>
+      <div><div class="t">Configuraci&oacute;</div><div class="d">Tarifes, cat&agrave;leg, usuaris</div></div>
+    </a>
+    {% else %}
+    <a class="qa" href="/ajustos">
+      <div class="ic">&#9881;</div>
+      <div><div class="t">Ajustos</div><div class="d">Marge, marca i empresa</div></div>
+    </a>
+    <a class="qa" href="/ajuda">
+      <div class="ic">&#10067;</div>
+      <div><div class="t">Ajuda</div><div class="d">Com funciona</div></div>
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
