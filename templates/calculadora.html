@@ -278,69 +278,92 @@ body.has-sticky-bar{padding-bottom:78px}
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
 <style>
 /* ============================================================
-   Redisseny visual 2026 de la calculadora (PAS 1 · només CSS).
-   Es carrega DESPRÉS de brand.css → guanya la cascada. NOMÉS
-   presentació (colors, ombres, radius, espais, tipografia); no
-   toca cap estructura grid/flex que pugui moure el formulari,
-   ni cap classe/markup/handler. Accent = color de marca: var(--green).
+   REDISSENY REAL · Variant B (càlid/daurat editorial).
+   Skin complet carregat DESPRÉS de brand.css → domina la cascada.
+   NOMÉS presentació, sobre les classes existents: no toca markup,
+   inputs, handlers ni cap <script>. El buscador de motllura per
+   referència (.ss) i el toggle del PVD (€) es conserven igual.
+   Accent primari = color de marca de sessió (var(--green));
+   var(--amber) = daurat per als detalls càlids de la variant B.
    ============================================================ */
-.wrap{ max-width:1200px; padding:1.7rem 1.3rem 3.5rem; }
-.ph h1{ font-size:clamp(1.7rem,2.8vw,2.15rem); letter-spacing:-.02em; line-height:1.05; }
-.ph p{ font-size:12.5px; line-height:1.55; }
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
 
-/* Targetes modernes */
-.card{ border:1px solid var(--border); border-radius:16px; padding:1.15rem 1.2rem; margin-bottom:1rem;
-  box-shadow:0 1px 2px rgba(18,16,12,.04), 0 8px 22px rgba(18,16,12,.05); }
-.card-t{ font-size:10.5px; letter-spacing:.12em; color:var(--hint); margin-bottom:1rem; padding-bottom:.6rem; }
-#tabs-bar{ border-radius:16px; background:#fff; box-shadow:0 1px 2px rgba(18,16,12,.04); padding:.8rem .95rem; }
+:root{ --b-serif:'Fraunces', 'DM Serif Display', Georgia, serif; --b-line:#e7e0d4; --b-line2:#d9d1c2; }
+body{ background:
+  radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--amber) 9%, transparent), transparent 52%),
+  linear-gradient(180deg,#faf7f1,#f3eee5) !important; font-size:15px; }
+.wrap{ max-width:1240px; padding:1.7rem 1.3rem 5.5rem; }
+.ph h1{ font-family:var(--b-serif) !important; font-weight:600; font-size:clamp(1.75rem,2.8vw,2.35rem); letter-spacing:-.01em; line-height:1.04; }
+.ph p{ font-size:12.5px; line-height:1.55; color:var(--muted); }
+
+/* Targetes amb to càlid i ombra en capes */
+.card{ background:#fff; border:1px solid var(--b-line); border-radius:18px; padding:1.3rem 1.35rem; margin-bottom:1.1rem;
+  box-shadow:0 1px 2px rgba(20,16,12,.04), 0 12px 32px rgba(20,16,12,.06); }
+.card-t{ font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:var(--hint);
+  margin-bottom:1.05rem; padding-bottom:.65rem; border-bottom:1px solid var(--b-line); }
+.card-t::after{ background:var(--b-line); }
+#tabs-bar{ border-radius:16px; background:#fff; border-color:var(--b-line); box-shadow:0 1px 2px rgba(20,16,12,.04); padding:.85rem 1rem; }
 
 /* Camps */
-.f label{ font-size:12px; font-weight:600; letter-spacing:.01em; margin-bottom:5px; }
-.f input, .f select{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:14px;
+.f label{ font-size:11.5px; font-weight:700; letter-spacing:.02em; color:var(--ink-muted, #5a554c); margin-bottom:6px; }
+.f input, .f select{ border:1px solid var(--b-line2); border-radius:11px; padding:11px 13px; font-size:14.5px; background:#fff;
   transition:border-color .15s, box-shadow .15s; }
-.f input:focus, .f select:focus{ border-color:var(--green); box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 14%, transparent); }
+.f input:focus, .f select:focus{ border-color:var(--green); box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 16%, transparent); }
+.f input[readonly]{ background:#f6f3ec; }
 
-/* Selectors de material (opcions) com a chips moderns */
-.opt-btn{ border:1px solid var(--border); border-radius:11px; min-height:46px; padding:9px 12px; transition:all .15s ease; }
+/* Buscador de motllura per referència (.ss) — es manté tal qual, només estilitzat */
+.ss-list{ border-radius:12px; border-color:var(--b-line2); box-shadow:0 16px 44px rgba(20,16,12,.16); }
+.ss-item:hover, .ss-item.active{ background:var(--green-l); }
+.ss-thumb{ border-radius:9px; }
+.chip{ border-radius:999px; padding:3px 11px; font-weight:700; letter-spacing:.02em; }
+
+/* Selectors de material com a chips moderns */
+.grup{ border-bottom:1px solid var(--b-line); }
+.opt-btn{ border:1px solid var(--b-line2); border-radius:12px; min-height:48px; padding:10px 13px; font-weight:600; transition:.15s ease; }
 .opt-btn:hover{ border-color:var(--green); background:var(--green-l); }
-.opt-btn.selected{ background:color-mix(in srgb, var(--green-l) 72%, white); border-color:var(--green);
-  box-shadow:inset 0 0 0 1px var(--green); }
+.opt-btn.selected{ background:color-mix(in srgb, var(--green-l) 70%, white); border-color:var(--green); box-shadow:inset 0 0 0 1px var(--green); }
 .opt-preu{ border-radius:999px; font-weight:800; }
-.chip{ border-radius:999px; padding:3px 10px; font-weight:700; }
-.extra-toggle{ border-radius:12px; }
+.extra-toggle{ border-radius:13px; padding:.85rem 1rem; }
+.extra-toggle-price{ border-radius:999px; }
 
-/* Targeta fosca del marge: més moderna però igual de fosca */
-.dcard{ border-radius:16px; box-shadow:0 14px 36px rgba(18,16,12,.18); }
-.cost-panel{ border-radius:12px; }
+/* Targeta fosca del marge (conté el PVD darrere del toggle €) — més moderna, igual de discreta */
+.dcard{ background:#1f1b16; border-color:#3a342b; border-radius:18px; box-shadow:0 16px 40px rgba(20,16,12,.2); }
+.cost-panel{ border-radius:13px; }
+.tog button.on{ background:var(--green); }
 
-/* Panell de RESULTAT / desglossament */
-.res-card{ border:1px solid var(--border); border-radius:18px; overflow:hidden;
-  box-shadow:0 2px 6px rgba(18,16,12,.05), 0 18px 44px rgba(18,16,12,.08); }
-.res-head{ padding:1rem 1.3rem; }
-.res-body{ padding:1.15rem 1.3rem; }
-.r-val.big{ font-size:24px; }
-.r-row{ padding:9px 0; }
-.e-row input{ border-radius:9px; }
+/* PANELL DE RESUM ECONÒMIC (.res-card) — protagonista, sempre a la dreta */
+.res-card{ border:1px solid var(--b-line); border-radius:20px; overflow:hidden;
+  box-shadow:0 4px 12px rgba(20,16,12,.06), 0 26px 60px rgba(20,16,12,.12); }
+.res-head{ background:#1f1b16; padding:1.05rem 1.3rem; }
+.res-head span{ letter-spacing:.12em; }
+.res-body{ padding:1.2rem 1.3rem; }
+.r-row{ padding:9px 0; border-bottom:1px solid var(--b-line); font-size:14px; }
+.r-lbl{ color:var(--ink-muted,#5a554c); }
+.r-val.big{ font-family:var(--b-serif) !important; font-size:30px; font-weight:600; color:var(--green); }
+.r-val.red{ font-family:var(--b-serif) !important; }
+.e-row input{ border-radius:10px; border-color:var(--b-line2); }
+.summary-sidebar{ top:80px; gap:1.05rem; }
 
-/* Botons amb jerarquia + elevació al hover */
-.btn{ border-radius:11px; padding:12px 15px; font-weight:700; transition:transform .14s ease, filter .14s ease, background .14s ease; }
+/* Botons amb jerarquia */
+.btn{ border-radius:12px; padding:12px 15px; font-weight:700; transition:transform .14s ease, filter .14s ease; }
 .btn:hover{ transform:translateY(-1px); }
 .btn-g{ background:var(--green); color:#fff; }
-.btn-g:hover{ filter:brightness(1.06); }
+.btn-g:hover{ filter:brightness(1.07); }
+.btn-a{ background:var(--amber-l); color:var(--amber); border:1px solid color-mix(in srgb, var(--amber) 36%, white); }
 .actions{ gap:.7rem; }
-.more-actions>summary{ border-radius:11px; }
+.more-actions>summary{ border-radius:12px; }
 .more-actions-menu{ border-radius:14px; }
-
-/* Avisos */
-.alert{ border-radius:11px; }
-.constraints-box{ border-radius:12px; }
+.alert{ border-radius:12px; }
+.constraints-box{ border-radius:13px; }
 .modal{ border-radius:20px; }
 
-/* Barra inferior sticky més refinada (cor del mostrador) */
-.sticky-bar{ border-radius:18px; padding:10px 11px 10px 18px; gap:15px;
-  background:rgba(24,21,16,.97); box-shadow:0 18px 50px rgba(18,16,12,.3); }
-.sticky-bar-total{ font-size:22px; }
+/* Barra inferior sticky (cor del mostrador) */
+.sticky-bar{ border-radius:18px; padding:11px 12px 11px 20px; gap:16px; background:rgba(28,24,18,.97);
+  box-shadow:0 18px 52px rgba(20,16,12,.32); }
+.sticky-bar-total{ font-family:var(--b-serif) !important; font-size:23px; font-weight:600; }
 .sticky-bar-cta{ border-radius:12px; }
+.sticky-bar-cta, .sb-cistella{ background:var(--green); }
+.sb-cistella{ color:#fff; border-color:transparent; background:color-mix(in srgb, var(--amber) 86%, black); }
 @media (max-width:640px){ .sticky-bar{ border-radius:16px; } }
 </style>
 </head>

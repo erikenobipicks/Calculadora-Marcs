@@ -94,15 +94,6 @@ def robots_txt():
     return Response("User-agent: *\nDisallow: /\n", mimetype='text/plain')
 
 
-@app.route('/mockup-calc')
-def mockup_calc():
-    """TEMPORAL · pàgina de mockup estàtica per validar el rediseny visual de
-    la calculadora. Aïllada i inofensiva: dades d'exemple, sense lògica de
-    càlcul, sense tocar res de l'app real. ?estil=2 mostra la variant B.
-    S'elimina un cop aprovat el disseny."""
-    return render_template('mockup_calc.html', v=(request.args.get('estil') or '1').strip())
-
-
 MOLDURA_IMAGE_EXTS = ('jpg', 'jpeg', 'png', 'webp', 'gif')
 MOLDURA_COLOR_FILTERS = [
     ('daurat', 'Daurades'),
