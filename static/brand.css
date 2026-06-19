@@ -218,3 +218,113 @@ nav.site-nav a[href="/cataleg"] {
 nav.site-nav + * {
     margin-top: 0;
 }
+
+/* ============================================================
+   REFRESC VISUAL 2026 — sistema de components compartit.
+   Es carrega l'última: sobreescriu el CSS inline d'igual
+   especificitat sense tocar cap plantilla. Propaga a totes les
+   pàgines d'usuari i admin (inclosa calculadora) amb baix risc.
+   ============================================================ */
+
+:root {
+    --shadow-sm: 0 1px 2px rgba(18,16,12,.04), 0 3px 10px rgba(18,16,12,.05);
+    --shadow-md: 0 6px 18px rgba(18,16,12,.07), 0 16px 40px rgba(18,16,12,.08);
+    --line-soft: #efe9df;
+}
+
+body { line-height: 1.55; }
+
+/* — Targetes: tractament unificat, modern i lleuger — */
+.card, .sessio-card, .section-card, .side-card, .quick-card,
+.search-card, .admin-card, .kpi, .qa, .side-panel > .side-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+}
+/* Microinteracció a les targetes/fileres clicables */
+a.admin-card, a.kpi, a.qa {
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+a.admin-card:hover, a.kpi:hover, a.qa:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: #cdbfa6;
+}
+
+/* — Taules llegibles (historial, admin) — */
+table { border-collapse: collapse; width: 100%; }
+table thead th, table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted-soft);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--sand);
+}
+table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+}
+table tbody tr:hover td { background: #fbf8f3; }
+table tr:last-child td { border-bottom: none; }
+
+/* — Botons amb jerarquia i hover — */
+.btn, .btn-g, .btn-o, .btn-sm, .btn-pdf {
+    font-weight: 600;
+    transition: transform .14s ease, box-shadow .14s ease, background .14s ease, border-color .14s ease;
+}
+.btn-g { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.btn-g:hover { background: #8b6133; border-color: #8b6133; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btn-o { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+.btn-o:hover { border-color: #c9bca6; background: var(--sand); }
+
+/* — Inputs / selects coherents — */
+input[type=text], input[type=email], input[type=password], input[type=number],
+input[type=search], input[type=tel], input[type=url], select, textarea {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+}
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(166,120,67,.13);
+}
+
+/* — Accessibilitat: focus visible coherent amb la marca — */
+a:focus-visible, button:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+
+/* — Sistema d'etiquetes d'ESTAT (color) — reutilitzable a historial i a F2 — */
+.estat {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: 11px; font-weight: 700; letter-spacing: .015em;
+    padding: 3px 11px; border-radius: 999px; white-space: nowrap;
+    border: 1px solid transparent; line-height: 1.5;
+}
+.estat::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.estat-nou        { background: #eef1fc; color: #3a49a8; border-color: #dbe1fb; }
+.estat-revisar    { background: #fff5ea; color: #a85108; border-color: #fcdcb8; }
+.estat-produccio  { background: #fef8e3; color: #8a6a0c; border-color: #f3e2a0; }
+.estat-material   { background: #fdedf0; color: #aa2e45; border-color: #f4cad3; }
+.estat-preparat   { background: #eaf5ef; color: #176046; border-color: #c5e3d2; }
+.estat-avisat     { background: #e8f3fb; color: #1c6a92; border-color: #cce4f3; }
+.estat-entregat   { background: var(--success-soft); color: var(--success); border-color: #bfe3cf; }
+.estat-cancelat   { background: #f2f0ec; color: #7b756b; border-color: #e1dbce; }
+
+/* Refinament dels badges existents de l'historial perquè respirin igual */
+.badge { border-radius: 999px; padding: 3px 10px; font-weight: 700; }
+.badge-pagat { background: var(--success-soft); color: var(--success); }
+
+/* Enllaç de retorn / pills més suaus */
+.pill, .filter-btn { transition: background .15s ease, color .15s ease, border-color .15s ease; }
+
