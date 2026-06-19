@@ -721,6 +721,55 @@ def _is_admin_session():
     return bool(session.get('is_admin'))
 
 
+# ── F2 · Cicle d'estats de comanda ─────────────────────────────────────────
+# Ordre del flux. La clau coincideix amb la classe CSS .estat-<clau> de
+# brand.css (etiquetes de color ja existents). 'pagat' NO és un estat: és
+# dada de cobrament a part.
+COMANDA_ESTATS = [
+    ('nou', 'Nou'),
+    ('revisar', 'Pendent de revisar'),
+    ('produccio', 'En producció'),
+    ('material', 'Pendent de material'),
+    ('preparat', 'Preparat'),
+    ('avisat', 'Avisat client'),
+    ('entregat', 'Entregat'),
+    ('cancelat', 'Cancel·lat'),
+]
+COMANDA_ESTAT_KEYS = {k for k, _ in COMANDA_ESTATS}
+COMANDA_ESTAT_LABELS = dict(COMANDA_ESTATS)
+# Estats considerats "tancats" (no pendents de feina al taller).
+COMANDA_ESTATS_TANCATS = {'entregat', 'cancelat'}
+
+
+def _derive_estat(row):
+    """Estat efectiu d'una comanda: el camp `estat` si és vàlid; si no, derivat
+    dels flags existents (compat amb files antigues encara sense backfill).
+    Mateix mapeig que la migració: entregat→entregat, [ACCEPTAT]→produccio,
+    altrament nou."""
+    e = str(_row_get(row, 'estat', '') or '').strip().lower()
+    if e in COMANDA_ESTAT_KEYS:
+        return e
+    if _row_get(row, 'entregat', 0):
+        return 'entregat'
+    if '[ACCEPTAT]' in str(_row_get(row, 'observacions', '') or ''):
+        return 'produccio'
+    return 'nou'
+
+
+def _comanda_es_urgent(row, dies=21):
+    """Urgent = comanda oberta (no tancada) amb més de `dies` d'antiguitat.
+    Sense camp de venciment, és una heurística per a la safata d'accions."""
+    if _derive_estat(row) in COMANDA_ESTATS_TANCATS:
+        return False
+    d = _parse_comanda_date(_row_get(row, 'data'))
+    if not d:
+        return False
+    try:
+        return (datetime.now().date() - d).days >= dies
+    except Exception:
+        return False
+
+
 def _audit_log(action, target_user_id=None, target_username=None, details=''):
     """Registra una acció administrativa a la taula audit_log. Idempotent
     davant errors (no peta la request si la taula no existeix encara — el
@@ -4431,7 +4480,29 @@ def marcar_entregat(sessio_id):
         return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
     entregat = (request.json or {}).get('entregat', 1)
     execute('UPDATE comandes SET entregat=? WHERE sessio_id=?', [entregat, sessio_id])
+    # Sincronitza el cicle d'estats amb el flag d'entrega (sense perdre estat manual).
+    if int(entregat or 0) == 1:
+        execute("UPDATE comandes SET estat='entregat' WHERE sessio_id=?", [sessio_id])
     return jsonify({'ok': True})
+
+
+@app.route('/sessio/<sessio_id>/estat', methods=['POST'])
+@login_required
+def marcar_estat(sessio_id):
+    """F2: fixa l'estat del cicle de la comanda (per sessio_id, com pagat/
+    entregat). Valida contra el conjunt d'estats. No toca pagat ni el càlcul."""
+    c = _get_comanda_by_sessio_for_session(sessio_id)
+    if not c:
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
+    data = request.get_json(silent=True) or request.form or {}
+    nou = str(data.get('estat', '') or '').strip().lower()
+    if nou not in COMANDA_ESTAT_KEYS:
+        return jsonify({'ok': False, 'error': 'estat_invalid'}), 400
+    execute('UPDATE comandes SET estat=? WHERE sessio_id=?', [nou, sessio_id])
+    # Mantenir coherent el flag d'entrega amb l'estat final.
+    if nou == 'entregat':
+        execute('UPDATE comandes SET entregat=1 WHERE sessio_id=?', [sessio_id])
+    return jsonify({'ok': True, 'estat': nou, 'label': COMANDA_ESTAT_LABELS.get(nou, nou)})
 
 @app.route('/comanda/<int:cid>/liquidar', methods=['POST'])
 @login_required
@@ -4984,6 +5055,11 @@ def admin_run_migrations():
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS pvd_unitari DECIMAL(8,4)",
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_admin_snap DECIMAL(5,2)",
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS marge_pro_snap DECIMAL(5,2)",
+        # F2 — cicle d'estats de comanda. Columna + backfill IDEMPOTENT des dels
+        # flags existents (entregat / [ACCEPTAT]). No toca pagat (és cobrament).
+        # El WHERE estat='' fa que re-executar no sobreescrigui estats ja fixats.
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS estat TEXT DEFAULT ''",
+        "UPDATE comandes SET estat = CASE WHEN entregat=1 THEN 'entregat' WHEN observacions LIKE '%[ACCEPTAT]%' THEN 'produccio' ELSE 'nou' END WHERE estat IS NULL OR estat=''",
         # Usuaris
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_pro_pct DECIMAL(5,2)",
         "ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS marge_impressio_pro_pct DECIMAL(5,2)",
@@ -6517,10 +6593,23 @@ def historial():
         d = dict(c)
         sessions[sid].append(d)
     sessio_list = list(sessions.values())
-    # Add pagat/entregat flag to first item of each session
+    # Add pagat/entregat flag + estat (F2) to first item of each session
     for grp in sessio_list:
         grp[0]['pagat']    = any(op.get('pagat')    for op in grp)
         grp[0]['entregat'] = any(op.get('entregat') for op in grp)
+        grp[0]['estat']    = _derive_estat(grp[0])
+        grp[0]['urgent']   = _comanda_es_urgent(grp[0])
+    # Filtre d'estat (F2), aplicat en Python sobre els grups perquè no cal
+    # tocar les branques SQL ni perdre el filtre per albarà/client/usuari.
+    filtre_estat = request.args.get('estat', '').strip().lower()
+    if filtre_estat == 'pendents':
+        sessio_list = [g for g in sessio_list if g[0]['estat'] not in COMANDA_ESTATS_TANCATS]
+    elif filtre_estat == 'entregats':
+        sessio_list = [g for g in sessio_list if g[0]['estat'] == 'entregat']
+    elif filtre_estat == 'urgents':
+        sessio_list = [g for g in sessio_list if g[0]['urgent']]
+    elif filtre_estat in COMANDA_ESTAT_KEYS:
+        sessio_list = [g for g in sessio_list if g[0]['estat'] == filtre_estat]
     filtre_client_nom = ''
     if filtre_client:
         _fc = query('SELECT nom FROM clients_externs WHERE id=?', [filtre_client], one=True)
@@ -6532,6 +6621,8 @@ def historial():
                            filtre_albara=filtre_albara if session.get('is_admin') else False,
                            filtre_client=filtre_client, filtre_client_nom=filtre_client_nom,
                            n_pendents_albara=n_pendents_albara if session.get('is_admin') else 0,
+                           estats=COMANDA_ESTATS, estat_labels=COMANDA_ESTAT_LABELS,
+                           filtre_estat=filtre_estat,
                            web_return_url=_current_web_return_url())
 
 @app.route('/pdf-comparativa/<sessio_id>')
@@ -11634,6 +11725,8 @@ def init_db():
                 "ALTER TABLE comandes ADD COLUMN passpartu_ref TEXT DEFAULT ''",
                 "ALTER TABLE comandes ADD COLUMN cost_produccio REAL DEFAULT 0",
                 "ALTER TABLE comandes ADD COLUMN fd_albara TEXT DEFAULT ''",
+                "ALTER TABLE comandes ADD COLUMN estat TEXT DEFAULT ''",
+                "UPDATE comandes SET estat = CASE WHEN entregat=1 THEN 'entregat' WHEN observacions LIKE '%[ACCEPTAT]%' THEN 'produccio' ELSE 'nou' END WHERE estat IS NULL OR estat=''",
                 "ALTER TABLE passpartout ADD COLUMN color TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN textura TEXT DEFAULT ''",
                 "ALTER TABLE passpartout ADD COLUMN descripcio TEXT DEFAULT ''",
