@@ -1,105 +1,190 @@
 {% extends "base.html" %}
-{% block title %}Reus Revela — Inici{% endblock %}
+{% block title %}Reus Revela — Tauler{% endblock %}
 {% block head %}
 <style>
-  .dash-head{margin-bottom:1.5rem}
-  .dash-head h1{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;letter-spacing:-.4px}
-  .dash-head p{font-size:14px;color:var(--muted);margin-top:.35rem}
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-bottom:2rem}
-  .kpi{position:relative;overflow:hidden;display:block;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1.3rem 1.2rem 1.5rem;text-decoration:none;color:inherit;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
-  .kpi::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#cfc7b7}
-  .kpi:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(28,27,24,.08);border-color:#cfc7b7}
-  .kpi .n{font-family:'DM Serif Display',serif;font-size:34px;line-height:1;color:var(--text)}
-  .kpi .l{display:block;margin-top:.55rem;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
-  .kpi.is-green .n{color:var(--green)}
-  .kpi.is-amber .n{color:var(--amber)}
-  .kpi.is-red .n{color:var(--red)}
-  .kpi.is-muted .n{color:var(--muted)}
-  .kpi.is-green::before{background:var(--green)}
-  .kpi.is-amber::before{background:var(--amber)}
-  .kpi.is-red::before{background:var(--red)}
-  .sec-title{font-family:'DM Serif Display',serif;font-size:20px;font-weight:400;margin:.5rem 0 1rem}
-  .qa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}
-  .qa{display:flex;align-items:center;gap:.85rem;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.05rem 1.2rem;text-decoration:none;color:inherit;transition:border-color .15s ease,transform .15s ease}
-  .qa:hover{border-color:var(--green);transform:translateY(-2px)}
-  .qa .ic{width:40px;height:40px;flex-shrink:0;border-radius:11px;background:var(--green-l);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:20px}
-  .qa .t{font-size:14px;font-weight:700;color:var(--text)}
-  .qa .d{font-size:12px;color:var(--muted);margin-top:.15rem}
+  /* ============================================================
+     Tauler /inici — sistema visual propi (.dsh-*). Classes pròpies
+     perquè el CSS de la pàgina mani (no el sobreescriu brand.css).
+     L'accent surt del color de marca de sessió: var(--green).
+     ============================================================ */
+  .dsh{ --acc: var(--green, #1A6B45); --acc-soft: var(--green-l, #E8F3EE);
+        max-width:1180px; margin:0 auto; padding:1.6rem 1.25rem 3.5rem; }
+
+  /* — Capçalera amb salutació + resum + CTA — */
+  .dsh-hero{
+    position:relative; overflow:hidden;
+    display:flex; align-items:flex-end; justify-content:space-between; gap:1.5rem; flex-wrap:wrap;
+    background:
+      radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--acc) 14%, transparent), transparent 55%),
+      linear-gradient(180deg, #ffffff, #fcfaf6);
+    border:1px solid var(--border); border-radius:22px;
+    padding:1.8rem 1.9rem; margin-bottom:1.5rem;
+    box-shadow:0 1px 2px rgba(18,16,12,.04), 0 14px 38px rgba(18,16,12,.06);
+  }
+  .dsh-eyebrow{ font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--acc); margin:0 0 .5rem; }
+  .dsh-title{ font-family:'DM Serif Display',serif; font-weight:400;
+    font-size:clamp(1.9rem,3.4vw,2.7rem); line-height:1.04; letter-spacing:-.02em; color:var(--text); margin:0; }
+  .dsh-sub{ margin:.7rem 0 0; color:var(--muted); font-size:1rem; line-height:1.6; max-width:54ch; }
+  .dsh-sub b{ color:var(--text); font-weight:700; }
+  .dsh-cta{ display:inline-flex; align-items:center; gap:.55rem; flex-shrink:0;
+    background:var(--acc); color:#fff; text-decoration:none; font-weight:700; font-size:.96rem;
+    padding:.95rem 1.4rem; border-radius:13px; border:1px solid var(--acc);
+    box-shadow:0 10px 24px color-mix(in srgb, var(--acc) 28%, transparent); transition:transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+  .dsh-cta:hover{ transform:translateY(-2px); filter:brightness(1.05); box-shadow:0 14px 30px color-mix(in srgb, var(--acc) 34%, transparent); }
+  .dsh-cta svg{ width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:2; }
+
+  /* — Graella de KPIs — */
+  .dsh-kpis{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1rem; margin-bottom:2.2rem; }
+  .dsh-kpi{ position:relative; display:flex; flex-direction:column; gap:.2rem;
+    background:#fff; border:1px solid var(--border); border-radius:18px; padding:1.15rem 1.2rem 1.25rem;
+    text-decoration:none; color:inherit; overflow:hidden;
+    box-shadow:0 1px 2px rgba(18,16,12,.04), 0 6px 16px rgba(18,16,12,.05);
+    transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+  .dsh-kpi:hover{ transform:translateY(-3px); border-color:#cdbfa6;
+    box-shadow:0 10px 22px rgba(18,16,12,.08), 0 20px 44px rgba(18,16,12,.07); }
+  .dsh-kpi-ic{ width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    margin-bottom:.7rem; background:var(--k-soft, #eef1f4); color:var(--k, #475569); }
+  .dsh-kpi-ic svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .dsh-kpi-n{ font-family:'DM Serif Display',serif; font-size:2.3rem; line-height:1; color:var(--text); }
+  .dsh-kpi-l{ font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-top:.5rem; }
+  /* Accents de color per categoria (semàntics, no de marca) */
+  .k-prod{ --k:#8a6a0c; --k-soft:#fef8e3; }
+  .k-deliver{ --k:#1c6a92; --k-soft:#e8f3fb; }
+  .k-pay{ --k:#a85108; --k-soft:#fff5ea; }
+  .k-urg{ --k:#aa2e45; --k-soft:#fdedf0; }
+  .k-albara{ --k:#b4530c; --k-soft:#fff7ed; }
+  .k-done{ --k:#176046; --k-soft:#eaf5ef; }
+  .k-budget{ --k:#3a49a8; --k-soft:#eef1fc; }
+  .dsh-kpi.is-urg .dsh-kpi-n{ color:#aa2e45; }
+
+  /* — Accessos ràpids — */
+  .dsh-sec{ font-family:'DM Serif Display',serif; font-weight:400; font-size:1.35rem; letter-spacing:-.01em;
+    color:var(--text); margin:0 0 1rem; }
+  .dsh-quick{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1rem; }
+  .dsh-q{ display:flex; align-items:center; gap:.9rem; background:#fff; border:1px solid var(--border);
+    border-radius:16px; padding:1.05rem 1.15rem; text-decoration:none; color:inherit;
+    box-shadow:0 1px 2px rgba(18,16,12,.04); transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  .dsh-q:hover{ transform:translateY(-2px); border-color:var(--acc); box-shadow:0 12px 26px rgba(18,16,12,.08); }
+  .dsh-q-ic{ width:44px; height:44px; flex-shrink:0; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    background:var(--acc-soft); color:var(--acc); }
+  .dsh-q-ic svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .dsh-q.is-primary{ background:var(--acc); border-color:var(--acc); color:#fff;
+    box-shadow:0 12px 28px color-mix(in srgb, var(--acc) 26%, transparent); }
+  .dsh-q.is-primary .dsh-q-ic{ background:rgba(255,255,255,.18); color:#fff; }
+  .dsh-q.is-primary .dsh-q-d{ color:rgba(255,255,255,.82); }
+  .dsh-q-t{ font-size:14px; font-weight:700; }
+  .dsh-q-d{ font-size:12px; color:var(--muted); margin-top:.12rem; }
+
+  @media(max-width:1080px){ .dsh-kpis{ grid-template-columns:repeat(2,1fr);} .dsh-quick{ grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:560px){
+    .dsh-hero{ padding:1.4rem 1.3rem; } .dsh-cta{ width:100%; justify-content:center; }
+    .dsh-kpis{ grid-template-columns:1fr 1fr; gap:.7rem; } .dsh-kpi-n{ font-size:2rem; }
+    .dsh-quick{ grid-template-columns:1fr; }
+  }
 </style>
 {% endblock %}
 {% block content %}
-<div class="wrap">
-  <div class="dash-head">
-    <h1>Hola{% if session.nom %}, {{ session.nom }}{% endif %}</h1>
-    <p>Resum de l'activitat i accessos r&agrave;pids del taller.</p>
-  </div>
+<section class="dsh">
 
-  <div class="kpi-grid">
-    <a class="kpi is-green" href="/historial">
-      <span class="n">{{ counts.comandes }}</span>
-      <span class="l">Comandes acceptades</span>
+  <header class="dsh-hero">
+    <div class="dsh-hero-main">
+      <p class="dsh-eyebrow" id="dsh-eyebrow">Tauler de control</p>
+      <h1 class="dsh-title">Hola{% if session.nom %}, {{ session.nom }}{% endif %}</h1>
+      <p class="dsh-sub">
+        {% if counts.comandes or counts.pressupostos %}
+          Tens <b>{{ counts.comandes }}</b> {{ 'comanda' if counts.comandes == 1 else 'comandes' }} acceptades
+          i <b>{{ counts.pressupostos }}</b> {{ 'pressupost obert' if counts.pressupostos == 1 else 'pressupostos oberts' }}.
+          {% if counts.pendents_entrega %}<b>{{ counts.pendents_entrega }}</b> {{ 'està' if counts.pendents_entrega == 1 else 'estan' }} pendents d'entrega{% if counts.urgents %} · <b style="color:#aa2e45">{{ counts.urgents }} {{ 'urgent' if counts.urgents == 1 else 'urgents' }}</b>{% endif %}.{% endif %}
+        {% else %}
+          Encara no hi ha comandes registrades. Comença creant un pressupost nou.
+        {% endif %}
+      </p>
+    </div>
+    <a class="dsh-cta" href="/calculadora">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      Nou pressupost
     </a>
-    <a class="kpi" href="/historial">
-      <span class="n">{{ counts.pressupostos }}</span>
-      <span class="l">Pressupostos oberts</span>
+  </header>
+
+  <div class="dsh-kpis">
+    <a class="dsh-kpi k-prod" href="/historial?estat=pendents">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5Z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.comandes }}</span>
+      <span class="dsh-kpi-l">Comandes en curs</span>
+    </a>
+    <a class="dsh-kpi k-deliver" href="/historial?estat=pendents">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="7" width="13" height="10" rx="1"/><path d="M15.5 10h3.5l2.5 3v4h-6z"/><circle cx="6" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.pendents_entrega }}</span>
+      <span class="dsh-kpi-l">Pendents d'entrega</span>
+    </a>
+    <a class="dsh-kpi k-pay" href="/historial">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a3.5 3.5 0 0 0-3-1.5c-2 0-3 1.2-3 2.4 0 3 6 1.6 6 4.5 0 1.3-1.2 2.6-3.2 2.6A3.6 3.6 0 0 1 9 15.7M8 11h5M8 13.5h5"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.pendents_cobrament }}</span>
+      <span class="dsh-kpi-l">Pendents de cobrament</span>
+    </a>
+    <a class="dsh-kpi k-urg is-urg" href="/historial?estat=urgents">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.5 20h19Z"/><path d="M12 10v4M12 17h.01"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.urgents }}</span>
+      <span class="dsh-kpi-l">Urgents</span>
     </a>
     {% if session.is_admin %}
-    <a class="kpi is-amber" href="/historial?albara=pendent">
-      <span class="n">{{ counts.pendents_albara }}</span>
-      <span class="l">Pendents albar&agrave;</span>
+    <a class="dsh-kpi k-albara" href="/historial?albara=pendent">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 16.5h6"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.pendents_albara }}</span>
+      <span class="dsh-kpi-l">Pendents albarà</span>
     </a>
     {% endif %}
-    <a class="kpi is-amber" href="/historial">
-      <span class="n">{{ counts.pendents_cobrament }}</span>
-      <span class="l">Pendents de cobrament</span>
+    <a class="dsh-kpi k-budget" href="/historial">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h3M8 14.5h3M14 11h2v3.5h-2z"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.pressupostos }}</span>
+      <span class="dsh-kpi-l">Pressupostos oberts</span>
     </a>
-    <a class="kpi is-amber" href="/historial">
-      <span class="n">{{ counts.pendents_entrega }}</span>
-      <span class="l">Pendents d'entrega</span>
-    </a>
-    <a class="kpi is-red" href="/historial">
-      <span class="n">{{ counts.urgents }}</span>
-      <span class="l">Urgents (&gt;21 dies)</span>
-    </a>
-    <a class="kpi is-muted" href="/historial">
-      <span class="n">{{ counts.entregats }}</span>
-      <span class="l">Entregades</span>
+    <a class="dsh-kpi k-done" href="/historial?estat=entregats">
+      <span class="dsh-kpi-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></span>
+      <span class="dsh-kpi-n">{{ counts.entregats }}</span>
+      <span class="dsh-kpi-l">Entregades</span>
     </a>
   </div>
 
-  <div class="sec-title">Accessos r&agrave;pids</div>
-  <div class="qa-grid">
-    <a class="qa" href="/calculadora">
-      <div class="ic">&#10010;</div>
-      <div><div class="t">Nou pressupost</div><div class="d">Calculadora de marcs</div></div>
+  <h2 class="dsh-sec">Accessos ràpids</h2>
+  <div class="dsh-quick">
+    <a class="dsh-q is-primary" href="/calculadora">
+      <span class="dsh-q-ic"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+      <span><span class="dsh-q-t">Nou pressupost</span><span class="dsh-q-d">Calculadora de marcs</span></span>
     </a>
-    <a class="qa" href="/historial">
-      <div class="ic">&#128203;</div>
-      <div><div class="t">Pressupostos i comandes</div><div class="d">Historial complet</div></div>
+    <a class="dsh-q" href="/historial">
+      <span class="dsh-q-ic"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></span>
+      <span><span class="dsh-q-t">Pressupostos i comandes</span><span class="dsh-q-d">Historial i estats</span></span>
     </a>
-    <a class="qa" href="/cataleg">
-      <div class="ic">&#127991;</div>
-      <div><div class="t">Cat&agrave;leg de motllures</div><div class="d">Consulta refer&egrave;ncies</div></div>
+    <a class="dsh-q" href="/cataleg">
+      <span class="dsh-q-ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg></span>
+      <span><span class="dsh-q-t">Catàleg de motllures</span><span class="dsh-q-d">Consulta referències</span></span>
     </a>
     {% if session.is_admin %}
-    <a class="qa" href="/admin/clients-externs">
-      <div class="ic">&#128100;</div>
-      <div><div class="t">Clients</div><div class="d">Fitxes de client</div></div>
-    </a>
-    <a class="qa" href="/admin">
-      <div class="ic">&#9881;</div>
-      <div><div class="t">Configuraci&oacute;</div><div class="d">Tarifes, cat&agrave;leg, usuaris</div></div>
+    <a class="dsh-q" href="/admin">
+      <span class="dsh-q-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L16.2 2h-4l-.4 2.5a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1c.6.5 1.3.9 2 1.2l.4 2.5h4l.4-2.5c.7-.3 1.4-.7 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg></span>
+      <span><span class="dsh-q-t">Configuració</span><span class="dsh-q-d">Tarifes, catàleg, usuaris</span></span>
     </a>
     {% else %}
-    <a class="qa" href="/ajustos">
-      <div class="ic">&#9881;</div>
-      <div><div class="t">Ajustos</div><div class="d">Marge, marca i empresa</div></div>
-    </a>
-    <a class="qa" href="/ajuda">
-      <div class="ic">&#10067;</div>
-      <div><div class="t">Ajuda</div><div class="d">Com funciona</div></div>
+    <a class="dsh-q" href="/ajustos">
+      <span class="dsh-q-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1l.4 2.5h4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4Z"/></svg></span>
+      <span><span class="dsh-q-t">Ajustos</span><span class="dsh-q-d">Marge, marca i empresa</span></span>
     </a>
     {% endif %}
   </div>
-</div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function(){
+    var el = document.getElementById('dsh-eyebrow');
+    if (!el) return;
+    try {
+      var d = new Date();
+      var s = d.toLocaleDateString('ca-ES', { weekday:'long', day:'numeric', month:'long' });
+      el.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+    } catch(e){}
+  })();
+</script>
 {% endblock %}
