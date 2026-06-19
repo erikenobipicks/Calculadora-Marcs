@@ -122,6 +122,18 @@ tr:hover td{background:#FAFAF8}
     </div>
   </div>
 
+  <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:1rem">
+    <span style="color:var(--hint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-right:.2rem">Estat</span>
+    <a href="/historial" class="filter-btn {% if not filtre_estat %}active{% endif %}">Tots</a>
+    <a href="/historial?estat=pendents" class="filter-btn {% if filtre_estat=='pendents' %}active{% endif %}">Pendents</a>
+    <a href="/historial?estat=urgents" class="filter-btn {% if filtre_estat=='urgents' %}active{% endif %}" style="{% if filtre_estat=='urgents' %}background:var(--red);border-color:var(--red){% else %}border-color:var(--red);color:var(--red){% endif %}">Urgents</a>
+    <a href="/historial?estat=entregats" class="filter-btn {% if filtre_estat=='entregats' %}active{% endif %}">Entregats</a>
+    <span style="color:var(--hint);font-size:11px;margin:0 .25rem">|</span>
+    {% for k, l in estats %}
+    <a href="/historial?estat={{ k }}" class="filter-btn {% if filtre_estat==k %}active{% endif %}">{{ l }}</a>
+    {% endfor %}
+  </div>
+
   {% if session.is_admin %}
   <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:1rem">
     <a href="/historial" class="filter-btn {% if not filtre_all and not filtre_albara and filtre_uid == session.user_id %}active{% endif %}">Els meus</a>
@@ -177,6 +189,8 @@ tr:hover td{background:#FAFAF8}
           </div>
         </div>
         <div class="sessio-badges">
+          <span class="estat estat-{{ c0.estat }}">{{ estat_labels.get(c0.estat, c0.estat) }}</span>
+          {% if c0.urgent %}<span class="badge" style="background:#fdecec;color:#b03048;border:1px solid #f3c9cf">⚠ Urgent</span>{% endif %}
           {% if multi %}
             <span class="badge badge-multi">{{ opcions|length }} opcions</span>
           {% endif %}
@@ -267,6 +281,12 @@ tr:hover td{background:#FAFAF8}
           </tbody>
         </table>
         <div class="sessio-actions" id="actions-{{ sessio_id }}">
+          {% if session.is_admin %}
+          <select onchange="canviEstat('{{ sessio_id }}', this.value, this)" title="Canviar estat de la comanda"
+                  style="padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif">
+            {% for k, l in estats %}<option value="{{ k }}" {% if c0.estat == k %}selected{% endif %}>{{ l }}</option>{% endfor %}
+          </select>
+          {% endif %}
           {% if multi %}
           <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">Comparativa PDF</a>
           {% endif %}
@@ -339,6 +359,23 @@ function liquidarComanda(id, btn) {
         if(pagBtn){ pagBtn.classList.replace('btn-pagat','btn-pagat-on'); pagBtn.innerHTML='✓ Pagat'; }
       }
     });
+}
+
+function canviEstat(sessioId, estat, sel) {
+  var prev = sel ? sel.value : estat;
+  if (sel) sel.disabled = true;
+  fetch('/sessio/'+sessioId+'/estat', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({estat: estat})
+  }).then(r=>r.json()).then(function(d){
+    if (d.ok) {
+      // Recarrega per refrescar el badge i els filtres de manera coherent.
+      location.reload();
+    } else {
+      if (sel) { sel.disabled = false; }
+      alert('No s\'ha pogut canviar l\'estat.');
+    }
+  }).catch(function(){ if (sel) sel.disabled = false; });
 }
 
 function marcarEntregat(sessioId, btn) {
