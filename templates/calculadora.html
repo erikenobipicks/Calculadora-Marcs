@@ -276,6 +276,73 @@ body.has-sticky-bar{padding-bottom:78px}
 }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+<style>
+/* ============================================================
+   Redisseny visual 2026 de la calculadora (PAS 1 · només CSS).
+   Es carrega DESPRÉS de brand.css → guanya la cascada. NOMÉS
+   presentació (colors, ombres, radius, espais, tipografia); no
+   toca cap estructura grid/flex que pugui moure el formulari,
+   ni cap classe/markup/handler. Accent = color de marca: var(--green).
+   ============================================================ */
+.wrap{ max-width:1200px; padding:1.7rem 1.3rem 3.5rem; }
+.ph h1{ font-size:clamp(1.7rem,2.8vw,2.15rem); letter-spacing:-.02em; line-height:1.05; }
+.ph p{ font-size:12.5px; line-height:1.55; }
+
+/* Targetes modernes */
+.card{ border:1px solid var(--border); border-radius:16px; padding:1.15rem 1.2rem; margin-bottom:1rem;
+  box-shadow:0 1px 2px rgba(18,16,12,.04), 0 8px 22px rgba(18,16,12,.05); }
+.card-t{ font-size:10.5px; letter-spacing:.12em; color:var(--hint); margin-bottom:1rem; padding-bottom:.6rem; }
+#tabs-bar{ border-radius:16px; background:#fff; box-shadow:0 1px 2px rgba(18,16,12,.04); padding:.8rem .95rem; }
+
+/* Camps */
+.f label{ font-size:12px; font-weight:600; letter-spacing:.01em; margin-bottom:5px; }
+.f input, .f select{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:14px;
+  transition:border-color .15s, box-shadow .15s; }
+.f input:focus, .f select:focus{ border-color:var(--green); box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 14%, transparent); }
+
+/* Selectors de material (opcions) com a chips moderns */
+.opt-btn{ border:1px solid var(--border); border-radius:11px; min-height:46px; padding:9px 12px; transition:all .15s ease; }
+.opt-btn:hover{ border-color:var(--green); background:var(--green-l); }
+.opt-btn.selected{ background:color-mix(in srgb, var(--green-l) 72%, white); border-color:var(--green);
+  box-shadow:inset 0 0 0 1px var(--green); }
+.opt-preu{ border-radius:999px; font-weight:800; }
+.chip{ border-radius:999px; padding:3px 10px; font-weight:700; }
+.extra-toggle{ border-radius:12px; }
+
+/* Targeta fosca del marge: més moderna però igual de fosca */
+.dcard{ border-radius:16px; box-shadow:0 14px 36px rgba(18,16,12,.18); }
+.cost-panel{ border-radius:12px; }
+
+/* Panell de RESULTAT / desglossament */
+.res-card{ border:1px solid var(--border); border-radius:18px; overflow:hidden;
+  box-shadow:0 2px 6px rgba(18,16,12,.05), 0 18px 44px rgba(18,16,12,.08); }
+.res-head{ padding:1rem 1.3rem; }
+.res-body{ padding:1.15rem 1.3rem; }
+.r-val.big{ font-size:24px; }
+.r-row{ padding:9px 0; }
+.e-row input{ border-radius:9px; }
+
+/* Botons amb jerarquia + elevació al hover */
+.btn{ border-radius:11px; padding:12px 15px; font-weight:700; transition:transform .14s ease, filter .14s ease, background .14s ease; }
+.btn:hover{ transform:translateY(-1px); }
+.btn-g{ background:var(--green); color:#fff; }
+.btn-g:hover{ filter:brightness(1.06); }
+.actions{ gap:.7rem; }
+.more-actions>summary{ border-radius:11px; }
+.more-actions-menu{ border-radius:14px; }
+
+/* Avisos */
+.alert{ border-radius:11px; }
+.constraints-box{ border-radius:12px; }
+.modal{ border-radius:20px; }
+
+/* Barra inferior sticky més refinada (cor del mostrador) */
+.sticky-bar{ border-radius:18px; padding:10px 11px 10px 18px; gap:15px;
+  background:rgba(24,21,16,.97); box-shadow:0 18px 50px rgba(18,16,12,.3); }
+.sticky-bar-total{ font-size:22px; }
+.sticky-bar-cta{ border-radius:12px; }
+@media (max-width:640px){ .sticky-bar{ border-radius:16px; } }
+</style>
 </head>
 <body>
 <nav class="site-nav">
