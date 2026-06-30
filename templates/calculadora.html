@@ -293,7 +293,16 @@ body.has-sticky-bar{padding-bottom:78px}
   --b-serif:'Fraunces','DM Serif Display',Georgia,serif;
   --b-line:#e8e1d3; --b-line2:#dccfb9;
   --b-ink:#241f18; --b-paper:#fbf8f2;
-  --b-gold:var(--amber);
+  /* ── ACCENT DAURAT Variant B ──────────────────────────────────────────
+     brand.css remapeja --green→--success (verd) i guanya el skin perquè es
+     carrega abans. Aquí, en l'últim full de la pàgina, reimposem la paleta
+     DAURADA editorial (la mateixa gamma que --accent de brand.css) perquè
+     l'accent de la calculadora sigui or, no verd. Només afecta /calculadora
+     (és l'<style> inline d'aquesta plantilla); no toca brand.css ni el nav. */
+  --vb-gold:#a67843; --vb-gold-d:#7c5526; --vb-gold-l:#f0e1cc;
+  --green:#a67843 !important; --green-l:#f0e1cc !important;
+  --amber:#a67843 !important; --amber-l:#f0e1cc !important;
+  --b-gold:var(--vb-gold);
 }
 
 /* — Fons editorial càlid — */
@@ -419,6 +428,25 @@ body{
 .sb-cistella{ color:#fff !important; border-color:transparent !important;
   background:color-mix(in srgb, var(--amber) 86%, black) !important; }
 @media (max-width:640px){ .sticky-bar{ border-radius:16px !important; } }
+
+/* — OVERRIDES de verds "hardcoded" → or (els que no depenen de var(--green)) —
+   Aquests colors estaven escrits a mà al CSS base, així que la redefinició de
+   la variable no els arriba: els forcem a la gamma daurada amb !important,
+   sempre dins d'aquesta pàgina. No canvia estructura ni handlers. */
+.opt-btn.opt-conservar{ border-color:color-mix(in srgb,var(--vb-gold) 45%,white) !important; color:var(--vb-gold-d) !important; }
+.opt-btn.selected{ background:var(--vb-gold-l) !important; border-color:var(--vb-gold) !important;
+  color:var(--vb-gold-d) !important; box-shadow:inset 0 0 0 1.5px var(--vb-gold) !important; }
+.opt-btn.selected::before{ background:var(--vb-gold) !important; border-color:var(--vb-gold) !important;
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--vb-gold) 22%,transparent) !important; }
+.opt-btn.selected .opt-preu{ background:color-mix(in srgb,var(--vb-gold) 22%,white) !important; color:var(--vb-gold-d) !important; }
+/* Botons WhatsApp (Client / Reus Revela) i Albarà de la barra inferior */
+.sb-wa, .btn-wa, .btn-wa2{ background:var(--vb-gold-l) !important; color:var(--vb-gold-d) !important;
+  border:1px solid color-mix(in srgb,var(--vb-gold) 50%,white) !important; }
+.sb-albara{ background:transparent !important; color:#f2dcb0 !important;
+  border:1px solid color-mix(in srgb,var(--vb-gold) 55%,black) !important; }
+.sb-albara:hover{ background:color-mix(in srgb,var(--vb-gold) 22%,transparent) !important; }
+/* Toggle del cost (€): estat actiu en or (el JS hi posa #1A6B45 inline) */
+#rb-cost[data-on="1"]{ background:var(--vb-gold) !important; color:#fff !important; }
 
 /* — Capçalera responsive de mostrador (tauleta) — */
 @media (max-width:1100px){ .wrap{ max-width:100% !important; } }
