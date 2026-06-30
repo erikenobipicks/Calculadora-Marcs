@@ -73,6 +73,47 @@ tr:hover td{background:#FAFAF8}
 .btn-albara-ok{background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7;font-size:10px}
 .albara-grp{display:inline-flex;gap:2px}
 .pagat-badge{display:inline-block;background:#1A6B45;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
+
+/* ===== Redisseny modern (mateix llenguatge que /inici) ===== */
+.wrap{max-width:1100px;padding:1.9rem 1.25rem 3.5rem}
+/* Capçalera com a hero (només CSS, sense tocar el markup) */
+.ph{
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--green) 13%, transparent), transparent 55%),
+    linear-gradient(180deg, #ffffff, #fcfaf6);
+  border:1px solid var(--border); border-radius:20px;
+  padding:1.5rem 1.7rem; margin-bottom:1.5rem; align-items:flex-end; gap:1rem;
+  box-shadow:0 1px 2px rgba(18,16,12,.04), 0 12px 32px rgba(18,16,12,.05);
+}
+.ph h1{font-size:clamp(1.7rem,3vw,2.25rem);letter-spacing:-.02em;line-height:1.05}
+.ph-left>div{font-size:13.5px !important;color:var(--muted) !important;max-width:60ch;line-height:1.55}
+.return-link{padding:7px 14px}
+.search-bar input{border-radius:12px;padding:11px 15px;width:280px;background:#fff}
+.search-bar input:focus{box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 14%, transparent)}
+/* Targetes de sessió i interacció */
+.sessio-card{border-radius:16px;margin-bottom:.85rem;box-shadow:0 1px 2px rgba(18,16,12,.04),0 6px 16px rgba(18,16,12,.05);transition:box-shadow .16s ease,border-color .16s ease}
+.sessio-card:hover{box-shadow:0 8px 20px rgba(18,16,12,.07),0 18px 40px rgba(18,16,12,.06);border-color:#cdbfa6}
+.sessio-head{padding:1rem 1.15rem}
+.sessio-head:hover{background:#faf7f1}
+.sessio-client{font-weight:700;letter-spacing:-.01em;font-size:15.5px}
+.sessio-meta{font-size:12.5px;margin-top:3px}
+/* Pills i badges arrodonits */
+.badge{border-radius:999px;padding:3px 10px;font-weight:700;display:inline-flex;align-items:center;line-height:1.5}
+.badge-pend{background:#fdedf0;color:#aa2e45;border:1px solid #f4cad3}
+.opcio-pill{border-radius:999px;padding:2px 9px;font-weight:700}
+.filter-btn{border-radius:999px;padding:6px 14px;font-weight:600}
+.admin-filter{border-radius:14px;background:#fff;box-shadow:0 1px 2px rgba(18,16,12,.04)}
+/* Taula */
+th{padding:10px 14px;letter-spacing:.07em}
+td{padding:11px 14px;border-bottom:1px solid #f1ece3}
+tr:hover td{background:#fbf8f3}
+/* Botons d'acció */
+.btn-sm{border-radius:9px;padding:6px 13px;transition:transform .14s ease,filter .14s ease}
+.btn-sm:hover{transform:translateY(-1px)}
+.btn-pdf{background:var(--green);color:#fff}
+.sessio-actions{padding:.85rem 1.15rem;flex-wrap:wrap;background:#faf7f1}
+.empty{padding:3.5rem 2rem;background:#fff;border:1px solid var(--border);border-radius:16px}
+
 @media(max-width:920px){
   nav{height:auto;min-height:56px;padding:.8rem 1rem;align-items:flex-start;flex-wrap:wrap;gap:.75rem}
   .nav-toggle{display:flex}
