@@ -6141,16 +6141,34 @@ def _auditoria_tarifes():
     _au_outliers(costos_mol, 'moldures', 'preu_cost', add)
 
     # ── VIDRES / PASSPARTOUT / ENCOLAT_PRO ──────────────────────────
+    # NOTA: aquestes taules es tarifen PER MIDA (una fila per talla), a
+    # diferència de moldures (€/100cm lineal, normalitzat). Per això:
+    #   - NO fem outliers per mediana plana: els formats petits sortirien
+    #     sempre "baixos" i els grans "alts" (falsos positius).
+    #   - A passpartout NOMÉS són files de preu les tarifes 1PAS/DOBPAS.
+    #     Les altres files (P0xx) són el catàleg de COLORS i han d'anar sense
+    #     preu (no és cap anomalia). Una referència d'una altra família
+    #     (PROECO, ENC, MIR…) dins passpartout es marca com a mal ubicada.
+    PASS_FOREIGN = ('PROECO', 'ENC', 'MIR', 'DV', 'LAM', 'MOL', 'M')
     for taula in ('vidres', 'passpartout', 'encolat_pro'):
         try:
             rows = [dict(r) for r in (query(f'SELECT * FROM {taula}') or [])]
         except Exception:
             rows = []
-        costos = []
         for r in rows:
             ref = (r.get('referencia') or '').strip()
+            refU = ref.upper()
             preu = _au_f(r.get('preu'))
             pc = _au_f(r.get('preu_cost'))
+            if taula == 'passpartout':
+                es_tarifa = refU.startswith('1PAS') or refU.startswith('DOBPAS')
+                if not es_tarifa:
+                    # Referència d'una altra família mal ubicada a passpartús.
+                    if refU.startswith(PASS_FOREIGN):
+                        add('warning', taula, ref, 'referencia',
+                            'Referència d\'una altra família dins la taula de passpartús: sembla mal ubicada.')
+                    # Els colors (P0xx) no tenen preu — és correcte, no avisem.
+                    continue
             sense_preu = preu is None or preu <= 0
             sense_pc = pc is None or pc <= 0
             if sense_preu and sense_pc:
@@ -6162,9 +6180,6 @@ def _auditoria_tarifes():
                 if pc is not None and preu is not None and preu > 0 and pc > preu:
                     add('warning', taula, ref, 'preu_cost',
                         f'preu_cost ({pc:g}) > preu ({preu:g}): cost per sobre del preu de venda.', pc)
-            if pc is not None and pc > 0:
-                costos.append((ref, pc))
-        _au_outliers(costos, taula, 'preu_cost', add)
 
     ordre = {'critical': 0, 'warning': 1, 'info': 2}
     findings.sort(key=lambda f: (ordre.get(f['sev'], 9), f['taula'], str(f['ref'])))
