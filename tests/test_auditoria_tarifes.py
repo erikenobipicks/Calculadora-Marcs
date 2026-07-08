@@ -100,6 +100,31 @@ def test_encolat_sense_preu_critica(monkeypatch):
     assert _has(f, sev='critical', ref='E1')
 
 
+def test_passpartu_color_sense_preu_no_avisa(monkeypatch):
+    # Els colors (P0xx) no tenen preu: és correcte, no és cap anomalia.
+    f, r = _run(monkeypatch, passpartout=[{'referencia': 'P001', 'color': 'Blanc', 'preu': None, 'preu_cost': None}])
+    assert not _has(f, ref='P001')
+
+
+def test_passpartu_tarifa_sense_preu_critica(monkeypatch):
+    # Una fila de tarifa (1PAS/DOBPAS) sense preu sí que és un problema.
+    f, r = _run(monkeypatch, passpartout=[{'referencia': '1PAS30X40', 'preu': None, 'preu_cost': None}])
+    assert _has(f, sev='critical', ref='1PAS30X40', camp='preu')
+
+
+def test_passpartu_referencia_mal_ubicada(monkeypatch):
+    f, r = _run(monkeypatch, passpartout=[{'referencia': 'PROECO90200', 'preu_cost': 78.65}])
+    assert _has(f, sev='warning', ref='PROECO90200', camp='referencia')
+
+
+def test_vidre_mida_petita_no_dispara_outlier(monkeypatch):
+    # Vidres es tarifen per mida: un format petit amb cost baix NO és outlier.
+    vids = [{'referencia': f'{30+i}x{40+i}', 'preu': 13.0 + i, 'preu_cost': 13.0 + i} for i in range(12)]
+    vids.append({'referencia': '09x13', 'preu': 1.68, 'preu_cost': 1.68})
+    f, r = _run(monkeypatch, vidres=vids)
+    assert not _has(f, ref='09x13')
+
+
 # ── outliers ──────────────────────────────────────────────────────────
 
 def test_outlier_alt_detectat(monkeypatch):
