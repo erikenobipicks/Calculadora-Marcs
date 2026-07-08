@@ -6043,6 +6043,150 @@ def admin_dump_pro():
     ])
 
 
+def _au_f(v):
+    """Converteix a float; None/buit/invàlid → None."""
+    if v is None or v == '':
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _au_median(vals):
+    s = sorted(vals)
+    n = len(s)
+    if n == 0:
+        return None
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2
+
+
+def _au_outliers(pairs, taula, camp, add, factor=8.0, min_rows=10):
+    """Marca valors molt lluny de la mediana (possibles errors de tecleig)."""
+    vals = [v for _, v in pairs if v is not None and v > 0]
+    if len(vals) < min_rows:
+        return
+    med = _au_median(vals)
+    if not med or med <= 0:
+        return
+    hi, lo = med * factor, med / factor
+    for ref, v in pairs:
+        if v is None or v <= 0:
+            continue
+        if v > hi:
+            add('warning', taula, ref, camp,
+                f'Valor molt alt ({v:g}) respecte la mediana ({med:g}). Possible error de tecleig.', v)
+        elif v < lo:
+            add('info', taula, ref, camp,
+                f'Valor molt baix ({v:g}) respecte la mediana ({med:g}). Revisa-ho.', v)
+
+
+def _auditoria_tarifes():
+    """Repassa els preus del catàleg (moldures, vidres, passpartout, encolat_pro)
+    i retorna (findings, resum). Cada finding: {sev, taula, ref, camp, missatge,
+    valor}. sev ∈ {critical, warning, info}. NOMÉS LECTURA: no modifica dades."""
+    findings = []
+
+    def add(sev, taula, ref, camp, missatge, valor=None):
+        findings.append({'sev': sev, 'taula': taula, 'ref': (ref or '—'),
+                         'camp': camp, 'missatge': missatge, 'valor': valor})
+
+    # ── MOLDURES ────────────────────────────────────────────────────
+    try:
+        mols = [dict(r) for r in (query('SELECT * FROM moldures') or [])]
+    except Exception:
+        mols = []
+    costos_mol = []
+    ref2_map = {}
+    for m in mols:
+        ref = (m.get('referencia') or '').strip()
+        descat = bool(m.get('descatalogada'))
+        pt = _au_f(m.get('preu_taller'))
+        pc = _au_f(m.get('preu_cost'))
+        gruix = _au_f(m.get('gruix'))
+        merma = _au_f(m.get('merma_pct'))
+        minim = _au_f(m.get('minim_cm'))
+        sense_pt = pt is None or pt <= 0
+        sense_pc = pc is None or pc <= 0
+        if sense_pt and sense_pc:
+            if not descat:
+                add('critical', 'moldures', ref, 'preu',
+                    'Sense preu de cap mena (ni preu_taller ni preu_cost).')
+        else:
+            if sense_pc and not descat:
+                add('warning', 'moldures', ref, 'preu_cost',
+                    'Sense cost v2 (preu_cost): es calcula amb el preu_taller legacy.')
+            if pc is not None and pt is not None and pt > 0 and pc > pt:
+                add('warning', 'moldures', ref, 'preu_cost',
+                    f'preu_cost ({pc:g}) > preu_taller ({pt:g}): cost per sobre del preu de venda.', pc)
+        if (gruix is None or gruix <= 0) and not descat:
+            add('warning', 'moldures', ref, 'gruix',
+                'Gruix buit o 0: afecta el consum de motllura i el càlcul del preu.')
+        if merma is not None and (merma < 0 or merma > 30):
+            add('warning', 'moldures', ref, 'merma_pct',
+                f'Merma atípica ({merma:g}%). Rang esperat 0–30%.', merma)
+        if minim is not None and (minim < 10 or minim > 600):
+            add('info', 'moldures', ref, 'minim_cm',
+                f'Mínim atípic ({minim:g} cm). Rang esperat 10–600 cm.', minim)
+        r2 = (m.get('ref2') or '').strip().lower()
+        if r2:
+            ref2_map.setdefault(r2, []).append(ref)
+        if pc is not None and pc > 0 and not descat:
+            costos_mol.append((ref, pc))
+    for r2, refs in ref2_map.items():
+        if len(refs) > 1:
+            add('info', 'moldures', ', '.join(refs), 'ref2',
+                f'Referència alternativa duplicada ("{r2}") en {len(refs)} motllures.')
+    _au_outliers(costos_mol, 'moldures', 'preu_cost', add)
+
+    # ── VIDRES / PASSPARTOUT / ENCOLAT_PRO ──────────────────────────
+    for taula in ('vidres', 'passpartout', 'encolat_pro'):
+        try:
+            rows = [dict(r) for r in (query(f'SELECT * FROM {taula}') or [])]
+        except Exception:
+            rows = []
+        costos = []
+        for r in rows:
+            ref = (r.get('referencia') or '').strip()
+            preu = _au_f(r.get('preu'))
+            pc = _au_f(r.get('preu_cost'))
+            sense_preu = preu is None or preu <= 0
+            sense_pc = pc is None or pc <= 0
+            if sense_preu and sense_pc:
+                add('critical', taula, ref, 'preu', 'Sense preu (ni preu ni preu_cost).')
+            else:
+                if sense_pc:
+                    add('warning', taula, ref, 'preu_cost',
+                        'Sense preu_cost (model v2): es fa servir el preu legacy.')
+                if pc is not None and preu is not None and preu > 0 and pc > preu:
+                    add('warning', taula, ref, 'preu_cost',
+                        f'preu_cost ({pc:g}) > preu ({preu:g}): cost per sobre del preu de venda.', pc)
+            if pc is not None and pc > 0:
+                costos.append((ref, pc))
+        _au_outliers(costos, taula, 'preu_cost', add)
+
+    ordre = {'critical': 0, 'warning': 1, 'info': 2}
+    findings.sort(key=lambda f: (ordre.get(f['sev'], 9), f['taula'], str(f['ref'])))
+    resum = {
+        'total': len(findings),
+        'critical': sum(1 for f in findings if f['sev'] == 'critical'),
+        'warning': sum(1 for f in findings if f['sev'] == 'warning'),
+        'info': sum(1 for f in findings if f['sev'] == 'info'),
+        'moldures': len(mols),
+    }
+    return findings, resum
+
+
+@app.route('/admin/auditoria-tarifes')
+@admin_required
+def admin_auditoria_tarifes():
+    """Repàs de qualitat de dades del catàleg de preus: buits, incoherències
+    preu↔cost, gruix/merma atípics, duplicats i valors fora de rang."""
+    findings, resum = _auditoria_tarifes()
+    return render_template('admin_auditoria_tarifes.html', findings=findings, resum=resum)
+
+
 @app.route('/admin/auditoria-preus')
 @admin_required
 def admin_auditoria_preus():
