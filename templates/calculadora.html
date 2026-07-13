@@ -387,6 +387,10 @@ body{
   border-radius:20px !important; box-shadow:0 18px 44px rgba(20,16,12,.24) !important; }
 .dcard .card-t{ color:#fff !important; border-bottom-color:rgba(255,255,255,.12) !important; }
 .dcard .card-t::after{ background:rgba(255,255,255,.12) !important; }
+/* Variant B posa fons blanc a tots els .f input; a la targeta fosca el text
+   seguia sent blanc (invisible). Text fosc sobre el xip blanc + label clara. */
+.dcard .f input{ color:#241f18 !important; }
+.dcard .f label{ color:rgba(255,255,255,.6) !important; }
 .cost-panel{ border-radius:13px !important; }
 .tog button.on{ background:var(--green) !important; }
 
@@ -3963,6 +3967,10 @@ function canviarOpcio(idx){
 
 function afegirOpcio(){
   var ll=['A','B','C','D','E','F'];
+  // En afegir una opció, estem AMPLIANT el pressupost actual (no començant-ne
+  // un de nou). Si veníem de desar, netegem el flag perquè el proper canvi de
+  // marc no col·lapsi les opcions a una de sola (Opció A).
+  _newBudgetPending = false;
   // Snapshot the current option before switching
   opcions[opcioActual].estat = capturaEstat();
   var estatAnterior = opcions[opcioActual].estat;
