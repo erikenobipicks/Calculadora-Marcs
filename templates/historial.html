@@ -61,6 +61,7 @@ tr:hover td{background:#FAFAF8}
 .btn-sm{padding:5px 11px;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;font-family:'DM Sans',sans-serif;transition:all .15s}
 .btn-pdf{background:var(--nav);color:var(--nav-text)}.btn-pdf:hover{filter:brightness(.94)}
 .btn-cmp{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}.btn-cmp:hover{background:#D5EDE3}
+.btn-wa-hist{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}.btn-wa-hist:hover{background:#ddeee5}
 .btn-acc{background:#E8F3EE;color:#1A6B45;border:1px solid #B8DCC9}.btn-acc:hover{background:#C8E6D9}
 .btn-del{background:#FAEAEA;color:#B84040;border:1px solid #E8B4B4}.btn-del:hover{background:#F5D0D0}
 .acceptat td{background:#F0FAF5!important}
@@ -276,6 +277,7 @@ tr:hover td{background:#FAFAF8}
             </td>
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
+              <button type="button" onclick="waHist(this)" data-tel="{{ op.wa_tel }}" data-text="{{ op.wa_text }}" class="btn-sm btn-wa-hist" title="Enviar per WhatsApp al client">WhatsApp</button>
               {% if session.is_admin and op.client_extern_id %}
               <a href="/pdf/{{ op.id }}?mode=dual" class="btn-sm btn-albara" target="_blank" title="PDF amb preu taller + PVP suggerit">PDF Taller</a>
               {% endif %}
@@ -357,6 +359,15 @@ function toggleSessio(head) {
   var chev = head.querySelector('.chevron');
   body.classList.toggle('open');
   chev.classList.toggle('open');
+}
+function waHist(btn){
+  var tel = btn.dataset.tel || '';
+  var txt = btn.dataset.text || '';
+  if(!tel){
+    alert("Aquest client no té telèfon guardat. Afegeix-li el telèfon al pressupost per poder enviar-li el WhatsApp.");
+    return;
+  }
+  window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(txt), '_blank');
 }
 function filtrar() {
   var q = document.getElementById('cerca').value.toLowerCase();
