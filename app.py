@@ -4514,6 +4514,30 @@ def liquidar_comanda(cid):
     return jsonify({'ok': True})
 
 
+@app.route('/comanda/<int:cid>/a-compte', methods=['POST'])
+@login_required
+def a_compte_comanda(cid):
+    """Marca un import rebut A COMPTE (senyal) per a una opció: desa l'entrega
+    parcial i recalcula el pendent (= total − entrega). Si cobreix el total,
+    marca com a pagat. El botó de WhatsApp de l'historial ja reflecteix
+    l'entrega i el pendent (així es confirma la senyal al client)."""
+    c = _get_comanda_for_session(cid, fields='id, user_id, preu_final')
+    if not c:
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        entrega = float(data.get('entrega') or 0)
+    except (TypeError, ValueError):
+        entrega = 0.0
+    total = float(_row_get(c, 'preu_final', 0) or 0)
+    entrega = round(max(0.0, min(entrega, total)), 2)
+    pendent = round(total - entrega, 2)
+    pagat = 1 if pendent <= 0.01 else 0
+    execute('UPDATE comandes SET entrega=?, pendent=?, pagat=? WHERE id=?',
+            [entrega, pendent, pagat, cid])
+    return jsonify({'ok': True, 'entrega': entrega, 'pendent': pendent, 'pagat': bool(pagat)})
+
+
 @app.route('/admin/eliminar-tot', methods=['POST'])
 @admin_required
 def eliminar_tot():
