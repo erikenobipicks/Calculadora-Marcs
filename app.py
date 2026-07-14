@@ -6769,11 +6769,37 @@ def historial():
         sessio_list = [g for g in sessio_list if g[0]['urgent']]
     elif filtre_estat in COMANDA_ESTAT_KEYS:
         sessio_list = [g for g in sessio_list if g[0]['estat'] == filtre_estat]
+    # Agrupar les sessions per CLIENT (nom + telèfon normalitzats): una targeta
+    # per client amb tots els seus pressupostos junts. Manté l'ordre (més recent
+    # primer) segons la primera sessió que apareix de cada client.
+    def _norm_tel(t):
+        return ''.join(ch for ch in str(t or '') if ch.isdigit())
+    _cli_map = {}
+    _cli_order = []
+    for grp in sessio_list:
+        c0 = grp[0]
+        key = (str(c0.get('client_nom') or '').strip().lower(), _norm_tel(c0.get('client_tel')))
+        g = _cli_map.get(key)
+        if g is None:
+            g = {'nom': c0.get('client_nom') or '(sense nom)',
+                 'tel': c0.get('client_tel') or '',
+                 'sessions': [], 'n': 0, 'pendent': 0.0}
+            _cli_map[key] = g
+            _cli_order.append(key)
+        g['sessions'].append(grp)
+        g['n'] += 1
+        for op in grp:
+            try:
+                g['pendent'] += float(op.get('pendent') or 0)
+            except (TypeError, ValueError):
+                pass
+    client_groups = [_cli_map[k] for k in _cli_order]
     filtre_client_nom = ''
     if filtre_client:
         _fc = query('SELECT nom FROM clients_externs WHERE id=?', [filtre_client], one=True)
         filtre_client_nom = _row_get(_fc, 'nom', '') if _fc else ''
     return render_template('historial.html', comandes=comandes, sessio_list=sessio_list,
+                           client_groups=client_groups,
                            usuaris_list=usuaris_list if session.get('is_admin') else [],
                            clients_habituals=clients_habituals if session.get('is_admin') else [],
                            filtre_uid=filtre_uid, filtre_all=filtre_all if session.get('is_admin') else False,

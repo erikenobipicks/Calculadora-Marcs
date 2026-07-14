@@ -28,6 +28,14 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .search-bar input:focus{border-color:var(--green)}
 .return-link{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;background:var(--green-l);color:var(--green);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}
 .return-link:hover{background:#dcefe6}
+.client-card{margin-bottom:1.5rem}
+.client-head{display:flex;align-items:center;gap:.8rem;padding:.55rem .3rem;cursor:pointer;border-bottom:2px solid var(--border)}
+.client-head:hover .client-name{color:var(--green)}
+.client-name{font-size:16px;font-weight:700;color:var(--text)}
+.client-tel{font-weight:400;color:var(--hint);font-size:13px}
+.client-sub{font-size:12px;color:var(--hint);margin-top:1px}
+.client-body{display:none;padding-top:.9rem}
+.client-body.open{display:block}
 .sessio-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:1rem;overflow:hidden}
 .sessio-head{padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s;gap:1rem}
 .sessio-head:hover{background:var(--bg)}
@@ -170,8 +178,19 @@ tr:hover td{background:#FAFAF8}
   </div>
   {% endif %}
 
-  {% if sessio_list %}
-    {% for opcions in sessio_list %}
+  {% if client_groups %}
+    {% for cli in client_groups %}
+    <div class="client-card">
+      <div class="client-head" onclick="toggleSessio(this)">
+        <div style="flex:1;min-width:0">
+          <div class="client-name">{{ cli.nom }}{% if cli.tel %} <span class="client-tel">· {{ cli.tel }}</span>{% endif %}</div>
+          <div class="client-sub">{{ cli.n }} pressupost{{ '' if cli.n == 1 else 's' }}</div>
+        </div>
+        {% if cli.pendent > 0.01 %}<span class="badge badge-pend">{{ "%.2f"|format(cli.pendent) }} € pendent</span>{% endif %}
+        <span class="chevron open">▶</span>
+      </div>
+      <div class="client-body open">
+    {% for opcions in cli.sessions %}
     {% set c0 = opcions[0] %}
     {% set sessio_id = c0.sessio_id or c0.id %}
     {% set multi = opcions|length > 1 %}
@@ -315,6 +334,9 @@ tr:hover td{background:#FAFAF8}
       </div>
     </div>
     {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
   {% else %}
     <div class="empty">Encara no tens pressupostos guardats.</div>
   {% endif %}
@@ -340,6 +362,13 @@ function filtrar() {
   var q = document.getElementById('cerca').value.toLowerCase();
   document.querySelectorAll('.sessio-card').forEach(function(card) {
     card.style.display = card.dataset.text.toLowerCase().includes(q) ? '' : 'none';
+  });
+  // Amaga les targetes de client que no tinguin cap pressupost visible.
+  document.querySelectorAll('.client-card').forEach(function(cc) {
+    var visible = Array.prototype.some.call(cc.querySelectorAll('.sessio-card'), function(s) {
+      return s.style.display !== 'none';
+    });
+    cc.style.display = visible ? '' : 'none';
   });
 }
 // Auto-open first card
