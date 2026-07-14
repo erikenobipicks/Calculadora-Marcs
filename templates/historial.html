@@ -62,6 +62,7 @@ tr:hover td{background:#FAFAF8}
 .btn-pdf{background:var(--nav);color:var(--nav-text)}.btn-pdf:hover{filter:brightness(.94)}
 .btn-cmp{background:var(--green-l);color:var(--green);border:1px solid #B8DCC9}.btn-cmp:hover{background:#D5EDE3}
 .btn-wa-hist{background:#eef6f1;color:#1A6B45;border:1px solid #B8DCC9}.btn-wa-hist:hover{background:#ddeee5}
+.btn-acompte{background:var(--amber-l);color:var(--amber);border:1px solid color-mix(in srgb, var(--amber) 34%, white)}.btn-acompte:hover{background:color-mix(in srgb, var(--amber-l) 74%, white)}
 .btn-acc{background:#E8F3EE;color:#1A6B45;border:1px solid #B8DCC9}.btn-acc:hover{background:#C8E6D9}
 .btn-del{background:#FAEAEA;color:#B84040;border:1px solid #E8B4B4}.btn-del:hover{background:#F5D0D0}
 .acceptat td{background:#F0FAF5!important}
@@ -278,6 +279,7 @@ tr:hover td{background:#FAFAF8}
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
               <button type="button" onclick="waHist(this)" data-tel="{{ op.wa_tel }}" data-text="{{ op.wa_text }}" class="btn-sm btn-wa-hist" title="Enviar per WhatsApp al client">WhatsApp</button>
+              <button type="button" onclick="aCompteComanda({{ op.id }}, {{ '%.2f'|format(op.preu_final) }}, this)" class="btn-sm btn-acompte" title="Marcar import rebut a compte (senyal)">A compte</button>
               {% if session.is_admin and op.client_extern_id %}
               <a href="/pdf/{{ op.id }}?mode=dual" class="btn-sm btn-albara" target="_blank" title="PDF amb preu taller + PVP suggerit">PDF Taller</a>
               {% endif %}
@@ -368,6 +370,25 @@ function waHist(btn){
     return;
   }
   window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(txt), '_blank');
+}
+function aCompteComanda(id, total, btn){
+  var v = prompt('Import rebut a compte (senyal), en €:\nTotal del pressupost: ' + total + ' €', '');
+  if(v === null) return;
+  var entrega = parseFloat(String(v).replace(',', '.'));
+  if(isNaN(entrega) || entrega < 0){ alert('Import no vàlid.'); return; }
+  btn.disabled = true;
+  fetch('/comanda/' + id + '/a-compte', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({entrega: entrega})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok){
+      // Recarrega perquè el pendent i el missatge de WhatsApp reflecteixin la senyal.
+      location.reload();
+    } else {
+      btn.disabled = false;
+      alert('No s\'ha pogut desar l\'import a compte.');
+    }
+  }).catch(function(){ btn.disabled = false; alert('Error de connexió.'); });
 }
 function filtrar() {
   var q = document.getElementById('cerca').value.toLowerCase();
