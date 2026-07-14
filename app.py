@@ -6698,6 +6698,74 @@ h2{{margin-top:2rem}}
     return html
 
 
+def _wa_phone(tel):
+    """Normalitza un telèfon per a wa.me (només dígits; afegeix 34 si són 9)."""
+    digits = ''.join(ch for ch in str(tel or '') if ch.isdigit())
+    if len(digits) == 9:
+        digits = '34' + digits
+    return digits
+
+
+def _wa_client_text(op, emp_nom, emp_adr, emp_tel):
+    """Construeix el text de WhatsApp per al client a partir d'una comanda
+    desada (una opció). Mateix contingut que el missatge de la calculadora, però
+    des de les dades guardades. En català."""
+    def _v(k):
+        v = op.get(k)
+        return '' if v is None else str(v).strip()
+    def _f(k):
+        try:
+            return float(op.get(k) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    L = []
+    num = _v('num_pressupost')
+    L.append('Hola' + (f' (Ref {num})' if num else ''))
+    L.append('')
+    if _v('client_nom'):
+        L.append('Client: ' + _v('client_nom'))
+    fw, fh = _f('final_amplada'), _f('final_alcada')
+    if fw and fh:
+        L.append('Mida final: %d × %d cm' % (round(fw), round(fh)))
+    aw, ah = _f('amplada'), _f('alcada')
+    if aw and ah:
+        L.append('Mides: %d × %d cm' % (round(aw), round(ah)))
+    if _v('marc_principal'):
+        marc = _v('marc_principal')
+        if _v('pre_marc') and _v('pre_marc') != '-':
+            marc += ' (+ ' + _v('pre_marc') + ')'
+        L.append('Marc: ' + marc)
+    if _v('encolat') and _v('encolat') != '-':
+        L.append('Muntatge: ' + _v('encolat'))
+    if _v('vidre') and _v('vidre') != '-':
+        L.append('Vidre: ' + _v('vidre'))
+    if _v('passpartout') and _v('passpartout') != '-':
+        pp = _v('passpartout')
+        if _v('passpartu_ref'):
+            pp += ' (' + _v('passpartu_ref') + ')'
+        L.append('Interior: ' + pp)
+    if _v('impressio') and _v('impressio') != '-':
+        L.append('Impressió: Sí')
+    if _v('observacions'):
+        L.append('Notes: ' + _v('observacions'))
+    L.append('')
+    desc = _f('descompte')
+    if desc > 0:
+        L.append('Descompte aplicat: %d%%' % round(desc))
+    L.append('*Total: %.2f EUR (IVA inclòs)*' % _f('preu_final'))
+    entrega = _f('entrega')
+    if entrega > 0:
+        L.append('Pagament: %.2f EUR' % entrega)
+        L.append('*Pendent: %.2f EUR*' % max(0.0, _f('pendent')))
+    L.append('')
+    L.append('Gràcies, ' + (emp_nom or 'Reus Revela'))
+    if emp_adr:
+        L.append(emp_adr)
+    if emp_tel:
+        L.append('Tel: ' + emp_tel)
+    return '\n'.join(L)
+
+
 @app.route('/historial')
 @login_required
 def historial():
@@ -6743,6 +6811,12 @@ def historial():
         comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                            JOIN usuaris u ON c.user_id=u.id
                            WHERE c.user_id=? ORDER BY c.id DESC''', [session['user_id']])
+    # Dades d'empresa (per a la firma del missatge de WhatsApp al client).
+    _emp = query('SELECT nom_empresa, empresa_adreca, empresa_tel FROM usuaris WHERE id=?',
+                 [session['user_id']], one=True)
+    _emp_nom = session.get('empresa_nom') or _row_get(_emp, 'nom_empresa', '') or 'Reus Revela'
+    _emp_adr = _row_get(_emp, 'empresa_adreca', '') or ''
+    _emp_tel = _row_get(_emp, 'empresa_tel', '') or ''
     # Group by sessio_id
     sessions = {}
     for c in comandes:
@@ -6750,6 +6824,9 @@ def historial():
         if sid not in sessions:
             sessions[sid] = []
         d = dict(c)
+        # Text i telèfon per enviar aquesta opció per WhatsApp des de l'historial.
+        d['wa_text'] = _wa_client_text(d, _emp_nom, _emp_adr, _emp_tel)
+        d['wa_tel'] = _wa_phone(d.get('client_tel'))
         sessions[sid].append(d)
     sessio_list = list(sessions.values())
     # Add pagat/entregat flag + estat (F2) to first item of each session
