@@ -259,20 +259,23 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .sb-cistella{background:rgba(214,158,77,.16);color:#f2cf94;border:1px solid rgba(214,158,77,.6)}
 .sb-cistella:hover{background:rgba(214,158,77,.28)}
 .sticky-bar-cta svg{display:block;flex-shrink:0}
+/* Menú "⋯ Més" de la barra: accions secundàries (WhatsApp Reus Revela, docs FD). */
+.sb-more{position:relative;display:inline-flex}
+.sb-more>summary{list-style:none;cursor:pointer;font-size:17px;line-height:1;letter-spacing:1px;padding:8px 13px}
+.sb-more>summary::-webkit-details-marker{display:none}
+.sb-more>summary::marker{content:""}
+.sb-more-menu{position:absolute;right:0;bottom:calc(100% + 10px);z-index:250;display:grid;gap:2px;min-width:215px;padding:6px;border-radius:14px;background:rgba(28,27,24,.98);box-shadow:0 18px 50px rgba(0,0,0,.4)}
+.sb-more-item{display:flex;align-items:center;width:100%;padding:10px 12px;border:none;background:transparent;border-radius:9px;color:#fff;font:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer;white-space:nowrap;transition:background .12s}
+.sb-more-item:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.sb-more-item:disabled{opacity:.4;cursor:not-allowed}
+.sb-more-sep{height:1px;background:rgba(255,255,255,.14);margin:4px 4px}
 body.has-sticky-bar{padding-bottom:78px}
 @media (max-width:640px){
-  .sticky-bar{left:8px;right:8px;bottom:8px;transform:none;max-width:none;padding:7px 8px 7px 13px;gap:9px}
-  .sticky-bar-total{font-size:18px}
-  .sticky-bar-meta{font-size:10px;max-width:22ch}
-  .sticky-bar-cta{min-height:36px;padding:7px 12px;font-size:12px}
-  .sticky-bar-actions{gap:4px}
-  .sb-secondary,.sb-wa{padding:8px 10px}
-  .sb-secondary .sb-label,.sb-wa .sb-label{display:none}
-  /* Albarà PVP/PVD: en mòbil amaguem el prefix "Albarà " i deixem només
-     PVP/PVD, perquè la barra (admin) no es desbordi lateralment. */
-  .sb-albara .sb-prefix{display:none}
-  .sb-cistella .sb-prefix{display:none}
-  body.has-sticky-bar{padding-bottom:66px}
+  /* Al mòbil amaguem la barra flotant: totes aquestes accions ja són al cos de
+     la pàgina (Desar, PDF i el menú "Més accions"), i la barra hi quedava massa
+     atapeïda. */
+  .sticky-bar{display:none !important}
+  body.has-sticky-bar{padding-bottom:0}
 }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
@@ -1086,20 +1089,23 @@ body{
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       <span class="sb-label">Client</span>
     </button>
-    <button type="button" class="sticky-bar-cta sb-wa" id="sb-wa-rr" onclick="whatsappObjectiu()" disabled title="WhatsApp Reus Revela">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-      <span class="sb-label">Reus Revela</span>
-    </button>
-    {% if session.is_admin %}
-    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pres" onclick="crearAlbaraFD('pvp','pressupost')" title="Generar pressupost (estimate) a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Pressupost </span>FD</span></button>
-    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVP</span></button>
-    <button type="button" class="sticky-bar-cta sb-albara" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)"><span class="sb-label"><span class="sb-prefix">Albarà </span>PVD</span></button>
-    {% endif %}
     <button type="button" class="sticky-bar-cta sb-cistella" id="sb-cistella-add" onclick="afegirACistella()" title="Afegir aquest marc a un pressupost amb diversos marcs"><span class="sb-label">+ <span class="sb-prefix">Pressupost</span></span></button>
     <button type="button" class="sticky-bar-cta sb-secondary" id="sb-nou" onclick="novaComanda()" title="Nou càlcul de marc">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span class="sb-label">Nou</span>
     </button>
+    <details class="sb-more" id="sb-more">
+      <summary class="sticky-bar-cta sb-secondary sb-more-toggle" title="Més accions" aria-label="Més accions">⋯</summary>
+      <div class="sb-more-menu">
+        <button type="button" class="sb-more-item" id="sb-wa-rr" onclick="whatsappObjectiu()" disabled title="WhatsApp Reus Revela">WhatsApp Reus Revela</button>
+        {% if session.is_admin %}
+        <div class="sb-more-sep"></div>
+        <button type="button" class="sb-more-item" id="sb-albara-pres" onclick="crearAlbaraFD('pvp','pressupost')" title="Generar pressupost (estimate) a Factura Directa (PVP, al client)">Pressupost FD</button>
+        <button type="button" class="sb-more-item" id="sb-albara-pvp" onclick="crearAlbaraFD('pvp')" title="Generar albarà a Factura Directa (PVP, al client)">Albarà PVP</button>
+        <button type="button" class="sb-more-item" id="sb-albara-pvd" onclick="crearAlbaraFD('cost')" title="Generar albarà a Factura Directa (PVD, taller)">Albarà PVD</button>
+        {% endif %}
+      </div>
+    </details>
   </div>
 </div>
 
