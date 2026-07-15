@@ -74,7 +74,23 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 .cr-badge.pvp{background:var(--green-l);color:var(--green)}
 .cr-empty{padding:10px 12px;color:var(--hint);font-size:12px}
 .client-selected{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border:1px solid var(--green);border-radius:8px;background:var(--green-l);font-size:13px;font-weight:600;color:var(--text)}
+.cs-actions{display:inline-flex;align-items:center;gap:2px}
 .client-selected button{border:none;background:transparent;color:var(--red,#B84040);font-size:18px;cursor:pointer;line-height:1;padding:0 4px}
+.cs-actions button[title="Editar client"]{color:var(--green);font-size:14px}
+.client-new-btn{border:none;background:transparent;color:var(--green);font-weight:700;cursor:pointer;font-family:inherit;font-size:11px;padding:0}
+.client-new-btn:hover{text-decoration:underline}
+.cmodal{position:fixed;inset:0;z-index:300;background:rgba(20,16,12,.45);display:none;align-items:center;justify-content:center;padding:1rem}
+.cmodal-card{background:#fff;border-radius:14px;padding:1.2rem 1.3rem;width:100%;max-width:420px;box-shadow:0 30px 70px rgba(0,0,0,.3)}
+.cmodal-title{font-size:16px;font-weight:700;margin-bottom:.4rem;color:var(--text)}
+.cmodal-card label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:.6rem 0 4px}
+.cmodal-card input[type=text],.cmodal-card input[type=email]{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;outline:none}
+.cmodal-card input:focus{border-color:var(--green)}
+.cmodal-row{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.cmodal-tipus{display:flex;gap:12px;margin-top:4px}
+.cmodal-tipus label{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;margin:0;cursor:pointer;color:var(--text)}
+.cmodal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:1.1rem}
+.cmodal-cancel{padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--muted);font-weight:600;cursor:pointer;font-family:inherit}
+.cmodal-save{padding:8px 16px;border:none;border-radius:8px;background:var(--green);color:#fff;font-weight:700;cursor:pointer;font-family:inherit}
 .client-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr) 150px;gap:.7rem;align-items:end}
 .client-grid .f{margin-bottom:0}
 .client-grid .client-name{grid-column:1 / 2}
@@ -610,7 +626,10 @@ body{
           <input type="hidden" id="client_extern_id" value="">
           <div id="client-selected" class="client-selected" style="display:none">
             <span id="client-selected-name"></span>
-            <button type="button" onclick="clearClient()" title="Treure client" aria-label="Treure client">×</button>
+            <span class="cs-actions">
+              {% if session.is_admin %}<button type="button" onclick="editSelectedClient()" title="Editar client" aria-label="Editar client">✎</button>{% endif %}
+              <button type="button" onclick="clearClient()" title="Treure client" aria-label="Treure client">×</button>
+            </span>
           </div>
           <input type="text" id="client-search" placeholder="Cerca per nom, telèfon o NIF…" autocomplete="off" oninput="filterClients()" onfocus="filterClients()">
           {% if session.is_admin %}
@@ -621,8 +640,30 @@ body{
           </div>
           {% endif %}
           <div class="client-results" id="client-results"></div>
-          <div style="font-size:11px;color:var(--hint);margin-top:4px">{% if session.is_admin %}Tria un client i l'albarà anirà al preu del seu tipus (PVD/PVP). <a href="/admin/clients-externs" target="_blank" rel="noopener" style="color:var(--green)">Gestionar →</a>{% else %}Cerca un client habitual, o deixa-ho buit i escriu el nom a sota.{% endif %}</div>
+          <div style="font-size:11px;color:var(--hint);margin-top:4px">{% if session.is_admin %}Tria un client (PVD/PVP) o <button type="button" class="client-new-btn" onclick="openClientModal()">+ Nou client</button>. <a href="/admin/clients-externs" target="_blank" rel="noopener" style="color:var(--green)">Gestionar →</a>{% else %}Cerca un client habitual, o deixa-ho buit i escriu el nom a sota.{% endif %}</div>
         </div>
+        {% if session.is_admin %}
+        <div id="client-modal" class="cmodal" style="display:none">
+          <div class="cmodal-card">
+            <div class="cmodal-title" id="cmodal-title">Nou client</div>
+            <label>Nom *</label><input type="text" id="cm-nom" autocomplete="off">
+            <div class="cmodal-row">
+              <div><label>Telèfon</label><input type="text" id="cm-tel" autocomplete="off"></div>
+              <div><label>NIF / CIF</label><input type="text" id="cm-nif" autocomplete="off" style="text-transform:uppercase"></div>
+            </div>
+            <label>Email</label><input type="email" id="cm-email" autocomplete="off">
+            <label>Tipus de client</label>
+            <div class="cmodal-tipus">
+              <label><input type="radio" name="cm-tipus" value="pvp" checked> 🏷️ PVP</label>
+              <label><input type="radio" name="cm-tipus" value="taller"> 🔧 PVD (taller)</label>
+            </div>
+            <div class="cmodal-actions">
+              <button type="button" class="cmodal-cancel" onclick="closeClientModal()">Cancel·lar</button>
+              <button type="button" class="cmodal-save" id="cm-save" onclick="saveClientModal()">Desar</button>
+            </div>
+          </div>
+        </div>
+        {% endif %}
         <div class="client-grid">
           <div class="f client-name"><label>Nom del client</label><input type="text" id="client_nom"></div>
           <div class="f client-phone"><label>Telèfon</label><input type="text" id="client_tel"></div>
@@ -1863,6 +1904,60 @@ document.addEventListener('click', function(ev){
     if(box) box.classList.remove('open');
   }
 });
+
+// ── Alta/edició ràpida de client (admin) ────────────────────────────────────
+var _editingClientId = null;
+function editSelectedClient(){
+  var hid = document.getElementById('client_extern_id');
+  var id = hid && hid.value ? parseInt(hid.value, 10) : null;
+  if(id) openClientModal(id);
+}
+function openClientModal(editId){
+  var m = document.getElementById('client-modal'); if(!m) return;
+  _editingClientId = editId || null;
+  var c = null;
+  if(editId){ for(var i=0;i<CLIENTS_EXTERNS.length;i++){ if(CLIENTS_EXTERNS[i].id===editId){ c=CLIENTS_EXTERNS[i]; break; } } }
+  document.getElementById('cmodal-title').textContent = c ? 'Editar client' : 'Nou client';
+  // En crear, prefill amb el que s'estava escrivint / el nom manual.
+  var srch = document.getElementById('client-search');
+  document.getElementById('cm-nom').value = c ? (c.nom||'') : ((srch && srch.value) || (document.getElementById('client_nom')||{}).value || '');
+  document.getElementById('cm-tel').value = c ? (c.telefon||'') : ((document.getElementById('client_tel')||{}).value || '');
+  document.getElementById('cm-nif').value = c ? (c.nif||'') : '';
+  document.getElementById('cm-email').value = c ? (c.email||'') : '';
+  var tipus = c ? (c.tipus||'pvp') : 'pvp';
+  var radios = document.getElementsByName('cm-tipus');
+  for(var j=0;j<radios.length;j++) radios[j].checked = (radios[j].value===tipus);
+  m.style.display='flex';
+  document.getElementById('cm-nom').focus();
+}
+function closeClientModal(){ var m=document.getElementById('client-modal'); if(m) m.style.display='none'; _editingClientId=null; }
+function saveClientModal(){
+  var nom=(document.getElementById('cm-nom').value||'').trim();
+  if(!nom){ alert('El nom és obligatori.'); return; }
+  var tipus='pvp'; var radios=document.getElementsByName('cm-tipus');
+  for(var j=0;j<radios.length;j++) if(radios[j].checked) tipus=radios[j].value;
+  var body={
+    nom:nom,
+    telefon:(document.getElementById('cm-tel').value||'').trim(),
+    nif:(document.getElementById('cm-nif').value||'').trim(),
+    email:(document.getElementById('cm-email').value||'').trim(),
+    tipus:tipus
+  };
+  var url = _editingClientId ? ('/admin/clients-externs/'+_editingClientId+'/editar') : '/admin/clients-externs/crear';
+  var btn=document.getElementById('cm-save'); btn.disabled=true;
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json();}).then(function(d){
+      btn.disabled=false;
+      if(!d || !d.ok){ alert((d && d.error) || 'No s\'ha pogut desar el client.'); return; }
+      var id = _editingClientId || d.id;
+      var obj = {id:id, nom:nom, nif:body.nif, tipus:tipus, telefon:body.telefon, email:body.email};
+      var found=false;
+      for(var i=0;i<CLIENTS_EXTERNS.length;i++){ if(CLIENTS_EXTERNS[i].id===id){ CLIENTS_EXTERNS[i]=obj; found=true; break; } }
+      if(!found) CLIENTS_EXTERNS.push(obj);
+      closeClientModal();
+      selectClient(id);
+    }).catch(function(){ btn.disabled=false; alert('Error de connexió.'); });
+}
 
 function onClientExternChange(){
   var hid = document.getElementById('client_extern_id');
