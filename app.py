@@ -8879,15 +8879,27 @@ def admin_clients_externs_eliminar(client_id):
 @app.route('/api/clients-externs')
 @login_required
 def api_clients_externs():
-    """Llista de clients externs actius — alimenta el selector del pressupost."""
-    rows = query("""
-        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
-               u.nom_empresa AS empresa
-        FROM clients_externs c
-        LEFT JOIN usuaris u ON c.usuari_id = u.id
-        WHERE c.actiu = TRUE
-        ORDER BY c.nom
-    """) or []
+    """Llista de clients externs actius — alimenta el cercador del pressupost.
+    Els NO-admin no gestionen clients tipus 'taller' (PVD), així que només se'ls
+    retornen els clients PVP."""
+    if session.get('is_admin'):
+        rows = query("""
+            SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+                   u.nom_empresa AS empresa
+            FROM clients_externs c
+            LEFT JOIN usuaris u ON c.usuari_id = u.id
+            WHERE c.actiu = TRUE
+            ORDER BY c.nom
+        """) or []
+    else:
+        rows = query("""
+            SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+                   u.nom_empresa AS empresa
+            FROM clients_externs c
+            LEFT JOIN usuaris u ON c.usuari_id = u.id
+            WHERE c.actiu = TRUE AND c.tipus <> 'taller'
+            ORDER BY c.nom
+        """) or []
     return jsonify({
         'ok': True,
         'clients': [
