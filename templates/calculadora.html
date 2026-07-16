@@ -628,6 +628,7 @@ body{
         <div class="mode-selector">
           <button type="button" id="mode-btn-marc" class="mode-chip active" onclick="setBudgetMode('marc')">🖼️ Marc</button>
           <button type="button" id="mode-btn-impressio" class="mode-chip" onclick="setBudgetMode('impressio')">🖨️ Només impressió (còpies)</button>
+          <button type="button" id="mode-btn-llenc" class="mode-chip" onclick="setBudgetMode('llenc')">🎨 Llenç</button>
         </div>
       </div>
       <div class="card client-card">
@@ -729,6 +730,40 @@ body{
         </div>
       </div>
 
+      <div class="card" id="card-llenc" style="display:none">
+        <div class="card-t"><span class="ct-n">3</span>Llenç</div>
+        <div class="f2">
+          <div class="f">
+            <label>Mida final (cm)</label>
+            <select id="llenc-mida" onchange="recalcLlenc()"></select>
+          </div>
+          <div class="f">
+            <label>Quantitat</label>
+            <input type="number" id="llenc-qty" min="1" value="1" inputmode="numeric" oninput="recalcLlenc()">
+          </div>
+        </div>
+        <div class="f" style="margin-top:.6rem">
+          <label>Preparació de l'arxiu</label>
+          <select id="llenc-edit" onchange="recalcLlenc()"></select>
+        </div>
+        <div style="margin-top:.6rem">
+          <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">Muntatge</label>
+          <div class="mode-selector">
+            <button type="button" id="llenc-bast-si" class="mode-chip active" onclick="setLlencBastidor(true)">Amb bastidor</button>
+            <button type="button" id="llenc-bast-no" class="mode-chip" onclick="setLlencBastidor(false)">Sense bastidor (enrotllat)</button>
+          </div>
+        </div>
+        <div id="llenc-fitxer-hint" style="font-size:11px;color:var(--hint);margin-top:.5rem"></div>
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
+          <span id="llenc-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">PVP</span>
+          <strong id="llenc-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
+        </div>
+        {% if session.is_admin %}
+        <div id="llenc-preu-pvd" style="font-size:12px;color:var(--muted);text-align:right;margin-top:2px"></div>
+        {% endif %}
+        <button type="button" onclick="afegirLlencACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+      </div>
+
       <div class="card" id="card-motllures">
         <div class="card-t"><span class="ct-n">3</span>Selecció de motllures</div>
         <div class="f2">
@@ -811,7 +846,7 @@ body{
       <input type="hidden" id="mida-manual-w" value="0">
       <input type="hidden" id="mida-manual-h" value="0">
 
-      <div class="card">
+      <div class="card" id="card-peca">
         <div class="card-t"><span class="ct-n">4</span>Peça i mides</div>
         <div class="f" style="margin-bottom:.7rem" id="camp-tipus-peca">
           <label>Tipus de peça</label>
@@ -853,7 +888,7 @@ body{
 
     <!-- COL DRETA -->
     <div class="right-col">
-      <div class="card">
+      <div class="card" id="card-materials">
         <div class="card-t"><span class="ct-n">5</span>Materials <span id="mida-hint" style="font-weight:400;color:var(--hint);font-size:10px;margin-left:4px"></span></div>
 
         <!-- GRUP 1: Encolat / Protter -->
@@ -1064,7 +1099,7 @@ body{
       </div>
 
       <div class="summary-sidebar">
-      <div class="card dcard">
+      <div class="card dcard" id="card-preu">
         <div class="card-t"><span class="ct-n">7</span>Preu i descompte</div>
         <div class="f2">
           <div class="f"><label>Descompte al client (%)</label><input type="number" id="descompte" value="0" min="0" max="100" oninput="calcular()"></div>
@@ -2932,19 +2967,41 @@ function canviarTipusLaminat(tipus){
   calcular();
 }
 
-// ── Mode del pressupost: "marc" (complet) o "impressio" (només còpies) ──────
+// ── Mode del pressupost: "marc" (complet), "impressio" (còpies) o "llenc" ───
 var _budgetMode = 'marc';
+// Recordem la visibilitat original de la targeta d'extres (el servidor l'amaga
+// si no hi ha extres manuals) per restaurar-la en sortir del mode Llenç.
+var _extrasCardDefaultDisplay = (function(){
+  var el = document.getElementById('extras-card');
+  return el ? el.style.display : '';
+})();
 function setBudgetMode(mode){
-  _budgetMode = (mode === 'impressio') ? 'impressio' : 'marc';
+  _budgetMode = (mode === 'impressio') ? 'impressio' : (mode === 'llenc' ? 'llenc' : 'marc');
   var isImp = _budgetMode === 'impressio';
-  var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio');
-  if(bm) bm.classList.toggle('active', !isImp);
+  var isLlenc = _budgetMode === 'llenc';
+  var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio'), bl = document.getElementById('mode-btn-llenc');
+  if(bm) bm.classList.toggle('active', _budgetMode === 'marc');
   if(bi) bi.classList.toggle('active', isImp);
-  // Seccions només-marc: s'amaguen en mode "només impressió".
-  ['card-motllures','grup-muntatge','grup-proteccio','grup-interior','grup-revers-peu','camp-tipus-peca'].forEach(function(id){
+  if(bl) bl.classList.toggle('active', isLlenc);
+  // Mode Llenç: panell propi (card-llenc); s'amaga tot el calculador de marc.
+  var lc = document.getElementById('card-llenc');
+  if(lc) lc.style.display = isLlenc ? '' : 'none';
+  ['card-peca','card-materials','card-preu'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.style.display = isLlenc ? 'none' : '';
+  });
+  var extrasCard = document.getElementById('extras-card');
+  if(extrasCard) extrasCard.style.display = isLlenc ? 'none' : _extrasCardDefaultDisplay;
+  var sbar = document.getElementById('sticky-bar');
+  if(sbar) sbar.style.display = isLlenc ? 'none' : '';
+  // card-motllures: només en mode marc (amagat en impressió i en llenç).
+  var cmot = document.getElementById('card-motllures');
+  if(cmot) cmot.style.display = (isImp || isLlenc) ? 'none' : '';
+  // Seccions només-marc dins de Materials: s'amaguen en "només impressió".
+  ['grup-muntatge','grup-proteccio','grup-interior','grup-revers-peu','camp-tipus-peca'].forEach(function(id){
     var el = document.getElementById(id);
     if(el) el.style.display = isImp ? 'none' : '';
   });
+  if(isLlenc){ if(typeof recalcLlenc === 'function') recalcLlenc(); return; }
   if(isImp){
     // Neteja marc/premarc i materials perquè la còpia només compti la impressió.
     if(typeof PREUS === 'object'){ PREUS.marc = 0; PREUS.pre = 0; }
@@ -3971,6 +4028,97 @@ function afegirACistella(){
 }
 
 function eliminarDeCistella(i){ _cistella.splice(i,1); renderCistella(); }
+
+// ── Mode Llenç ─────────────────────────────────────────────────────────────
+// Tarifa portada de la web: el preu de cada mida és el PVD (cost/taller); el
+// PVP = PVD + marge. Sense bastidor = PVD × print_only_factor.
+var CANVAS_PRICING = {{ canvas_pricing | tojson }};
+var _llencBastidor = true;
+
+function _llencInit(){
+  var selMida = document.getElementById('llenc-mida');
+  if(selMida && !selMida.options.length){
+    var grups = {standard:'Estàndard', panoramic:'Panoràmic'};
+    ['standard','panoramic'].forEach(function(g){
+      var og = document.createElement('optgroup'); og.label = grups[g] || g;
+      CANVAS_PRICING.sizes.filter(function(s){return s.group===g;}).forEach(function(s){
+        var o = document.createElement('option');
+        o.value = s.w+'x'+s.h; o.textContent = s.w+' × '+s.h+' cm';
+        og.appendChild(o);
+      });
+      if(og.children.length) selMida.appendChild(og);
+    });
+  }
+  var selEdit = document.getElementById('llenc-edit');
+  if(selEdit && !selEdit.options.length){
+    CANVAS_PRICING.edit_options.forEach(function(e){
+      var o = document.createElement('option'); o.value = e.id;
+      o.textContent = e.label + (e.price>0 ? (' (+'+e.price.toFixed(2)+' €)') : '');
+      selEdit.appendChild(o);
+    });
+  }
+}
+
+function setLlencBastidor(on){
+  _llencBastidor = !!on;
+  var s = document.getElementById('llenc-bast-si'), n = document.getElementById('llenc-bast-no');
+  if(s) s.classList.toggle('active', _llencBastidor);
+  if(n) n.classList.toggle('active', !_llencBastidor);
+  recalcLlenc();
+}
+
+function _llencSelected(){
+  var mv = (document.getElementById('llenc-mida')||{}).value;
+  var size = CANVAS_PRICING.sizes.filter(function(s){return (s.w+'x'+s.h)===mv;})[0] || CANVAS_PRICING.sizes[0];
+  var ev = (document.getElementById('llenc-edit')||{}).value;
+  var edit = CANVAS_PRICING.edit_options.filter(function(e){return e.id===ev;})[0] || CANVAS_PRICING.edit_options[0];
+  var qty = Math.max(1, parseInt((document.getElementById('llenc-qty')||{}).value, 10) || 1);
+  var baseUnit = size.price;
+  if(!_llencBastidor) baseUnit = Math.round(baseUnit * CANVAS_PRICING.print_only_factor * 100) / 100;
+  var pvdUnit = baseUnit + (edit.price || 0);
+  var pvdSub = Math.round(pvdUnit * qty * 100) / 100;
+  var margin = CANVAS_PRICING.margin_percent || 0;
+  var pvpSub = Math.round(pvdSub * (1 + margin/100) * 100) / 100;
+  return {size:size, edit:edit, qty:qty, bastidor:_llencBastidor, pvd:pvdSub, pvp:pvpSub};
+}
+
+function _llencDescripcio(r){
+  var txt = 'Llenç ' + r.size.w + '×' + r.size.h + (r.bastidor ? ' · amb bastidor' : ' · sense bastidor (enrotllat)');
+  if(r.edit && r.edit.id !== 'none') txt += ' · ' + r.edit.label;
+  return txt;
+}
+
+function recalcLlenc(){
+  if(!document.getElementById('llenc-mida')) return;
+  var r = _llencSelected();
+  var isPVD = (typeof cistellaClientIsPVD === 'function') ? cistellaClientIsPVD() : false;
+  var lbl = document.getElementById('llenc-preu-label');
+  var val = document.getElementById('llenc-preu');
+  var pvdRow = document.getElementById('llenc-preu-pvd');
+  if(isPVD){
+    if(lbl) lbl.textContent = 'PVD (taller)';
+    if(val) val.textContent = r.pvd.toFixed(2) + ' € + IVA';
+    if(pvdRow) pvdRow.textContent = '';
+  } else {
+    if(lbl) lbl.textContent = 'PVP (client)';
+    if(val) val.textContent = r.pvp.toFixed(2) + ' € + IVA';
+    if(pvdRow) pvdRow.textContent = 'Cost taller (PVD): ' + r.pvd.toFixed(2) + ' €';
+  }
+  var hint = document.getElementById('llenc-fitxer-hint');
+  if(hint) hint.textContent = 'Arxiu recomanat amb marges: ' + r.size.file[0] + ' × ' + r.size.file[1] + ' cm.';
+}
+
+function afegirLlencACistella(){
+  var r = _llencSelected();
+  if(!(r.pvd > 0 || r.pvp > 0)){ showAlert('Tria una mida de llenç.', 'err'); return; }
+  _cistella.push({ text: _llencDescripcio(r), quantity: r.qty, preu_net: r.pvp, cost_produccio: r.pvd });
+  renderCistella();
+  var q = document.getElementById('llenc-qty'); if(q) q.value = '1';
+  recalcLlenc();
+  showAlert('Llenç afegit (' + _cistella.length + ' al pressupost). Posa el següent.', 'ok');
+}
+
+_llencInit();
 
 // Retorna true si el client seleccionat és PVD (taller/distribuïdor) i, per tant,
 // al pressupost només s'hi ha de veure el preu PVD, no el PVP.

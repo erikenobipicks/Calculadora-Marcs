@@ -3561,6 +3561,60 @@ def api_novetats_vist():
     return jsonify({'ok': True})
 
 
+# ── Tarifa de llenços (portada de la web reusrevela) ───────────────────────
+# El `price` de cada mida és el PVD (cost/taller). El PVP es deriva aplicant
+# `margin_percent`. Sense bastidor (només impressió laminada enrotllada) es
+# cobra `print_only_factor` del preu de la mida muntada.
+CANVAS_PRICING = {
+    'margin_percent': 30.0,
+    'print_only_factor': 0.65,
+    'sizes': [
+        {'group': 'standard', 'w': 30,  'h': 30,  'file': [40, 40],   'price': 39.50},
+        {'group': 'standard', 'w': 30,  'h': 40,  'file': [40, 50],   'price': 40.00},
+        {'group': 'standard', 'w': 30,  'h': 50,  'file': [40, 60],   'price': 45.00},
+        {'group': 'standard', 'w': 40,  'h': 40,  'file': [50, 50],   'price': 48.00},
+        {'group': 'standard', 'w': 40,  'h': 50,  'file': [50, 60],   'price': 51.00},
+        {'group': 'standard', 'w': 50,  'h': 50,  'file': [60, 60],   'price': 52.00},
+        {'group': 'standard', 'w': 50,  'h': 60,  'file': [60, 70],   'price': 54.00},
+        {'group': 'standard', 'w': 50,  'h': 70,  'file': [60, 80],   'price': 56.00},
+        {'group': 'standard', 'w': 50,  'h': 80,  'file': [60, 90],   'price': 60.00},
+        {'group': 'standard', 'w': 60,  'h': 60,  'file': [70, 70],   'price': 60.00},
+        {'group': 'standard', 'w': 60,  'h': 80,  'file': [70, 90],   'price': 66.00},
+        {'group': 'standard', 'w': 60,  'h': 90,  'file': [70, 100],  'price': 68.00},
+        {'group': 'standard', 'w': 60,  'h': 100, 'file': [70, 110],  'price': 79.00},
+        {'group': 'standard', 'w': 70,  'h': 70,  'file': [80, 80],   'price': 65.00},
+        {'group': 'standard', 'w': 70,  'h': 100, 'file': [80, 110],  'price': 80.00},
+        {'group': 'standard', 'w': 70,  'h': 150, 'file': [80, 160],  'price': 110.00},
+        {'group': 'standard', 'w': 80,  'h': 80,  'file': [90, 90],   'price': 87.00},
+        {'group': 'standard', 'w': 80,  'h': 100, 'file': [90, 110],  'price': 92.00},
+        {'group': 'standard', 'w': 80,  'h': 150, 'file': [90, 160],  'price': 120.00},
+        {'group': 'standard', 'w': 90,  'h': 90,  'file': [100, 100], 'price': 95.00},
+        {'group': 'standard', 'w': 90,  'h': 120, 'file': [100, 130], 'price': 105.00},
+        {'group': 'standard', 'w': 90,  'h': 150, 'file': [100, 160], 'price': 120.00},
+        {'group': 'standard', 'w': 90,  'h': 200, 'file': [100, 210], 'price': 170.00},
+        {'group': 'standard', 'w': 100, 'h': 100, 'file': [110, 110], 'price': 105.00},
+        {'group': 'standard', 'w': 100, 'h': 150, 'file': [110, 160], 'price': 135.00},
+        {'group': 'panoramic', 'w': 40, 'h': 100, 'file': [50, 110],  'price': 60.00},
+        {'group': 'panoramic', 'w': 40, 'h': 140, 'file': [50, 150],  'price': 72.50},
+        {'group': 'panoramic', 'w': 60, 'h': 120, 'file': [70, 130],  'price': 80.00},
+        {'group': 'panoramic', 'w': 50, 'h': 120, 'file': [60, 130],  'price': 78.00},
+        {'group': 'panoramic', 'w': 50, 'h': 200, 'file': [60, 210],  'price': 105.00},
+        {'group': 'panoramic', 'w': 60, 'h': 150, 'file': [70, 160],  'price': 95.00},
+        {'group': 'panoramic', 'w': 60, 'h': 200, 'file': [70, 210],  'price': 105.00},
+        {'group': 'panoramic', 'w': 65, 'h': 120, 'file': [75, 130],  'price': 87.00},
+        {'group': 'panoramic', 'w': 65, 'h': 200, 'file': [75, 210],  'price': 125.00},
+        {'group': 'panoramic', 'w': 70, 'h': 200, 'file': [80, 210],  'price': 140.00},
+        {'group': 'panoramic', 'w': 80, 'h': 200, 'file': [90, 210],  'price': 155.00},
+    ],
+    'edit_options': [
+        {'id': 'none',           'label': 'Arxiu preparat pel fotògraf', 'price': 0.0},
+        {'id': 'extend_only',    'label': 'Ampliar llenç (marges bastidor)', 'price': 2.0},
+        {'id': 'extend_quality', 'label': 'Ampliar i adaptar qualitat', 'price': 5.0},
+        {'id': 'full_retouch',   'label': 'Retoc complet (marges + qualitat + neteja)', 'price': 15.0},
+    ],
+}
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3627,6 +3681,7 @@ def calculadora():
                            novetats_pendents=novetats_pendents,
                            novetats_ids=[n['id'] for n in novetats_pendents],
                            extras=get_extras_list(),
+                           canvas_pricing=CANVAS_PRICING,
                            user_has_email=user_has_email)
 
 @app.route('/api/lookup')
