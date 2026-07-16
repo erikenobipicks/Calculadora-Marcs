@@ -744,9 +744,9 @@ body{
         </div>
         <div style="margin-top:.6rem">
           <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">O mida a mida (cm)</label>
-          <div class="f2" style="align-items:end">
-            <div class="f"><input type="number" id="llenc-w" min="30" max="100" step="1" inputmode="numeric" placeholder="Amplada" oninput="onLlencCustomInput()"></div>
-            <div class="f"><input type="number" id="llenc-h" min="30" max="200" step="1" inputmode="numeric" placeholder="Alçada" oninput="onLlencCustomInput()"></div>
+          <div class="f2">
+            <div class="f" style="margin-bottom:0"><input type="number" id="llenc-w" min="30" max="100" step="1" inputmode="numeric" placeholder="Amplada" oninput="onLlencCustomInput()"></div>
+            <div class="f" style="margin-bottom:0"><input type="number" id="llenc-h" min="30" max="200" step="1" inputmode="numeric" placeholder="Alçada" oninput="onLlencCustomInput()"></div>
           </div>
           <div id="llenc-custom-status" style="font-size:11.5px;margin-top:.35rem;line-height:1.4"></div>
         </div>
@@ -1890,6 +1890,10 @@ function setClientFilter(f, btn){
   var chips = document.querySelectorAll('#client-filter .cf-chip');
   for(var i=0;i<chips.length;i++) chips[i].classList.toggle('is-active', chips[i]===btn);
   filterClients();
+  // Sense client seleccionat, el filtre també decideix quins preus es mostren
+  // (PVD/PVP/tots) al panell de llenç i a la cistella.
+  if(typeof recalcLlenc === 'function') recalcLlenc();
+  if(typeof renderCistella === 'function') renderCistella();
 }
 
 function filterClients(){
@@ -2026,6 +2030,9 @@ function onClientExternChange(){
     nomInp.readOnly = false;
   }
   updateAlbaraButtons();
+  // El tipus de client determina quins preus es mostren: refresquem llenç i cistella.
+  if(typeof recalcLlenc === 'function') recalcLlenc();
+  if(typeof renderCistella === 'function') renderCistella();
 }
 
 // Mostra els botons d'albarà segons el tipus de client seleccionat:
@@ -4148,22 +4155,23 @@ function _llencDescripcio(r){
 function recalcLlenc(){
   if(!document.getElementById('llenc-mida')) return;
   var r = _llencSelected();
-  var isPVD = (typeof cistellaClientIsPVD === 'function') ? cistellaClientIsPVD() : false;
+  var view = (typeof _priceView === 'function') ? _priceView() : 'both';
   var lbl = document.getElementById('llenc-preu-label');
   var val = document.getElementById('llenc-preu');
   var pvdRow = document.getElementById('llenc-preu-pvd');
   if(r.invalid){
-    if(lbl) lbl.textContent = isPVD ? 'PVD (taller)' : 'PVP (client)';
+    if(lbl) lbl.textContent = view === 'pvd' ? 'PVD (taller)' : 'PVP (client)';
     if(val) val.textContent = '—';
     if(pvdRow) pvdRow.textContent = '';
-  } else if(isPVD){
+  } else if(view === 'pvd'){
     if(lbl) lbl.textContent = 'PVD (taller)';
     if(val) val.textContent = r.pvd.toFixed(2) + ' € + IVA';
     if(pvdRow) pvdRow.textContent = '';
   } else {
     if(lbl) lbl.textContent = 'PVP (client)';
     if(val) val.textContent = r.pvp.toFixed(2) + ' € + IVA';
-    if(pvdRow) pvdRow.textContent = 'Cost taller (PVD): ' + r.pvd.toFixed(2) + ' €';
+    // El cost PVD només en vista "both" (Tots); en filtre PVP s'amaga.
+    if(pvdRow) pvdRow.textContent = (view === 'both') ? ('Cost taller (PVD): ' + r.pvd.toFixed(2) + ' €') : '';
   }
   var hint = document.getElementById('llenc-fitxer-hint');
   if(hint) hint.textContent = 'Arxiu recomanat amb marges: ' + r.fileW + ' × ' + r.fileH + ' cm.';
@@ -4192,17 +4200,27 @@ function afegirLlencACistella(){
 
 _llencInit();
 
-// Retorna true si el client seleccionat és PVD (taller/distribuïdor) i, per tant,
-// al pressupost només s'hi ha de veure el preu PVD, no el PVP.
-function cistellaClientIsPVD(){
+// Quins preus s'han de mostrar al pressupost: 'pvd' (només PVD), 'pvp' (només
+// PVP) o 'both' (PVP principal + cost PVD per a admin).
+//  · Amb client seleccionat → mana el seu tipus (taller=PVD, pvp=PVP).
+//  · Sense client → mana el filtre PVD/PVP (Tots = els dos).
+function _priceView(){
   var hid = document.getElementById('client_extern_id');
-  if(hid && hid.value) return (hid.dataset.tipus || 'pvp') === 'taller';
-  return rmode === 'cost';
+  if(hid && hid.value) return (hid.dataset.tipus || 'pvp') === 'taller' ? 'pvd' : 'pvp';
+  if(typeof clientFilter !== 'undefined'){
+    if(clientFilter === 'taller') return 'pvd';
+    if(clientFilter === 'pvp') return 'pvp';
+  }
+  return (rmode === 'cost') ? 'pvd' : 'both';
 }
+
+// Retorna true si al pressupost només s'hi ha de veure el preu PVD.
+function cistellaClientIsPVD(){ return _priceView() === 'pvd'; }
 
 function renderCistella(){
   var n = _cistella.length;
-  var isPVD = cistellaClientIsPVD();
+  var view = _priceView();
+  var isPVD = view === 'pvd';
   var fab = document.getElementById('cistella-fab');
   var cnt = document.getElementById('cistella-count');
   if(cnt) cnt.textContent = n;
@@ -4216,11 +4234,12 @@ function renderCistella(){
         var pvp=(it.preu_net||0), pvd=(it.cost_produccio||0);
         var meta;
         if(isPVD){
-          // Client PVD: només preu PVD.
+          // Vista PVD: només preu PVD.
           meta = it.quantity+' u · PVD '+pvd.toFixed(2)+' €';
         } else {
           meta = it.quantity+' u · PVP '+pvp.toFixed(2)+' €';
-          if(IS_ADMIN) meta += ' · cost '+pvd.toFixed(2)+' €';
+          // El cost PVD només s'afegeix en vista "both" (Tots), no si es filtra PVP.
+          if(IS_ADMIN && view === 'both') meta += ' · cost '+pvd.toFixed(2)+' €';
         }
         return '<div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--border)">'+
           '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;line-height:1.3">'+escapeHtml(it.text)+'</div>'+
@@ -4237,14 +4256,15 @@ function renderCistella(){
   var elPvd=document.getElementById('cistella-tot-pvd');
   var secRow=document.getElementById('cistella-tot-secondary');
   if(isPVD){
-    // Client PVD: el total principal és el PVD i s'amaga la fila de cost extra.
+    // Vista PVD: el total principal és el PVD i s'amaga la fila de cost extra.
     if(labelEl) labelEl.textContent = 'Total PVD (taller)';
     if(elPvp) elPvp.textContent = totPvd.toFixed(2)+' € + IVA';
     if(secRow) secRow.style.display = 'none';
   } else {
     if(labelEl) labelEl.textContent = 'Total PVP (client)';
     if(elPvp) elPvp.textContent = totPvp.toFixed(2)+' € + IVA';
-    if(secRow) secRow.style.display = '';
+    // La fila de cost PVD només es mostra en vista "both" (Tots).
+    if(secRow) secRow.style.display = (view === 'both') ? '' : 'none';
     if(elPvd) elPvd.textContent = totPvd.toFixed(2)+' €';
   }
 }
