@@ -669,6 +669,10 @@ body{
               <label><input type="radio" name="cm-tipus" value="pvp" checked> 🏷️ PVP</label>
               <label><input type="radio" name="cm-tipus" value="taller"> 🔧 PVD (taller)</label>
             </div>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:.7rem;font-size:13px;font-weight:600;cursor:pointer">
+              <input type="checkbox" id="cm-recarrec"> 🧾 Recàrrec d'equivalència (5,2%)
+            </label>
+            <div style="font-size:11px;color:var(--hint);margin-top:2px">Marca-ho si el client és revenedor en règim de RE; s'afegirà a les factures/albarans de FD.</div>
             <div class="cmodal-actions">
               <button type="button" class="cmodal-cancel" onclick="closeClientModal()">Cancel·lar</button>
               <button type="button" class="cmodal-save" id="cm-save" onclick="saveClientModal()">Desar</button>
@@ -1983,6 +1987,8 @@ function openClientModal(editId){
   var tipus = c ? (c.tipus||'pvp') : 'pvp';
   var radios = document.getElementsByName('cm-tipus');
   for(var j=0;j<radios.length;j++) radios[j].checked = (radios[j].value===tipus);
+  var re = document.getElementById('cm-recarrec');
+  if(re) re.checked = c ? !!c.recarrec_equiv : false;
   m.style.display='flex';
   document.getElementById('cm-nom').focus();
 }
@@ -1992,12 +1998,14 @@ function saveClientModal(){
   if(!nom){ alert('El nom és obligatori.'); return; }
   var tipus='pvp'; var radios=document.getElementsByName('cm-tipus');
   for(var j=0;j<radios.length;j++) if(radios[j].checked) tipus=radios[j].value;
+  var recarrec = !!(document.getElementById('cm-recarrec')||{}).checked;
   var body={
     nom:nom,
     telefon:(document.getElementById('cm-tel').value||'').trim(),
     nif:(document.getElementById('cm-nif').value||'').trim(),
     email:(document.getElementById('cm-email').value||'').trim(),
-    tipus:tipus
+    tipus:tipus,
+    recarrec_equiv:recarrec
   };
   var url = _editingClientId ? ('/admin/clients-externs/'+_editingClientId+'/editar') : '/admin/clients-externs/crear';
   var btn=document.getElementById('cm-save'); btn.disabled=true;
@@ -2006,7 +2014,7 @@ function saveClientModal(){
       btn.disabled=false;
       if(!d || !d.ok){ alert((d && d.error) || 'No s\'ha pogut desar el client.'); return; }
       var id = _editingClientId || d.id;
-      var obj = {id:id, nom:nom, nif:body.nif, tipus:tipus, telefon:body.telefon, email:body.email};
+      var obj = {id:id, nom:nom, nif:body.nif, tipus:tipus, telefon:body.telefon, email:body.email, recarrec_equiv:recarrec};
       var found=false;
       for(var i=0;i<CLIENTS_EXTERNS.length;i++){ if(CLIENTS_EXTERNS[i].id===id){ CLIENTS_EXTERNS[i]=obj; found=true; break; } }
       if(!found) CLIENTS_EXTERNS.push(obj);
