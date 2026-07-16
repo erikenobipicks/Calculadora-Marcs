@@ -734,13 +734,21 @@ body{
         <div class="card-t"><span class="ct-n">3</span>Llenç</div>
         <div class="f2">
           <div class="f">
-            <label>Mida final (cm)</label>
-            <select id="llenc-mida" onchange="recalcLlenc()"></select>
+            <label>Mida final (catàleg)</label>
+            <select id="llenc-mida" onchange="onLlencMidaSelect()"></select>
           </div>
           <div class="f">
             <label>Quantitat</label>
             <input type="number" id="llenc-qty" min="1" value="1" inputmode="numeric" oninput="recalcLlenc()">
           </div>
+        </div>
+        <div style="margin-top:.6rem">
+          <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">O mida a mida (cm)</label>
+          <div class="f2" style="align-items:end">
+            <div class="f"><input type="number" id="llenc-w" min="30" max="100" step="1" inputmode="numeric" placeholder="Amplada" oninput="onLlencCustomInput()"></div>
+            <div class="f"><input type="number" id="llenc-h" min="30" max="200" step="1" inputmode="numeric" placeholder="Alçada" oninput="onLlencCustomInput()"></div>
+          </div>
+          <div id="llenc-custom-status" style="font-size:11.5px;margin-top:.35rem;line-height:1.4"></div>
         </div>
         <div class="f" style="margin-top:.6rem">
           <label>Preparació de l'arxiu</label>
@@ -4067,23 +4075,72 @@ function setLlencBastidor(on){
   recalcLlenc();
 }
 
+// En triar una mida del catàleg, buidem els camps de mida a mida (el catàleg mana).
+function onLlencMidaSelect(){
+  var w=document.getElementById('llenc-w'), h=document.getElementById('llenc-h');
+  if(w) w.value=''; if(h) h.value='';
+  recalcLlenc();
+}
+function onLlencCustomInput(){ recalcLlenc(); }
+
+// Preu PVD d'una mida a mida: s'INTERPOLA del catàleg (anchors [àrea,preu]
+// monòtons), igual que a la web. Així sempre queda entre els presets que la
+// voregen i mai surt més barata que una de més petita.
+function _canvasCustomPrice(w, h){
+  var A = CANVAS_PRICING.anchors || [];
+  var margin = (CANVAS_PRICING.constants && CANVAS_PRICING.constants.file_margin_cm) || 10;
+  var area = w * h, pvd = 0;
+  if(!A.length){ pvd = 0; }
+  else if(area <= A[0][0]){ pvd = A[0][1] * area / A[0][0]; }
+  else if(area >= A[A.length-1][0]){
+    var a=A[A.length-2], b=A[A.length-1];
+    pvd = b[1] + (b[1]-a[1])/(b[0]-a[0]) * (area - b[0]);
+  } else {
+    for(var i=0;i<A.length-1;i++){
+      if(area >= A[i][0] && area <= A[i+1][0]){
+        var t=(area-A[i][0])/(A[i+1][0]-A[i][0]);
+        pvd = A[i][1] + t*(A[i+1][1]-A[i][1]);
+        break;
+      }
+    }
+  }
+  return { pvd: Math.round(pvd*100)/100, file_w: w+margin, file_h: h+margin };
+}
+
+// Resol la mida activa: mida a mida si hi ha amplada i alçada, si no la del catàleg.
 function _llencSelected(){
-  var mv = (document.getElementById('llenc-mida')||{}).value;
-  var size = CANVAS_PRICING.sizes.filter(function(s){return (s.w+'x'+s.h)===mv;})[0] || CANVAS_PRICING.sizes[0];
   var ev = (document.getElementById('llenc-edit')||{}).value;
   var edit = CANVAS_PRICING.edit_options.filter(function(e){return e.id===ev;})[0] || CANVAS_PRICING.edit_options[0];
   var qty = Math.max(1, parseInt((document.getElementById('llenc-qty')||{}).value, 10) || 1);
-  var baseUnit = size.price;
+  var C = CANVAS_PRICING.constraints || {min_cm:30, max_w_cm:100, max_h_cm:200};
+  var wv = parseFloat((document.getElementById('llenc-w')||{}).value) || 0;
+  var hv = parseFloat((document.getElementById('llenc-h')||{}).value) || 0;
+  var custom = (wv>0 && hv>0);
+  var w, h, baseUnit, fileW, fileH, special=false, invalid=false, invalidMsg='';
+  if(custom){
+    w=wv; h=hv;
+    if(w < C.min_cm || h < C.min_cm){ invalid=true; invalidMsg='La mida mínima és '+C.min_cm+' cm per costat.'; }
+    else if(w > C.max_w_cm){ invalid=true; invalidMsg='L\'amplada màxima del llenç és '+C.max_w_cm+' cm.'; }
+    else if(h > C.max_h_cm){ invalid=true; invalidMsg='L\'alçada màxima del llenç és '+C.max_h_cm+' cm.'; }
+    var std = CANVAS_PRICING.sizes.filter(function(s){return s.w===w && s.h===h;})[0];
+    if(std){ baseUnit=std.price; fileW=std.file[0]; fileH=std.file[1]; special=false; }
+    else { var q=_canvasCustomPrice(w,h); baseUnit=q.pvd; fileW=q.file_w; fileH=q.file_h; special=true; }
+  } else {
+    var mv=(document.getElementById('llenc-mida')||{}).value;
+    var size = CANVAS_PRICING.sizes.filter(function(s){return (s.w+'x'+s.h)===mv;})[0] || CANVAS_PRICING.sizes[0];
+    w=size.w; h=size.h; baseUnit=size.price; fileW=size.file[0]; fileH=size.file[1];
+  }
   if(!_llencBastidor) baseUnit = Math.round(baseUnit * CANVAS_PRICING.print_only_factor * 100) / 100;
   var pvdUnit = baseUnit + (edit.price || 0);
   var pvdSub = Math.round(pvdUnit * qty * 100) / 100;
   var margin = CANVAS_PRICING.margin_percent || 0;
   var pvpSub = Math.round(pvdSub * (1 + margin/100) * 100) / 100;
-  return {size:size, edit:edit, qty:qty, bastidor:_llencBastidor, pvd:pvdSub, pvp:pvpSub};
+  return {w:w, h:h, fileW:fileW, fileH:fileH, special:special, custom:custom, invalid:invalid, invalidMsg:invalidMsg,
+          edit:edit, qty:qty, bastidor:_llencBastidor, pvd:pvdSub, pvp:pvpSub};
 }
 
 function _llencDescripcio(r){
-  var txt = 'Llenç ' + r.size.w + '×' + r.size.h + (r.bastidor ? ' · amb bastidor' : ' · sense bastidor (enrotllat)');
+  var txt = 'Llenç ' + r.w + '×' + r.h + (r.special ? ' (mida especial)' : '') + (r.bastidor ? ' · amb bastidor' : ' · sense bastidor (enrotllat)');
   if(r.edit && r.edit.id !== 'none') txt += ' · ' + r.edit.label;
   return txt;
 }
@@ -4095,7 +4152,11 @@ function recalcLlenc(){
   var lbl = document.getElementById('llenc-preu-label');
   var val = document.getElementById('llenc-preu');
   var pvdRow = document.getElementById('llenc-preu-pvd');
-  if(isPVD){
+  if(r.invalid){
+    if(lbl) lbl.textContent = isPVD ? 'PVD (taller)' : 'PVP (client)';
+    if(val) val.textContent = '—';
+    if(pvdRow) pvdRow.textContent = '';
+  } else if(isPVD){
     if(lbl) lbl.textContent = 'PVD (taller)';
     if(val) val.textContent = r.pvd.toFixed(2) + ' € + IVA';
     if(pvdRow) pvdRow.textContent = '';
@@ -4105,15 +4166,26 @@ function recalcLlenc(){
     if(pvdRow) pvdRow.textContent = 'Cost taller (PVD): ' + r.pvd.toFixed(2) + ' €';
   }
   var hint = document.getElementById('llenc-fitxer-hint');
-  if(hint) hint.textContent = 'Arxiu recomanat amb marges: ' + r.size.file[0] + ' × ' + r.size.file[1] + ' cm.';
+  if(hint) hint.textContent = 'Arxiu recomanat amb marges: ' + r.fileW + ' × ' + r.fileH + ' cm.';
+  // Estat de la mida a mida (estàndard / especial / fora de límits).
+  var st = document.getElementById('llenc-custom-status');
+  if(st){
+    if(!r.custom){ st.innerHTML=''; }
+    else if(r.invalid){ st.innerHTML = '<span style="color:var(--red,#B84040);font-weight:600">⚠ '+r.invalidMsg+'</span>'; }
+    else if(r.special){ st.innerHTML = '<span style="color:var(--amber,#a67843);font-weight:600">★ Mida especial</span> '+r.w+'×'+r.h+' cm · a consultar disponibilitat.'; }
+    else { st.innerHTML = '<span style="color:var(--green,#1A6B45);font-weight:600">✓ Mida estàndard</span> '+r.w+'×'+r.h+' cm.'; }
+  }
 }
 
 function afegirLlencACistella(){
   var r = _llencSelected();
+  if(r.invalid){ showAlert(r.invalidMsg || 'Mida de llenç no vàlida.', 'err'); return; }
   if(!(r.pvd > 0 || r.pvp > 0)){ showAlert('Tria una mida de llenç.', 'err'); return; }
   _cistella.push({ text: _llencDescripcio(r), quantity: r.qty, preu_net: r.pvp, cost_produccio: r.pvd });
   renderCistella();
   var q = document.getElementById('llenc-qty'); if(q) q.value = '1';
+  var cw=document.getElementById('llenc-w'), ch=document.getElementById('llenc-h');
+  if(cw) cw.value=''; if(ch) ch.value='';
   recalcLlenc();
   showAlert('Llenç afegit (' + _cistella.length + ' al pressupost). Posa el següent.', 'ok');
 }
