@@ -4851,6 +4851,7 @@ def admin_ensure_clients_externs():
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS recarrec_equiv BOOLEAN DEFAULT FALSE",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
@@ -5093,6 +5094,7 @@ def admin_run_migrations():
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS dropbox_url TEXT",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS recarrec_equiv BOOLEAN DEFAULT FALSE",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_nom ON clients_externs(nom)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_nif ON clients_externs(nif)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
@@ -7881,6 +7883,21 @@ _FD_BASE    = 'https://app.facturadirecta.com/api'
 _FD_ALBARA_SERIES   = os.environ.get('FD_ALBARA_SERIES', 'AL')
 _FD_ESTIMATE_SERIES = os.environ.get('FD_ESTIMATE_SERIES', '')
 
+# IVA i recàrrec d'equivalència. A FacturaDirecta el recàrrec d'equivalència és
+# una taxa que s'afegeix a la línia JUNT amb l'IVA (per a clients revenedors en
+# règim de RE). 5,2% correspon a l'IVA 21%. El codi es pot ajustar amb FD_RE_CODE
+# si el compte usa un identificador diferent.
+_FD_IVA_CODE = os.environ.get('FD_IVA_CODE', 'S_IVA_21')
+_FD_RE_CODE  = os.environ.get('FD_RE_CODE', 'S_REQ_52')
+
+def _fd_line_tax(recarrec=False):
+    """Llista de codis de taxa per a una línia FD: IVA 21% i, si el client està
+    en règim de recàrrec d'equivalència, també el recàrrec (5,2%)."""
+    tax = [_FD_IVA_CODE]
+    if recarrec:
+        tax.append(_FD_RE_CODE)
+    return tax
+
 def _fd_docnumber(series):
     """Construeix el docNumber per a l'API de FD. Sempre ha d'anar present;
     si no forcem cap sèrie (buida), FD aplica la sèrie per defecte del compte."""
@@ -8022,7 +8039,7 @@ def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
     return _fd_crear_albara(contact_id, linies, notes=notes, data_doc=data_doc)
 
 
-def _fd_linies_de_comandes(comandes):
+def _fd_linies_de_comandes(comandes, recarrec=False):
     """Construeix les linies FD (a cost de produccio, una per fila de comanda)
     i les notes a partir d'una llista de files de `comandes`. Compartit per
     l'albara de sessio i pel document conjunt de diversos pressupostos."""
@@ -8065,7 +8082,7 @@ def _fd_linies_de_comandes(comandes):
             'text':      desc_marc,
             'quantity':  float(quantitat),
             'unitPrice': unit_cost,
-            'tax':       ['S_IVA_21'],
+            'tax':       _fd_line_tax(recarrec),
         })
         if num_pres and num_pres not in notes_parts:
             notes_parts.append(f'Pressupost: {num_pres}')
@@ -8947,10 +8964,11 @@ def admin_clients_externs_crear():
     else:
         usuari_id = None
     dropbox_url = (payload.get('dropbox_url') or '').strip() or None
+    recarrec = _parse_bool(payload.get('recarrec_equiv'))
     new_id = execute(
-        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, actiu) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [nom, nif, fd_id, tipus, telefon, email, usuari_id, dropbox_url, True],
+        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec_equiv, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [nom, nif, fd_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec, True],
     )
     print(f"[clients_externs] crear: id={new_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True, 'id': new_id})
@@ -8980,9 +8998,10 @@ def admin_clients_externs_editar(client_id):
     else:
         usuari_id = None
     dropbox_url = (payload.get('dropbox_url') or '').strip() or None
+    recarrec = _parse_bool(payload.get('recarrec_equiv'))
     execute(
-        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=? WHERE id=?",
-        [nom, nif, tipus, telefon, email, usuari_id, dropbox_url, client_id],
+        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=?, recarrec_equiv=? WHERE id=?",
+        [nom, nif, tipus, telefon, email, usuari_id, dropbox_url, recarrec, client_id],
     )
     print(f"[clients_externs] editar: id={client_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True})
@@ -9009,7 +9028,7 @@ def api_clients_externs():
     if session.get('is_admin'):
         rows = query("""
             SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
-                   u.nom_empresa AS empresa
+                   c.recarrec_equiv, u.nom_empresa AS empresa
             FROM clients_externs c
             LEFT JOIN usuaris u ON c.usuari_id = u.id
             WHERE c.actiu = TRUE
@@ -9018,7 +9037,7 @@ def api_clients_externs():
     else:
         rows = query("""
             SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
-                   u.nom_empresa AS empresa
+                   c.recarrec_equiv, u.nom_empresa AS empresa
             FROM clients_externs c
             LEFT JOIN usuaris u ON c.usuari_id = u.id
             WHERE c.actiu = TRUE AND c.tipus <> 'taller'
@@ -9035,6 +9054,7 @@ def api_clients_externs():
                 'telefon': _row_get(r, 'telefon') or '',
                 'email': _row_get(r, 'email') or '',
                 'usuari_id': _row_get(r, 'usuari_id'),
+                'recarrec_equiv': bool(_row_get(r, 'recarrec_equiv', False)),
                 'empresa': _row_get(r, 'empresa') or '',
             }
             for r in rows
@@ -9058,6 +9078,25 @@ def _resolve_client_extern_fd_id(client_extern_id):
         print(f"[clients_externs] WARN: client_extern_id={client_extern_id} desactivat — fallback al flux antic")
         return None, None
     return _row_get(row, 'fd_contact_id') or None, _row_get(row, 'nom') or None
+
+
+def _parse_bool(v):
+    """Interpreta un valor divers (checkbox, JSON, form) com a booleà."""
+    if isinstance(v, bool):
+        return v
+    return str(v or '').strip().lower() in ('1', 'true', 'yes', 'on', 't')
+
+
+def _client_extern_recarrec(client_extern_id):
+    """True si el client habitual està en règim de recàrrec d'equivalència.
+    Tolerant si la columna encara no s'ha migrat (retorna False)."""
+    if not client_extern_id:
+        return False
+    try:
+        row = query('SELECT recarrec_equiv FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+    except Exception:
+        return False
+    return bool(_row_get(row, 'recarrec_equiv', False)) if row else False
 
 
 # ── Enviament a client final (tarifes NACEX, vàlides fins 31/12/2026) ────────
@@ -9260,6 +9299,7 @@ def api_crear_albara():
     client_extern_id = (d.get('client_extern_id') or '').strip() or None
     nif_client = (d.get('client_nif') or '').strip()
     nom_fd     = client_nom
+    recarrec   = _client_extern_recarrec(client_extern_id)
 
     # 1) PRIORITAT: si s'ha triat un client habitual (importat) ja enllaçat amb un
     #    contacte real de Factura Directa, fem servir aquest contacte directament.
@@ -9323,7 +9363,7 @@ def api_crear_albara():
         'text':      desc_marc,
         'quantity':  float(quantitat),
         'unitPrice': unit_price,
-        'tax':       ['S_IVA_21'],
+        'tax':       _fd_line_tax(recarrec),
     }]
 
     # Línia d'enviament a client final (NACEX), si s'ha activat a la calc.
@@ -9344,7 +9384,7 @@ def api_crear_albara():
                 'text':      env_text,
                 'quantity':  1.0,
                 'unitPrice': round(env_base, 2),
-                'tax':       ['S_IVA_21'],
+                'tax':       _fd_line_tax(recarrec),
             })
 
     notes_parts = []
@@ -9445,7 +9485,7 @@ def api_albara_de_comanda():
         print(f"[albara_de_comanda] usant fd_contact_id cached: {contact_id} per a client extern {client_extern_id}")
 
     # Build albaran lines — one per comanda row (helper compartit)
-    linies, notes_parts = _fd_linies_de_comandes(comandes)
+    linies, notes_parts = _fd_linies_de_comandes(comandes, recarrec=_client_extern_recarrec(client_extern_id))
     notes = ' | '.join(notes_parts)
 
     albara = _fd_crear_albara(contact_id, linies, notes=notes)
@@ -9510,7 +9550,7 @@ def api_crear_doc_conjunt():
         if not contact_id:
             return jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500
 
-    linies, notes_parts = _fd_linies_de_comandes(comandes)
+    linies, notes_parts = _fd_linies_de_comandes(comandes, recarrec=_client_extern_recarrec(client_extern_id))
     notes = ' | '.join(notes_parts)
 
     doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
@@ -9553,7 +9593,7 @@ def _resolve_fd_contact_for_request(d):
     return cid, nom_fd, None
 
 
-def _linies_de_cistella(items, mode_preu):
+def _linies_de_cistella(items, mode_preu, recarrec=False):
     """Construeix les linies FD a partir de la cistella de marcs del pressupost
     multi-marc. Cada item: {text, quantity, preu_net, cost_produccio}. Segons
     mode_preu fa servir el PVP net o el cost de produccio."""
@@ -9571,7 +9611,7 @@ def _linies_de_cistella(items, mode_preu):
         except (TypeError, ValueError):
             base = 0.0
         unit = round(base / qty, 2) if qty > 0 else round(base, 2)
-        linies.append({'text': text, 'quantity': qty, 'unitPrice': unit, 'tax': ['S_IVA_21']})
+        linies.append({'text': text, 'quantity': qty, 'unitPrice': unit, 'tax': _fd_line_tax(recarrec)})
     return linies
 
 
@@ -9594,7 +9634,8 @@ def api_crear_doc_marcs():
     if err is not None:
         return err
 
-    linies = _linies_de_cistella(items, mode_preu)
+    recarrec = _client_extern_recarrec((d.get('client_extern_id') or '').strip() or None)
+    linies = _linies_de_cistella(items, mode_preu, recarrec=recarrec)
     if not linies:
         return jsonify({'ok': False, 'error': 'No s\'han pogut construir les línies del pressupost.'}), 400
 
@@ -9639,6 +9680,7 @@ def api_albara_individual():
     # Si la comanda té client_extern_id apuntant a un client actiu,
     # saltem la cerca de FD i forcem mode_preu=cost (PVD) per disseny.
     client_extern_id = _row_get(com, 'client_extern_id')
+    recarrec = _client_extern_recarrec(client_extern_id)
     cached_fd_id, cached_nom = _resolve_client_extern_fd_id(client_extern_id)
     is_client_extern = bool(cached_fd_id)
     if is_client_extern:
@@ -9714,7 +9756,7 @@ def api_albara_individual():
         'text':      desc_marc,
         'quantity':  float(quantitat),
         'unitPrice': unit_price,
-        'tax':       ['S_IVA_21'],
+        'tax':       _fd_line_tax(recarrec),
     }]
 
     notes_parts = []
