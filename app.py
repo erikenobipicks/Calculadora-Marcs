@@ -7774,6 +7774,10 @@ def admin_extras():
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
 _FD_COMPANY = os.environ.get('FACTURADIRECTA_COMPANY', '')
 _FD_BASE    = 'https://app.facturadirecta.com/api'
+# Sèries de numeració a FacturaDirecta (docNumber.series). L'API les EXIGEIX.
+# Configurables per si el compte usa uns codis diferents.
+_FD_ALBARA_SERIES   = os.environ.get('FD_ALBARA_SERIES', 'AL')
+_FD_ESTIMATE_SERIES = os.environ.get('FD_ESTIMATE_SERIES', 'P')
 
 def _fd_headers():
     return {
@@ -7861,7 +7865,7 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
         'contact':   contact_id,
         'currency':  'EUR',
         'baseState': 'pending',
-        'docNumber': {'series': 'AL'},
+        'docNumber': {'series': _FD_ALBARA_SERIES},
         'lines':     linies,
     }
     if data_doc:
@@ -7873,15 +7877,16 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
 
 def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
     """Crea un PRESSUPOST (estimate) a FacturaDirecta. Mateix patro que
-    l'albara pero amb type/endpoint 'estimate'/'estimates'. No es forca cap
-    serie de docNumber: FacturaDirecta assigna la serie de pressupost per
-    defecte (evita errors de 'serie inexistent')."""
+    l'albara pero amb type/endpoint 'estimate'/'estimates'. L'API EXIGEIX
+    docNumber.series (400 'must have required property docNumber' si falta);
+    la serie es configurable amb FD_ESTIMATE_SERIES."""
     if not data_doc:
         data_doc = datetime.now().strftime('%Y-%m-%d')
     main = {
         'contact':   contact_id,
         'currency':  'EUR',
         'baseState': 'pending',  # estat inicial del pressupost (requerit per l'API)
+        'docNumber': {'series': _FD_ESTIMATE_SERIES},
         'date':      data_doc,
         'lines':     linies,
     }
