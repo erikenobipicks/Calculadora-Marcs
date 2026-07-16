@@ -7774,10 +7774,22 @@ def admin_extras():
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
 _FD_COMPANY = os.environ.get('FACTURADIRECTA_COMPANY', '')
 _FD_BASE    = 'https://app.facturadirecta.com/api'
-# Sèries de numeració a FacturaDirecta (docNumber.series). L'API les EXIGEIX.
-# Configurables per si el compte usa uns codis diferents.
+# Sèries de numeració a FacturaDirecta. L'API EXIGEIX que la propietat
+# docNumber estigui present (400 'must have required property docNumber' si
+# falta), però la SÈRIE dins seu és opcional: si la deixem buida, FD aplica la
+# sèrie PER DEFECTE del compte per a aquell tipus de document. Per això només
+# forcem una sèrie concreta si l'usuari l'ha configurada explícitament.
+#  · Albarà: 'AL' funciona al compte actual (sèrie existent) → per defecte.
+#  · Pressupost: buit per defecte → FD tria la sèrie per defecte d'estimates,
+#    així no cal saber-ne el codi. Es pot forçar amb FD_ESTIMATE_SERIES.
 _FD_ALBARA_SERIES   = os.environ.get('FD_ALBARA_SERIES', 'AL')
-_FD_ESTIMATE_SERIES = os.environ.get('FD_ESTIMATE_SERIES', 'P')
+_FD_ESTIMATE_SERIES = os.environ.get('FD_ESTIMATE_SERIES', '')
+
+def _fd_docnumber(series):
+    """Construeix el docNumber per a l'API de FD. Sempre ha d'anar present;
+    si no forcem cap sèrie (buida), FD aplica la sèrie per defecte del compte."""
+    s = (series or '').strip()
+    return {'series': s} if s else {}
 
 def _fd_headers():
     return {
@@ -7865,7 +7877,7 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
         'contact':   contact_id,
         'currency':  'EUR',
         'baseState': 'pending',
-        'docNumber': {'series': _FD_ALBARA_SERIES},
+        'docNumber': _fd_docnumber(_FD_ALBARA_SERIES),
         'lines':     linies,
     }
     if data_doc:
@@ -7877,22 +7889,33 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
 
 def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
     """Crea un PRESSUPOST (estimate) a FacturaDirecta. Mateix patro que
-    l'albara pero amb type/endpoint 'estimate'/'estimates'. L'API EXIGEIX
-    docNumber.series (400 'must have required property docNumber' si falta);
-    la serie es configurable amb FD_ESTIMATE_SERIES."""
+    l'albara pero amb type/endpoint 'estimate'/'estimates'. L'API EXIGEIX que
+    docNumber estigui present (400 'must have required property docNumber' si
+    falta), pero la serie dins seu es opcional: si la deixem buida FD aplica la
+    serie per defecte del compte. Es pot forçar amb FD_ESTIMATE_SERIES."""
     if not data_doc:
         data_doc = datetime.now().strftime('%Y-%m-%d')
     main = {
         'contact':   contact_id,
         'currency':  'EUR',
         'baseState': 'pending',  # estat inicial del pressupost (requerit per l'API)
-        'docNumber': {'series': _FD_ESTIMATE_SERIES},
+        'docNumber': _fd_docnumber(_FD_ESTIMATE_SERIES),
         'date':      data_doc,
         'lines':     linies,
     }
     if notes:
         main['notes'] = notes
-    return _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+    res = _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+    # Auto-correcció: si haviem forçat una serie que no existeix al compte, FD
+    # respon 400 queixant-se de docNumber/series. Reintentem un cop deixant que
+    # FD triï la serie per defecte (docNumber buit), sense haver de saber-ne el codi.
+    if (isinstance(res, dict) and res.get('_error') == 400
+            and (_FD_ESTIMATE_SERIES or '').strip()):
+        msg = (res.get('_msg') or '').lower()
+        if 'docnumber' in msg or 'series' in msg:
+            main['docNumber'] = {}
+            res = _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+    return res
 
 
 def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
