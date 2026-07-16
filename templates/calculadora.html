@@ -833,14 +833,20 @@ body{
           <button type="button" id="dig-sub-s8g" class="mode-chip" onclick="setDigitalSub('s8g')">Súper 8 gran</button>
         </div>
 
-        <!-- Cintes -->
+        <!-- Cintes: llista amb durada per cinta -->
         <div id="dig-cintes">
           <div class="f2">
             <div class="f"><label>Format</label><select id="dig-format" onchange="recalcDigital()"></select></div>
-            <div class="f"><label>Nombre de cintes</label><input type="number" id="dig-ncintes" min="1" value="1" inputmode="numeric" oninput="recalcDigital()"></div>
+            <div class="f"><label>Preu reparació / cinta (€)</label><input type="number" id="dig-preu-rep" min="0" step="0.01" value="0" inputmode="decimal" oninput="recalcDigital()"></div>
           </div>
-          <div class="f" style="margin-top:.6rem"><label>Minuts totals a digitalitzar</label><input type="number" id="dig-minuts" min="0" value="60" inputmode="numeric" oninput="recalcDigital()"></div>
-          <div id="dig-cintes-hint" style="font-size:11px;color:var(--hint);margin-top:.4rem"></div>
+          <div style="margin-top:.7rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+              <label style="font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint)">Cintes i minuts</label>
+              <button type="button" onclick="addDigTape()" style="padding:5px 11px;border:1px solid var(--green,#1A6B45);border-radius:7px;background:var(--green-l,#eaf3ee);color:var(--green,#1A6B45);font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir cinta</button>
+            </div>
+            <div id="dig-tapes"></div>
+          </div>
+          <div id="dig-cintes-hint" style="font-size:11px;color:var(--hint);margin-top:.5rem"></div>
         </div>
 
         <!-- DVD -->
@@ -863,12 +869,12 @@ body{
           </div>
         </div>
 
-        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
-          <span id="dig-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
+        <div id="dig-summary" style="margin-top:.8rem;padding-top:.7rem;border-top:2px solid var(--border);font-size:12.5px;color:var(--muted)"></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:.5rem">
+          <span id="dig-preu-label" style="font-size:14px;font-weight:700">Total (sense IVA)</span>
           <strong id="dig-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
         </div>
-        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
-        <button type="button" onclick="afegirDigitalACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+        <button type="button" onclick="copiarDigital()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar pressupost</button>
       </div>
 
       <div class="card" id="card-motllures">
@@ -3115,6 +3121,9 @@ function setBudgetMode(mode){
   if(ac) ac.style.display = isAlbum ? '' : 'none';
   var dc2 = document.getElementById('card-digital');
   if(dc2) dc2.style.display = isDigital ? '' : 'none';
+  // La digitalització és sense IVA i a part de FD: amaguem el «Resum econòmic».
+  var resCard = document.querySelector('.res-card');
+  if(resCard) resCard.style.display = isDigital ? 'none' : '';
   ['card-peca','card-materials','card-preu'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.style.display = isCustom ? 'none' : '';
   });
@@ -4465,7 +4474,10 @@ function afegirAlbumACistella(){
 _albumInit();
 
 // ── Mode Digitalització ─────────────────────────────────────────────────────
-// Preus de la web = PVD (net); PVP = PVD × (1 + marge). IVA 21% al resum.
+// Eina PRÒPIA, a part de FacturaDirecta i SENSE IVA. Els preus de la web són el
+// PVD (cost); el client paga PVD × (1 + marge). Les reparacions s'afegeixen tal
+// qual (preu per cinta que s'escriu cada comanda). Es copia el pressupost per
+// enviar-lo directament (WhatsApp/email), no passa mai per FD.
 var DIGITAL_PRICING = {{ digital_pricing | tojson }};
 var _digitalSub = 'cintes';
 
@@ -4477,6 +4489,34 @@ function _digTier(tiers, qty){
   return tiers[tiers.length-1];
 }
 
+function _renumberDigTapes(){
+  var rows = document.querySelectorAll('#dig-tapes .dig-tape-row');
+  for(var i=0;i<rows.length;i++){
+    var n = rows[i].querySelector('.dig-tape-n');
+    if(n) n.textContent = (i+1);
+  }
+}
+function addDigTape(minuts){
+  var cont = document.getElementById('dig-tapes'); if(!cont) return;
+  var row = document.createElement('div');
+  row.className = 'dig-tape-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem';
+  row.innerHTML =
+    '<span class="dig-tape-n" style="font-size:12px;color:var(--muted);width:1.6rem;text-align:right">1</span>'+
+    '<input type="number" class="dig-tape-min" min="0" placeholder="minuts" inputmode="numeric" value="'+(minuts||'')+'" oninput="recalcDigital()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:\'DM Sans\',sans-serif">'+
+    '<label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--muted)"><input type="checkbox" class="dig-tape-rep" onchange="recalcDigital()"> rep.</label>'+
+    '<button type="button" onclick="removeDigTape(this)" title="Treure" style="background:none;border:none;color:#B84040;cursor:pointer;font-size:18px;line-height:1;padding:0 4px">×</button>';
+  cont.appendChild(row);
+  _renumberDigTapes();
+  recalcDigital();
+}
+function removeDigTape(btn){
+  var row = btn.closest ? btn.closest('.dig-tape-row') : null;
+  if(row) row.parentNode.removeChild(row);
+  _renumberDigTapes();
+  recalcDigital();
+}
+
 function _digitalInit(){
   var sf=document.getElementById('dig-format');
   if(sf && !sf.options.length){
@@ -4486,6 +4526,8 @@ function _digitalInit(){
   if(sd && !sd.options.length){
     DIGITAL_PRICING.s8_grans.forEach(function(b){ var o=document.createElement('option'); o.value=b.id; o.textContent=b.label+' — '+b.preu.toFixed(2)+' €'; sd.appendChild(o); });
   }
+  var tapes=document.getElementById('dig-tapes');
+  if(tapes && !tapes.children.length){ addDigTape(); }
 }
 
 function setDigitalSub(sub){
@@ -4500,67 +4542,132 @@ function setDigitalSub(sub){
   recalcDigital();
 }
 
+// Retorna { pvd_base, rep_total, meta } — el PVD base (sense marge ni reparacions),
+// el total de reparacions (preu final) i metadades per al resum i la còpia.
 function _digitalSelected(){
-  var margin = DIGITAL_PRICING.margin_percent || 0;
-  var pvd = 0, qty = 1, desc = '', hintId = '', hint = '';
+  var pvd_base = 0, rep_total = 0, meta = {};
   if(_digitalSub === 'cintes'){
     var fmtId=(document.getElementById('dig-format')||{}).value;
     var fmt2=DIGITAL_PRICING.cintes.formats.filter(function(f){return f.id===fmtId;})[0] || DIGITAL_PRICING.cintes.formats[0];
-    var ncintes=Math.max(1, parseInt((document.getElementById('dig-ncintes')||{}).value,10)||1);
-    var minuts=Math.max(0, parseInt((document.getElementById('dig-minuts')||{}).value,10)||0);
-    var tier=_digTier(DIGITAL_PRICING.cintes.tiers, ncintes);
-    var minAplicat = (minuts>0 && minuts < DIGITAL_PRICING.min_minuts);
-    var billMin = Math.max(minuts, DIGITAL_PRICING.min_minuts);
-    pvd = Math.round(billMin * tier.preu_min * 100) / 100;
-    qty = ncintes;
-    desc = 'Digitalització ' + fmt2.label + ' · ' + ncintes + ' cintes · ' + minuts + ' min';
-    hintId = 'dig-cintes-hint';
-    hint = 'Tram: ' + tier.label + ' (' + tier.preu_min.toFixed(2).replace('.',',') + ' €/min). Mínim 1 h/client' + (minAplicat ? ' — s\'aplica el mínim de 60 min.' : '.');
+    var rows=document.querySelectorAll('#dig-tapes .dig-tape-row');
+    var count=rows.length;
+    var tier=_digTier(DIGITAL_PRICING.cintes.tiers, count||1);
+    var permin=tier.preu_min;
+    var preuRep=Math.max(0, parseFloat(String((document.getElementById('dig-preu-rep')||{}).value||'').replace(',','.'))||0);
+    var totMin=0, nReps=0, tapes=[];
+    for(var i=0;i<rows.length;i++){
+      var m=Math.max(0, parseInt(rows[i].querySelector('.dig-tape-min').value,10)||0);
+      var rep=rows[i].querySelector('.dig-tape-rep').checked;
+      totMin+=m; if(rep) nReps++;
+      tapes.push({n:i+1, min:m, rep:rep});
+    }
+    var billMin = count ? Math.max(totMin, DIGITAL_PRICING.min_minuts) : 0;
+    var minAplicat = count && totMin>0 && totMin<DIGITAL_PRICING.min_minuts;
+    pvd_base = Math.round(billMin*permin*100)/100;
+    rep_total = Math.round(nReps*preuRep*100)/100;
+    meta = {kind:'cintes', format:fmt2.label, count:count, totMin:totMin, permin:permin,
+            tier:tier, nReps:nReps, preuRep:preuRep, minAplicat:minAplicat, billMin:billMin, tapes:tapes};
   } else if(_digitalSub === 'dvd'){
     var ndvd=Math.max(1, parseInt((document.getElementById('dig-ndvd')||{}).value,10)||1);
     var td=_digTier(DIGITAL_PRICING.dvd.tiers, ndvd);
-    pvd = Math.round(ndvd * td.preu * 100) / 100; qty = ndvd;
-    desc = 'Digitalització DVD → MP4 · ' + ndvd + ' u';
-    hintId = 'dig-dvd-hint'; hint = 'Tram: ' + td.label + ' (' + td.preu.toFixed(2).replace('.',',') + ' €/u).';
+    pvd_base = Math.round(ndvd*td.preu*100)/100;
+    meta = {kind:'dvd', qty:ndvd, tier:td, preu:td.preu};
   } else if(_digitalSub === 's8p'){
     var ns=Math.max(1, parseInt((document.getElementById('dig-ns8p')||{}).value,10)||1);
     var ts=_digTier(DIGITAL_PRICING.s8_petita.tiers, ns);
-    pvd = Math.round(ns * ts.preu * 100) / 100; qty = ns;
-    desc = 'Digitalització Súper 8 petita · ' + ns + ' bobines';
-    hintId = 'dig-s8p-hint'; hint = DIGITAL_PRICING.s8_petita.spec + ' · Tram: ' + ts.label + ' (' + ts.preu.toFixed(2).replace('.',',') + ' €/u).';
-  } else { // s8g
+    pvd_base = Math.round(ns*ts.preu*100)/100;
+    meta = {kind:'s8p', qty:ns, tier:ts, preu:ts.preu, spec:DIGITAL_PRICING.s8_petita.spec};
+  } else {
     var diamId=(document.getElementById('dig-s8g-diam')||{}).value;
     var bob=DIGITAL_PRICING.s8_grans.filter(function(b){return b.id===diamId;})[0] || DIGITAL_PRICING.s8_grans[0];
     var ng=Math.max(1, parseInt((document.getElementById('dig-ns8g')||{}).value,10)||1);
-    pvd = Math.round(ng * bob.preu * 100) / 100; qty = ng;
-    desc = 'Digitalització Súper 8 gran ' + bob.label + ' · ' + ng + ' bobines';
+    pvd_base = Math.round(ng*bob.preu*100)/100;
+    meta = {kind:'s8g', qty:ng, bob:bob, preu:bob.preu};
   }
-  var pvp = Math.round(pvd * (1 + margin/100) * 100) / 100;
-  return {qty:qty, pvd:pvd, pvp:pvp, desc:desc, hintId:hintId, hint:hint};
+  return {pvd_base:pvd_base, rep_total:rep_total, meta:meta};
+}
+
+// Aplica el marge (segons PVD/PVP) i les reparacions. Total SENSE IVA.
+function _digitalTotals(r, view){
+  var isPVD = view === 'pvd';
+  var margin = DIGITAL_PRICING.margin_percent || 0;
+  var factor = isPVD ? 1 : (1 + margin/100);
+  var digCharged = Math.round(r.pvd_base * factor * 100) / 100;
+  var total = Math.round((digCharged + r.rep_total) * 100) / 100;
+  return {isPVD:isPVD, factor:factor, digCharged:digCharged, total:total};
 }
 
 function recalcDigital(){
   if(!document.getElementById('card-digital')) return;
   var r = _digitalSelected();
-  var view = (typeof _priceView === 'function') ? _priceView() : 'both';
-  var isPVD = view === 'pvd';
-  var net = isPVD ? r.pvd : r.pvp;
-  var total = _feedResumEconomic(net, view);
+  var view = (typeof _priceView === 'function') ? _priceView() : 'pvp';
+  var t = _digitalTotals(r, view);
   var lbl=document.getElementById('dig-preu-label'), val=document.getElementById('dig-preu');
-  if(lbl) lbl.textContent = isPVD ? 'Total PVD (IVA inclòs)' : 'Total (IVA inclòs)';
-  if(val) val.textContent = fmt(total);
-  // Neteja tots els hints i posa el de la sub-secció activa.
-  ['dig-cintes-hint','dig-dvd-hint','dig-s8p-hint'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent=''; });
-  if(r.hintId){ var h=document.getElementById(r.hintId); if(h) h.textContent = r.hint; }
+  if(lbl) lbl.textContent = t.isPVD ? 'Total PVD (sense IVA)' : 'Total (sense IVA)';
+  if(val) val.textContent = fmt(t.total);
+  // Resum desglossat + hints per sub-secció.
+  var sum=document.getElementById('dig-summary');
+  var m=r.meta, lines=[];
+  if(m.kind==='cintes'){
+    lines.push(m.count+' cintes · '+m.totMin+' min'+(m.minAplicat?' (mín. facturat 60)':'')+' · '+fmt(m.permin)+'/min');
+    lines.push('Digitalització'+(t.isPVD?' (PVD)':'')+': '+fmt(t.digCharged));
+    if(m.nReps>0 && m.preuRep>0) lines.push('Reparacions: '+m.nReps+' × '+fmt(m.preuRep)+' = '+fmt(r.rep_total));
+  } else if(m.kind==='dvd'){
+    lines.push(m.qty+' DVD · '+m.tier.label+' · '+fmt(m.preu)+'/u');
+    lines.push('Digitalització'+(t.isPVD?' (PVD)':'')+': '+fmt(t.digCharged));
+  } else if(m.kind==='s8p'){
+    lines.push(m.qty+' bobines · '+m.spec+' · '+fmt(m.preu)+'/u');
+    lines.push('Digitalització'+(t.isPVD?' (PVD)':'')+': '+fmt(t.digCharged));
+  } else if(m.kind==='s8g'){
+    lines.push(m.qty+' bobines · '+m.bob.label+' · '+fmt(m.preu)+'/u');
+    lines.push('Digitalització'+(t.isPVD?' (PVD)':'')+': '+fmt(t.digCharged));
+  }
+  if(sum) sum.innerHTML = lines.map(function(l){return '<div style="display:flex;justify-content:space-between"><span>'+l.split(': ')[0]+'</span><span>'+(l.indexOf(': ')>=0?l.split(': ').slice(1).join(': '):'')+'</span></div>';}).join('');
+  var hint=document.getElementById('dig-cintes-hint');
+  if(hint) hint.textContent = (m.kind==='cintes') ? ('Tram '+m.tier.label+'. Mínim 1 h per client. Preu SENSE IVA.') : '';
 }
 
-function afegirDigitalACistella(){
-  var r = _digitalSelected();
-  if(!(r.pvd > 0 || r.pvp > 0)){ showAlert('Configura la digitalització abans d\'afegir-la.', 'err'); return; }
-  _cistella.push({ text: r.desc, quantity: r.qty, preu_net: r.pvp, cost_produccio: r.pvd });
-  renderCistella();
-  recalcDigital();
-  showAlert('Digitalització afegida (' + _cistella.length + ' al pressupost).', 'ok');
+// Construeix i copia el pressupost de digitalització (sense IVA) per enviar.
+function _digitalText(){
+  var r=_digitalSelected();
+  var view=(typeof _priceView==='function')?_priceView():'pvp';
+  var t=_digitalTotals(r, view);
+  var nom=((document.getElementById('client_nom')||{}).value||'').trim();
+  var L=['Pressupost digitalització'+(nom?(' · '+nom):'')];
+  var m=r.meta;
+  if(m.kind==='cintes'){
+    L.push('Format: '+m.format);
+    L.push('');
+    m.tapes.forEach(function(tp){ L.push('• Cinta '+tp.n+': '+tp.min+' min'+(tp.rep?' (reparació)':'')); });
+    L.push('');
+    L.push(m.count+' cintes · '+m.totMin+' min'+(m.minAplicat?' (mín. 60)':'')+' · '+fmt(m.permin)+'/min');
+    L.push('Digitalització: '+fmt(t.digCharged));
+    if(m.nReps>0 && m.preuRep>0) L.push('Reparacions: '+m.nReps+' × '+fmt(m.preuRep)+' = '+fmt(r.rep_total));
+  } else if(m.kind==='dvd'){
+    L.push(m.qty+' DVD → MP4 · '+fmt(m.preu)+'/u');
+    L.push('Digitalització: '+fmt(t.digCharged));
+  } else if(m.kind==='s8p'){
+    L.push(m.qty+' bobines Súper 8 petita ('+m.spec+') · '+fmt(m.preu)+'/u');
+    L.push('Digitalització: '+fmt(t.digCharged));
+  } else {
+    L.push(m.qty+' bobines Súper 8 gran '+m.bob.label+' · '+fmt(m.preu)+'/u');
+    L.push('Digitalització: '+fmt(t.digCharged));
+  }
+  L.push('');
+  L.push('TOTAL (sense IVA): '+fmt(t.total));
+  return L.join('\n');
+}
+
+function copiarDigital(){
+  var r=_digitalSelected();
+  var view=(typeof _priceView==='function')?_priceView():'pvp';
+  var t=_digitalTotals(r, view);
+  if(!(t.total>0)){ showAlert('Configura la digitalització abans de copiar.', 'err'); return; }
+  var txt=_digitalText();
+  function done(){ showAlert('Pressupost copiat! Ja el pots enganxar a WhatsApp.', 'ok'); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ _copiaFallback(txt, done); });
+  } else { _copiaFallback(txt, done); }
 }
 
 _digitalInit();
