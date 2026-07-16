@@ -3972,8 +3972,17 @@ function afegirACistella(){
 
 function eliminarDeCistella(i){ _cistella.splice(i,1); renderCistella(); }
 
+// Retorna true si el client seleccionat és PVD (taller/distribuïdor) i, per tant,
+// al pressupost només s'hi ha de veure el preu PVD, no el PVP.
+function cistellaClientIsPVD(){
+  var hid = document.getElementById('client_extern_id');
+  if(hid && hid.value) return (hid.dataset.tipus || 'pvp') === 'taller';
+  return rmode === 'cost';
+}
+
 function renderCistella(){
   var n = _cistella.length;
+  var isPVD = cistellaClientIsPVD();
   var fab = document.getElementById('cistella-fab');
   var cnt = document.getElementById('cistella-count');
   if(cnt) cnt.textContent = n;
@@ -3985,8 +3994,14 @@ function renderCistella(){
     } else {
       cont.innerHTML = _cistella.map(function(it,i){
         var pvp=(it.preu_net||0), pvd=(it.cost_produccio||0);
-        var meta = it.quantity+' u · PVP '+pvp.toFixed(2)+' €';
-        if(IS_ADMIN) meta += ' · cost '+pvd.toFixed(2)+' €';
+        var meta;
+        if(isPVD){
+          // Client PVD: només preu PVD.
+          meta = it.quantity+' u · PVD '+pvd.toFixed(2)+' €';
+        } else {
+          meta = it.quantity+' u · PVP '+pvp.toFixed(2)+' €';
+          if(IS_ADMIN) meta += ' · cost '+pvd.toFixed(2)+' €';
+        }
         return '<div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--border)">'+
           '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;line-height:1.3">'+escapeHtml(it.text)+'</div>'+
           '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+meta+'</div></div>'+
@@ -3997,10 +4012,64 @@ function renderCistella(){
   }
   var totPvp=_cistella.reduce(function(s,it){return s+(it.preu_net||0);},0);
   var totPvd=_cistella.reduce(function(s,it){return s+(it.cost_produccio||0);},0);
+  var labelEl=document.getElementById('cistella-tot-label');
   var elPvp=document.getElementById('cistella-tot-pvp');
   var elPvd=document.getElementById('cistella-tot-pvd');
-  if(elPvp) elPvp.textContent = totPvp.toFixed(2)+' € + IVA';
-  if(elPvd) elPvd.textContent = totPvd.toFixed(2)+' €';
+  var secRow=document.getElementById('cistella-tot-secondary');
+  if(isPVD){
+    // Client PVD: el total principal és el PVD i s'amaga la fila de cost extra.
+    if(labelEl) labelEl.textContent = 'Total PVD (taller)';
+    if(elPvp) elPvp.textContent = totPvd.toFixed(2)+' € + IVA';
+    if(secRow) secRow.style.display = 'none';
+  } else {
+    if(labelEl) labelEl.textContent = 'Total PVP (client)';
+    if(elPvp) elPvp.textContent = totPvp.toFixed(2)+' € + IVA';
+    if(secRow) secRow.style.display = '';
+    if(elPvd) elPvd.textContent = totPvd.toFixed(2)+' €';
+  }
+}
+
+// Construeix el text del pressupost per copiar (WhatsApp, etc.).
+function _cistellaText(){
+  var isPVD = cistellaClientIsPVD();
+  var nom = ((document.getElementById('client_nom')||{}).value||'').trim();
+  var num = window._numPressupost || '';
+  var lines = [];
+  var head = 'Pressupost';
+  if(num) head += ' ' + num;
+  lines.push(head);
+  if(nom) lines.push('Client: ' + nom);
+  lines.push('');
+  var tot = 0;
+  _cistella.forEach(function(it){
+    var preu = isPVD ? (it.cost_produccio||0) : (it.preu_net||0);
+    tot += preu;
+    lines.push('• ' + it.text + ' — ' + it.quantity + ' u · ' + preu.toFixed(2) + ' €');
+  });
+  lines.push('');
+  lines.push('Total: ' + tot.toFixed(2) + ' € + IVA');
+  return lines.join('\n');
+}
+
+function _copiaFallback(txt, cb){
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=txt; ta.style.position='fixed'; ta.style.top='0'; ta.style.left='0'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    var ok=document.execCommand('copy'); ta.remove();
+    if(ok && cb){ cb(); } else if(!ok){ showAlert('No s\'ha pogut copiar automàticament.', 'err'); }
+  }catch(e){ showAlert('No s\'ha pogut copiar automàticament.', 'err'); }
+}
+
+function copiarCistella(){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  var txt = _cistellaText();
+  function done(){ showAlert('Text copiat! Ja el pots enganxar a WhatsApp.', 'ok'); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ _copiaFallback(txt, done); });
+  } else {
+    _copiaFallback(txt, done);
+  }
 }
 
 function obrirCistella(){ renderCistella(); var m=document.getElementById('cistella-modal'); if(m) m.style.display='flex'; }
@@ -4019,7 +4088,8 @@ function _cistellaPayloadBase(){
 
 function cistellaPDF(mode){
   if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
-  var payload=_cistellaPayloadBase(); payload.mode_preu=mode||'pvp';
+  if(!mode) mode = cistellaClientIsPVD() ? 'cost' : 'pvp';
+  var payload=_cistellaPayloadBase(); payload.mode_preu=mode;
   fetch('/api/pdf-marcs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){ if(!r.ok) return r.json().then(function(d){throw new Error(d.error||'Error');}); return r.blob(); })
     .then(function(blob){
@@ -4035,7 +4105,8 @@ function cistellaFD(docType, mode){
   if(!(document.getElementById('client_nom')||{}).value && !(document.getElementById('client_extern_id')||{}).value){
     showAlert('Omple el nom del client abans de generar el document a Factura Directa.', 'err'); return;
   }
-  var payload=_cistellaPayloadBase(); payload.doc_type=docType; payload.mode_preu=mode||'pvp';
+  if(!mode) mode = cistellaClientIsPVD() ? 'cost' : 'pvp';
+  var payload=_cistellaPayloadBase(); payload.doc_type=docType; payload.mode_preu=mode;
   var btns=document.querySelectorAll('#cistella-actions button');
   btns.forEach(function(b){b.disabled=true;});
   fetch('/api/crear-doc-marcs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
@@ -4622,20 +4693,21 @@ recalcMides();
     <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
       <div id="cistella-items"></div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:1rem;padding-top:.8rem;border-top:2px solid var(--border)">
-        <span style="font-size:13px;font-weight:600;color:var(--muted)">Total PVP (client)</span>
+        <span id="cistella-tot-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total PVP (client)</span>
         <strong id="cistella-tot-pvp" style="font-size:18px;color:var(--green,#1A6B45)">0.00 € + IVA</strong>
       </div>
       {% if session.is_admin %}
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:.35rem">
+      <div id="cistella-tot-secondary" style="display:flex;justify-content:space-between;align-items:baseline;margin-top:.35rem">
         <span style="font-size:12px;color:var(--muted)">Total cost producció (taller)</span>
         <span id="cistella-tot-pvd" style="font-size:13px;color:var(--muted)">0.00 €</span>
       </div>
       {% endif %}
     </div>
     <div id="cistella-actions" style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end">
-      <button type="button" onclick="cistellaPDF('pvp')" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">📄 PDF</button>
+      <button type="button" onclick="copiarCistella()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text del pressupost per enganxar-lo a WhatsApp">📋 Copiar text</button>
+      <button type="button" onclick="cistellaPDF()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">📄 PDF</button>
       {% if session.is_admin %}
-      <button type="button" onclick="cistellaFD('pressupost','pvp')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa, PVP al client">Pressupost FD</button>
+      <button type="button" onclick="cistellaFD('pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa; usa PVD si el client és de taller">Pressupost FD</button>
       <button type="button" onclick="cistellaFD('albara','pvp')" class="albara-btn albara-pvp">Albarà PVP</button>
       <button type="button" onclick="cistellaFD('albara','cost')" class="albara-btn albara-cost">Albarà Cost</button>
       {% endif %}
