@@ -630,6 +630,7 @@ body{
           <button type="button" id="mode-btn-impressio" class="mode-chip" onclick="setBudgetMode('impressio')">🖨️ Només impressió (còpies)</button>
           <button type="button" id="mode-btn-llenc" class="mode-chip" onclick="setBudgetMode('llenc')">🎨 Llenç</button>
           <button type="button" id="mode-btn-album" class="mode-chip" onclick="setBudgetMode('album')">📔 Àlbum</button>
+          <button type="button" id="mode-btn-digital" class="mode-chip" onclick="setBudgetMode('digital')">💾 Digitalització</button>
         </div>
       </div>
       <div class="card client-card">
@@ -821,6 +822,53 @@ body{
         </div>
         <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
         <button type="button" onclick="afegirAlbumACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+      </div>
+
+      <div class="card" id="card-digital" style="display:none">
+        <div class="card-t"><span class="ct-n">3</span>Digitalització</div>
+        <div class="mode-selector" style="margin-bottom:.7rem">
+          <button type="button" id="dig-sub-cintes" class="mode-chip active" onclick="setDigitalSub('cintes')">Cintes vídeo</button>
+          <button type="button" id="dig-sub-dvd" class="mode-chip" onclick="setDigitalSub('dvd')">DVD → MP4</button>
+          <button type="button" id="dig-sub-s8p" class="mode-chip" onclick="setDigitalSub('s8p')">Súper 8 petita</button>
+          <button type="button" id="dig-sub-s8g" class="mode-chip" onclick="setDigitalSub('s8g')">Súper 8 gran</button>
+        </div>
+
+        <!-- Cintes -->
+        <div id="dig-cintes">
+          <div class="f2">
+            <div class="f"><label>Format</label><select id="dig-format" onchange="recalcDigital()"></select></div>
+            <div class="f"><label>Nombre de cintes</label><input type="number" id="dig-ncintes" min="1" value="1" inputmode="numeric" oninput="recalcDigital()"></div>
+          </div>
+          <div class="f" style="margin-top:.6rem"><label>Minuts totals a digitalitzar</label><input type="number" id="dig-minuts" min="0" value="60" inputmode="numeric" oninput="recalcDigital()"></div>
+          <div id="dig-cintes-hint" style="font-size:11px;color:var(--hint);margin-top:.4rem"></div>
+        </div>
+
+        <!-- DVD -->
+        <div id="dig-dvd" style="display:none">
+          <div class="f"><label>Nombre de DVD</label><input type="number" id="dig-ndvd" min="1" value="1" inputmode="numeric" oninput="recalcDigital()"></div>
+          <div id="dig-dvd-hint" style="font-size:11px;color:var(--hint);margin-top:.4rem"></div>
+        </div>
+
+        <!-- Súper 8 petita -->
+        <div id="dig-s8p" style="display:none">
+          <div class="f"><label>Nombre de bobines</label><input type="number" id="dig-ns8p" min="1" value="1" inputmode="numeric" oninput="recalcDigital()"></div>
+          <div id="dig-s8p-hint" style="font-size:11px;color:var(--hint);margin-top:.4rem"></div>
+        </div>
+
+        <!-- Súper 8 gran -->
+        <div id="dig-s8g" style="display:none">
+          <div class="f2">
+            <div class="f"><label>Diàmetre</label><select id="dig-s8g-diam" onchange="recalcDigital()"></select></div>
+            <div class="f"><label>Nombre de bobines</label><input type="number" id="dig-ns8g" min="1" value="1" inputmode="numeric" oninput="recalcDigital()"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
+          <span id="dig-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
+          <strong id="dig-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
+        </div>
+        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
+        <button type="button" onclick="afegirDigitalACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
       </div>
 
       <div class="card" id="card-motllures">
@@ -3046,22 +3094,27 @@ var _extrasCardDefaultDisplay = (function(){
   return el ? el.style.display : '';
 })();
 function setBudgetMode(mode){
-  _budgetMode = (mode === 'impressio') ? 'impressio' : (mode === 'llenc' ? 'llenc' : (mode === 'album' ? 'album' : 'marc'));
+  _budgetMode = (mode === 'impressio') ? 'impressio' : (mode === 'llenc' ? 'llenc' : (mode === 'album' ? 'album' : (mode === 'digital' ? 'digital' : 'marc')));
   var isImp = _budgetMode === 'impressio';
   var isLlenc = _budgetMode === 'llenc';
   var isAlbum = _budgetMode === 'album';
-  var isCustom = isLlenc || isAlbum;  // productes amb panell propi (no marc)
+  var isDigital = _budgetMode === 'digital';
+  var isCustom = isLlenc || isAlbum || isDigital;  // productes amb panell propi (no marc)
   var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio'),
-      bl = document.getElementById('mode-btn-llenc'), ba = document.getElementById('mode-btn-album');
+      bl = document.getElementById('mode-btn-llenc'), ba = document.getElementById('mode-btn-album'),
+      bd = document.getElementById('mode-btn-digital');
   if(bm) bm.classList.toggle('active', _budgetMode === 'marc');
   if(bi) bi.classList.toggle('active', isImp);
   if(bl) bl.classList.toggle('active', isLlenc);
   if(ba) ba.classList.toggle('active', isAlbum);
-  // Panells propis (llenç / àlbum); s'amaga tot el calculador de marc.
+  if(bd) bd.classList.toggle('active', isDigital);
+  // Panells propis (llenç / àlbum / digitalització); s'amaga tot el calculador de marc.
   var lc = document.getElementById('card-llenc');
   if(lc) lc.style.display = isLlenc ? '' : 'none';
   var ac = document.getElementById('card-album');
   if(ac) ac.style.display = isAlbum ? '' : 'none';
+  var dc2 = document.getElementById('card-digital');
+  if(dc2) dc2.style.display = isDigital ? '' : 'none';
   ['card-peca','card-materials','card-preu'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.style.display = isCustom ? 'none' : '';
   });
@@ -3080,6 +3133,7 @@ function setBudgetMode(mode){
     var el = document.getElementById(id);
     if(el) el.style.display = isImp ? 'none' : '';
   });
+  if(isDigital){ if(typeof recalcDigital === 'function') recalcDigital(); return; }
   if(isAlbum){ if(typeof recalcAlbum === 'function') recalcAlbum(); return; }
   if(isLlenc){ if(typeof recalcLlenc === 'function') recalcLlenc(); return; }
   if(isImp){
@@ -4161,6 +4215,7 @@ function onLlencCustomInput(){ recalcLlenc(); }
 function _refreshActiveResum(){
   if(_budgetMode === 'llenc'){ if(typeof recalcLlenc === 'function') recalcLlenc(); }
   else if(_budgetMode === 'album'){ if(typeof recalcAlbum === 'function') recalcAlbum(); }
+  else if(_budgetMode === 'digital'){ if(typeof recalcDigital === 'function') recalcDigital(); }
   else if(typeof calcular === 'function'){ calcular(); }
 }
 function onEntregaInput(){ _refreshActiveResum(); }
@@ -4408,6 +4463,107 @@ function afegirAlbumACistella(){
 }
 
 _albumInit();
+
+// ── Mode Digitalització ─────────────────────────────────────────────────────
+// Preus de la web = PVD (net); PVP = PVD × (1 + marge). IVA 21% al resum.
+var DIGITAL_PRICING = {{ digital_pricing | tojson }};
+var _digitalSub = 'cintes';
+
+function _digTier(tiers, qty){
+  for(var i=0;i<tiers.length;i++){
+    var t=tiers[i];
+    if(qty>=t.min && (t.max===null || t.max===undefined || qty<=t.max)) return t;
+  }
+  return tiers[tiers.length-1];
+}
+
+function _digitalInit(){
+  var sf=document.getElementById('dig-format');
+  if(sf && !sf.options.length){
+    DIGITAL_PRICING.cintes.formats.forEach(function(f){ var o=document.createElement('option'); o.value=f.id; o.textContent=f.label; sf.appendChild(o); });
+  }
+  var sd=document.getElementById('dig-s8g-diam');
+  if(sd && !sd.options.length){
+    DIGITAL_PRICING.s8_grans.forEach(function(b){ var o=document.createElement('option'); o.value=b.id; o.textContent=b.label+' — '+b.preu.toFixed(2)+' €'; sd.appendChild(o); });
+  }
+}
+
+function setDigitalSub(sub){
+  var valid=['cintes','dvd','s8p','s8g'];
+  _digitalSub = valid.indexOf(sub)>=0 ? sub : 'cintes';
+  [['dig-sub-cintes','cintes'],['dig-sub-dvd','dvd'],['dig-sub-s8p','s8p'],['dig-sub-s8g','s8g']].forEach(function(p){
+    var b=document.getElementById(p[0]); if(b) b.classList.toggle('active', _digitalSub===p[1]);
+  });
+  [['dig-cintes','cintes'],['dig-dvd','dvd'],['dig-s8p','s8p'],['dig-s8g','s8g']].forEach(function(p){
+    var el=document.getElementById(p[0]); if(el) el.style.display = _digitalSub===p[1] ? '' : 'none';
+  });
+  recalcDigital();
+}
+
+function _digitalSelected(){
+  var margin = DIGITAL_PRICING.margin_percent || 0;
+  var pvd = 0, qty = 1, desc = '', hintId = '', hint = '';
+  if(_digitalSub === 'cintes'){
+    var fmtId=(document.getElementById('dig-format')||{}).value;
+    var fmt2=DIGITAL_PRICING.cintes.formats.filter(function(f){return f.id===fmtId;})[0] || DIGITAL_PRICING.cintes.formats[0];
+    var ncintes=Math.max(1, parseInt((document.getElementById('dig-ncintes')||{}).value,10)||1);
+    var minuts=Math.max(0, parseInt((document.getElementById('dig-minuts')||{}).value,10)||0);
+    var tier=_digTier(DIGITAL_PRICING.cintes.tiers, ncintes);
+    var minAplicat = (minuts>0 && minuts < DIGITAL_PRICING.min_minuts);
+    var billMin = Math.max(minuts, DIGITAL_PRICING.min_minuts);
+    pvd = Math.round(billMin * tier.preu_min * 100) / 100;
+    qty = ncintes;
+    desc = 'Digitalització ' + fmt2.label + ' · ' + ncintes + ' cintes · ' + minuts + ' min';
+    hintId = 'dig-cintes-hint';
+    hint = 'Tram: ' + tier.label + ' (' + tier.preu_min.toFixed(2).replace('.',',') + ' €/min). Mínim 1 h/client' + (minAplicat ? ' — s\'aplica el mínim de 60 min.' : '.');
+  } else if(_digitalSub === 'dvd'){
+    var ndvd=Math.max(1, parseInt((document.getElementById('dig-ndvd')||{}).value,10)||1);
+    var td=_digTier(DIGITAL_PRICING.dvd.tiers, ndvd);
+    pvd = Math.round(ndvd * td.preu * 100) / 100; qty = ndvd;
+    desc = 'Digitalització DVD → MP4 · ' + ndvd + ' u';
+    hintId = 'dig-dvd-hint'; hint = 'Tram: ' + td.label + ' (' + td.preu.toFixed(2).replace('.',',') + ' €/u).';
+  } else if(_digitalSub === 's8p'){
+    var ns=Math.max(1, parseInt((document.getElementById('dig-ns8p')||{}).value,10)||1);
+    var ts=_digTier(DIGITAL_PRICING.s8_petita.tiers, ns);
+    pvd = Math.round(ns * ts.preu * 100) / 100; qty = ns;
+    desc = 'Digitalització Súper 8 petita · ' + ns + ' bobines';
+    hintId = 'dig-s8p-hint'; hint = DIGITAL_PRICING.s8_petita.spec + ' · Tram: ' + ts.label + ' (' + ts.preu.toFixed(2).replace('.',',') + ' €/u).';
+  } else { // s8g
+    var diamId=(document.getElementById('dig-s8g-diam')||{}).value;
+    var bob=DIGITAL_PRICING.s8_grans.filter(function(b){return b.id===diamId;})[0] || DIGITAL_PRICING.s8_grans[0];
+    var ng=Math.max(1, parseInt((document.getElementById('dig-ns8g')||{}).value,10)||1);
+    pvd = Math.round(ng * bob.preu * 100) / 100; qty = ng;
+    desc = 'Digitalització Súper 8 gran ' + bob.label + ' · ' + ng + ' bobines';
+  }
+  var pvp = Math.round(pvd * (1 + margin/100) * 100) / 100;
+  return {qty:qty, pvd:pvd, pvp:pvp, desc:desc, hintId:hintId, hint:hint};
+}
+
+function recalcDigital(){
+  if(!document.getElementById('card-digital')) return;
+  var r = _digitalSelected();
+  var view = (typeof _priceView === 'function') ? _priceView() : 'both';
+  var isPVD = view === 'pvd';
+  var net = isPVD ? r.pvd : r.pvp;
+  var total = _feedResumEconomic(net, view);
+  var lbl=document.getElementById('dig-preu-label'), val=document.getElementById('dig-preu');
+  if(lbl) lbl.textContent = isPVD ? 'Total PVD (IVA inclòs)' : 'Total (IVA inclòs)';
+  if(val) val.textContent = fmt(total);
+  // Neteja tots els hints i posa el de la sub-secció activa.
+  ['dig-cintes-hint','dig-dvd-hint','dig-s8p-hint'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent=''; });
+  if(r.hintId){ var h=document.getElementById(r.hintId); if(h) h.textContent = r.hint; }
+}
+
+function afegirDigitalACistella(){
+  var r = _digitalSelected();
+  if(!(r.pvd > 0 || r.pvp > 0)){ showAlert('Configura la digitalització abans d\'afegir-la.', 'err'); return; }
+  _cistella.push({ text: r.desc, quantity: r.qty, preu_net: r.pvp, cost_produccio: r.pvd });
+  renderCistella();
+  recalcDigital();
+  showAlert('Digitalització afegida (' + _cistella.length + ' al pressupost).', 'ok');
+}
+
+_digitalInit();
 
 // Quins preus s'han de mostrar al pressupost: 'pvd' (només PVD), 'pvp' (només
 // PVP) o 'both' (PVP principal + cost PVD per a admin).
