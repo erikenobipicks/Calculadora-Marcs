@@ -148,6 +148,10 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
 /* GRUPS DE MATERIALS */
+.mode-selector{display:flex;gap:.5rem;flex-wrap:wrap}
+.mode-chip{flex:1;min-width:140px;padding:.7rem 1rem;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--muted);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s}
+.mode-chip:hover{border-color:var(--green)}
+.mode-chip.active{background:var(--green);color:#fff;border-color:var(--green)}
 .grup{margin-bottom:.9rem;padding-bottom:.9rem;border-bottom:1px solid var(--border)}
 .grup:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
 .grup-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--hint);margin-bottom:.5rem}
@@ -619,6 +623,13 @@ body{
         </div>
       </div>
       {% endif %}
+      <div class="card" id="card-mode" style="padding-top:.9rem;padding-bottom:.9rem">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.5rem">Què vols pressupostar?</div>
+        <div class="mode-selector">
+          <button type="button" id="mode-btn-marc" class="mode-chip active" onclick="setBudgetMode('marc')">🖼️ Marc</button>
+          <button type="button" id="mode-btn-impressio" class="mode-chip" onclick="setBudgetMode('impressio')">🖨️ Només impressió (còpies)</button>
+        </div>
+      </div>
       <div class="card client-card">
         <div class="card-t"><span class="ct-n">1</span>Dades del client</div>
         <div class="f client-picker" style="margin-bottom:.6rem;position:relative">
@@ -718,7 +729,7 @@ body{
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="card-motllures">
         <div class="card-t"><span class="ct-n">3</span>Selecció de motllures</div>
         <div class="f2">
           <div class="f">
@@ -802,7 +813,7 @@ body{
 
       <div class="card">
         <div class="card-t"><span class="ct-n">4</span>Peça i mides</div>
-        <div class="f" style="margin-bottom:.7rem">
+        <div class="f" style="margin-bottom:.7rem" id="camp-tipus-peca">
           <label>Tipus de peça</label>
           <select id="tipus-peca" onchange="onPieceTypeChange()">
             <option value="fotografia">Fotografia</option>
@@ -990,7 +1001,7 @@ body{
         </div>
 
         <!-- GRUP 4: Impressió (independent) -->
-        <div class="grup">
+        <div class="grup" id="grup-impressio">
           <div class="grup-label">Impressió fotogràfica</div>
           <div class="grup-opcions single">
             <div class="opt-btn" id="opt-impressio" onclick="toggleImpressio()" style="cursor:pointer">
@@ -2921,6 +2932,36 @@ function canviarTipusLaminat(tipus){
   calcular();
 }
 
+// ── Mode del pressupost: "marc" (complet) o "impressio" (només còpies) ──────
+var _budgetMode = 'marc';
+function setBudgetMode(mode){
+  _budgetMode = (mode === 'impressio') ? 'impressio' : 'marc';
+  var isImp = _budgetMode === 'impressio';
+  var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio');
+  if(bm) bm.classList.toggle('active', !isImp);
+  if(bi) bi.classList.toggle('active', isImp);
+  // Seccions només-marc: s'amaguen en mode "només impressió".
+  ['card-motllures','grup-muntatge','grup-proteccio','grup-interior','grup-revers-peu','camp-tipus-peca'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = isImp ? 'none' : '';
+  });
+  if(isImp){
+    // Neteja marc/premarc i materials perquè la còpia només compti la impressió.
+    if(typeof PREUS === 'object'){ PREUS.marc = 0; PREUS.pre = 0; }
+    var mp = document.getElementById('marc_principal'); if(mp) mp.value = '';
+    var pm = document.getElementById('pre_marc'); if(pm) pm.value = '';
+    if(typeof setGroupValue === 'function'){ setGroupValue('muntatge',''); setGroupValue('proteccio',''); setGroupValue('interior',''); }
+    // Peça = fotografia, impressió al laboratori i activada.
+    var tp = document.getElementById('tipus-peca');
+    if(tp && tp.value !== 'fotografia'){ tp.value = 'fotografia'; if(typeof onPieceTypeChange === 'function') onPieceTypeChange(); }
+    var po = document.getElementById('photo-origin');
+    if(po && po.value !== 'laboratori'){ po.value = 'laboratori'; if(typeof onPieceContextChange === 'function') onPieceContextChange(); }
+    var chk = document.getElementById('chk-impressio');
+    if(chk && !chk.checked && typeof toggleImpressio === 'function') toggleImpressio();
+  }
+  if(typeof recalcMides === 'function') recalcMides();
+}
+
 function toggleImpressio(){
   var chk = document.getElementById('chk-impressio');
   var printBtn = document.getElementById('opt-impressio');
@@ -3880,6 +3921,13 @@ function _optLabel(name){
   return txt ? (txt.textContent||'').trim() : '';
 }
 function _descripcioMarcActual(){
+  if(_budgetMode === 'impressio'){
+    var pw = parseFloat((document.getElementById('amplada')||{}).value)||0;
+    var ph = parseFloat((document.getElementById('alcada')||{}).value)||0;
+    var paperRadio = document.querySelector('input[name="impressio-paper"]:checked');
+    var paper = paperRadio ? (paperRadio.value === 'baryta' ? 'Hahnemühle Baryta' : 'Paper Lustre') : '';
+    return 'Còpia' + ((pw && ph) ? (' ' + _gNum(pw) + 'x' + _gNum(ph)) : '') + (paper ? (' · ' + paper) : '');
+  }
   var ref = ((document.getElementById('marc_principal')||{}).value || '').trim();
   var w = parseFloat((document.getElementById('marc-w')||{}).value)||0;
   var h = parseFloat((document.getElementById('marc-h')||{}).value)||0;
@@ -3910,7 +3958,16 @@ function afegirACistella(){
     cost_produccio: c.cost_produccio||0
   });
   renderCistella();
-  showAlert('Marc afegit al pressupost (' + _cistella.length + ' en total).', 'ok');
+  if(_budgetMode === 'impressio'){
+    // Neteja la mida per afegir la còpia següent ràpidament (manté paper i mode).
+    var _a=document.getElementById('amplada'), _h=document.getElementById('alcada'), _q=document.getElementById('quantitat');
+    if(_a) _a.value=''; if(_h) _h.value=''; if(_q) _q.value='1';
+    if(typeof recalcMides === 'function') recalcMides();
+    if(_a) _a.focus();
+    showAlert('Còpia afegida (' + _cistella.length + ' al pressupost). Posa la següent.', 'ok');
+  } else {
+    showAlert('Marc afegit al pressupost (' + _cistella.length + ' en total).', 'ok');
+  }
 }
 
 function eliminarDeCistella(i){ _cistella.splice(i,1); renderCistella(); }
