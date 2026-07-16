@@ -8871,11 +8871,13 @@ def admin_fd_orles_create():
 @admin_required
 def admin_clients_externs():
     """Llistat de clients habituals (taller + pvp)."""
+    _ensure_recarrec_column()
     filtre = (request.args.get('tipus') or '').strip().lower()
     if filtre in ('taller', 'pvp'):
         clients = query("""
             SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
-                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, u.username AS usuari_username, u.nom AS usuari_nom
+                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, c.recarrec_equiv,
+                   u.username AS usuari_username, u.nom AS usuari_nom
             FROM clients_externs c
             LEFT JOIN usuaris u ON c.usuari_id = u.id
             WHERE c.tipus = ? ORDER BY c.actiu DESC, c.nom
@@ -8884,7 +8886,8 @@ def admin_clients_externs():
         filtre = ''
         clients = query("""
             SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
-                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, u.username AS usuari_username, u.nom AS usuari_nom
+                   c.actiu, c.created_at, c.usuari_id, c.dropbox_url, c.recarrec_equiv,
+                   u.username AS usuari_username, u.nom AS usuari_nom
             FROM clients_externs c
             LEFT JOIN usuaris u ON c.usuari_id = u.id
             ORDER BY c.actiu DESC, c.nom
@@ -8965,6 +8968,7 @@ def admin_clients_externs_crear():
         usuari_id = None
     dropbox_url = (payload.get('dropbox_url') or '').strip() or None
     recarrec = _parse_bool(payload.get('recarrec_equiv'))
+    _ensure_recarrec_column()
     new_id = execute(
         "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec_equiv, actiu) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -8999,6 +9003,7 @@ def admin_clients_externs_editar(client_id):
         usuari_id = None
     dropbox_url = (payload.get('dropbox_url') or '').strip() or None
     recarrec = _parse_bool(payload.get('recarrec_equiv'))
+    _ensure_recarrec_column()
     execute(
         "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=?, recarrec_equiv=? WHERE id=?",
         [nom, nif, tipus, telefon, email, usuari_id, dropbox_url, recarrec, client_id],
@@ -9025,24 +9030,27 @@ def api_clients_externs():
     """Llista de clients externs actius — alimenta el cercador del pressupost.
     Els NO-admin no gestionen clients tipus 'taller' (PVD), així que només se'ls
     retornen els clients PVP."""
-    if session.get('is_admin'):
-        rows = query("""
-            SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
-                   c.recarrec_equiv, u.nom_empresa AS empresa
-            FROM clients_externs c
-            LEFT JOIN usuaris u ON c.usuari_id = u.id
-            WHERE c.actiu = TRUE
-            ORDER BY c.nom
-        """) or []
-    else:
-        rows = query("""
-            SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
-                   c.recarrec_equiv, u.nom_empresa AS empresa
-            FROM clients_externs c
-            LEFT JOIN usuaris u ON c.usuari_id = u.id
-            WHERE c.actiu = TRUE AND c.tipus <> 'taller'
-            ORDER BY c.nom
-        """) or []
+    _ensure_recarrec_column()
+    where_extra = '' if session.get('is_admin') else " AND c.tipus <> 'taller'"
+    sql_re = ("""
+        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+               c.recarrec_equiv, u.nom_empresa AS empresa
+        FROM clients_externs c
+        LEFT JOIN usuaris u ON c.usuari_id = u.id
+        WHERE c.actiu = TRUE""" + where_extra + " ORDER BY c.nom")
+    sql_plain = ("""
+        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+               u.nom_empresa AS empresa
+        FROM clients_externs c
+        LEFT JOIN usuaris u ON c.usuari_id = u.id
+        WHERE c.actiu = TRUE""" + where_extra + " ORDER BY c.nom")
+    try:
+        rows = query(sql_re) or []
+    except Exception as e:
+        # La columna recarrec_equiv encara no existeix a la BD: no trenquem el
+        # cercador de clients; tornem sense el camp (default False).
+        print(f"[clients_externs] recarrec_equiv absent, fallback: {e}")
+        rows = query(sql_plain) or []
     return jsonify({
         'ok': True,
         'clients': [
@@ -9085,6 +9093,21 @@ def _parse_bool(v):
     if isinstance(v, bool):
         return v
     return str(v or '').strip().lower() in ('1', 'true', 'yes', 'on', 't')
+
+
+_recarrec_col_ready = False
+def _ensure_recarrec_column():
+    """Assegura que existeix clients_externs.recarrec_equiv. Les migracions no
+    sempre s'han executat a l'arrencada (com passa amb altres columnes), i
+    referenciar-la abans peta la consulta. Idempotent i cached per procés."""
+    global _recarrec_col_ready
+    if _recarrec_col_ready:
+        return
+    try:
+        execute("ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS recarrec_equiv BOOLEAN DEFAULT FALSE")
+        _recarrec_col_ready = True
+    except Exception as e:
+        print(f"[recarrec] ensure column skip: {e}")
 
 
 def _client_extern_recarrec(client_extern_id):
