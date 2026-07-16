@@ -127,7 +127,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           </td>
           <td>
             <div class="actions-cell">
-              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}', '{{ c.usuari_id or '' }}', '{{ c.dropbox_url or ''|e }}')">Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}', '{{ c.usuari_id or '' }}', '{{ c.dropbox_url or ''|e }}', {{ 'true' if c.recarrec_equiv else 'false' }})">Editar</button>
               <button class="btn btn-ghost btn-sm" data-id="{{ c.id }}" onclick="toggleClient(this)" style="{% if c.actiu %}color:var(--red){% else %}color:var(--green){% endif %}">
                 {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
               </button>
@@ -161,6 +161,8 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <label><input type="radio" name="c-tipus" value="taller"> 🔧 Taller (preu taller)</label>
       <label><input type="radio" name="c-tipus" value="pvp" checked> 🏷️ PVP (tarifa client)</label>
     </div>
+
+    <label style="display:flex;align-items:center;gap:.5rem;margin-top:.6rem;cursor:pointer;font-weight:500"><input type="checkbox" id="c-recarrec"> 🧾 Recàrrec d'equivalència (5,2%)</label>
 
     <label for="c-tel">Telèfon</label>
     <input type="text" id="c-tel" placeholder="Opcional">
@@ -204,6 +206,8 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <label><input type="radio" name="e-tipus" value="taller"> 🔧 Taller</label>
       <label><input type="radio" name="e-tipus" value="pvp"> 🏷️ PVP</label>
     </div>
+
+    <label style="display:flex;align-items:center;gap:.5rem;margin-top:.6rem;cursor:pointer;font-weight:500"><input type="checkbox" id="e-recarrec"> 🧾 Recàrrec d'equivalència (5,2%)</label>
 
     <label for="e-tel">Telèfon</label>
     <input type="text" id="e-tel">
@@ -280,6 +284,7 @@ function closeCreateModal(){
   ['c-nom','c-nif','c-tel','c-email','c-dropbox'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('c-usuari').value = '';
   document.querySelector('input[name="c-tipus"][value="pvp"]').checked = true;
+  var re = document.getElementById('c-recarrec'); if(re) re.checked = false;
 }
 function confirmCreate(){
   var nom = document.getElementById('c-nom').value.trim();
@@ -294,7 +299,8 @@ function confirmCreate(){
       telefon: document.getElementById('c-tel').value.trim(),
       email: document.getElementById('c-email').value.trim(),
       dropbox_url: document.getElementById('c-dropbox').value.trim(),
-      usuari_id: document.getElementById('c-usuari').value || null
+      usuari_id: document.getElementById('c-usuari').value || null,
+      recarrec_equiv: document.getElementById('c-recarrec').checked
     })
   }).then(function(r){ return r.json(); }).then(function(d){
     if(d.ok) location.reload();
@@ -303,7 +309,7 @@ function confirmCreate(){
 }
 
 /* --- Editar --- */
-function openEditModal(id, nom, nif, tipus, tel, email, usuariId, dropboxUrl){
+function openEditModal(id, nom, nif, tipus, tel, email, usuariId, dropboxUrl, recarrec){
   document.getElementById('e-id').value = id;
   document.getElementById('e-nom').value = nom;
   document.getElementById('e-nif').value = nif;
@@ -313,6 +319,7 @@ function openEditModal(id, nom, nif, tipus, tel, email, usuariId, dropboxUrl){
   document.getElementById('e-usuari').value = usuariId || '';
   var radio = document.querySelector('input[name="e-tipus"][value="' + tipus + '"]');
   if(radio) radio.checked = true;
+  var re = document.getElementById('e-recarrec'); if(re) re.checked = !!recarrec;
   document.getElementById('edit-modal').classList.add('is-open');
 }
 function closeEditModal(){
@@ -332,7 +339,8 @@ function confirmEdit(){
       telefon: document.getElementById('e-tel').value.trim(),
       email: document.getElementById('e-email').value.trim(),
       dropbox_url: document.getElementById('e-dropbox').value.trim(),
-      usuari_id: document.getElementById('e-usuari').value || null
+      usuari_id: document.getElementById('e-usuari').value || null,
+      recarrec_equiv: document.getElementById('e-recarrec').checked
     })
   }).then(function(r){ return r.json(); }).then(function(d){
     if(d.ok) location.reload();
