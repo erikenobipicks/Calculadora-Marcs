@@ -3709,6 +3709,49 @@ ALBUM_PRICING = {
 }
 
 
+# ── Tarifa de digitalització (portada de la web reusrevela) ────────────────
+# Els preus de la web són el PVD (cost/taller, net). El PVP = PVD × (1+marge).
+# L'IVA 21% s'afegeix al resum, com la resta de productes.
+DIGITAL_PRICING = {
+    'margin_percent': 40.0,
+    'min_minuts': 60,  # mínim 1 hora per client (cintes)
+    'cintes': {
+        'formats': [
+            {'id': 'vhs',     'label': 'VHS'},
+            {'id': '8mm',     'label': '8 mm'},
+            {'id': 'beta',    'label': 'Beta'},
+            {'id': 'minidv',  'label': 'MiniDV'},
+            {'id': 'barreja', 'label': 'Barreja de formats'},
+        ],
+        # preu_min = € per minut (net PVD), segons el nombre de cintes.
+        'tiers': [
+            {'min': 1,  'max': 6,    'label': '1–6 cintes',  'preu_min': 0.20},
+            {'min': 7,  'max': 15,   'label': '7–15 cintes', 'preu_min': 0.18},
+            {'min': 16, 'max': None, 'label': '16 o més',    'preu_min': 0.16},
+        ],
+    },
+    'dvd': {  # DVD → MP4, preu per unitat segons trams.
+        'tiers': [
+            {'min': 1,  'max': 6,    'label': '1–6 DVD',  'preu': 8.00},
+            {'min': 7,  'max': 15,   'label': '7–15 DVD', 'preu': 7.00},
+            {'min': 16, 'max': None, 'label': '16 o més', 'preu': 5.00},
+        ],
+    },
+    's8_petita': {  # Súper 8 bobina petita, preu per unitat segons trams.
+        'spec': 'Ø 7,5 cm · 15 m · ±3 min',
+        'tiers': [
+            {'min': 1, 'max': 5,    'label': '1–5 bobines', 'preu': 12.00},
+            {'min': 6, 'max': None, 'label': '6 o més',     'preu': 11.00},
+        ],
+    },
+    's8_grans': [  # Súper 8 bobina gran, preu fix per diàmetre.
+        {'id': 'd12', 'label': 'Ø 12 cm · ±14 min', 'preu': 23.00},
+        {'id': 'd18', 'label': 'Ø 18 cm · ±30 min', 'preu': 33.00},
+        {'id': 'd20', 'label': 'Ø 20 cm · ±40 min', 'preu': 38.00},
+    ],
+}
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3777,6 +3820,7 @@ def calculadora():
                            extras=get_extras_list(),
                            canvas_pricing=CANVAS_PRICING,
                            album_pricing=ALBUM_PRICING,
+                           digital_pricing=DIGITAL_PRICING,
                            user_has_email=user_has_email)
 
 @app.route('/api/lookup')
