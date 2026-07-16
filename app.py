@@ -3656,6 +3656,59 @@ def _build_canvas_price_anchors(sizes):
 CANVAS_PRICING['anchors'] = _build_canvas_price_anchors(CANVAS_PRICING['sizes'])
 
 
+# ── Tarifa d'àlbums (portada de la web reusrevela) ─────────────────────────
+# Preus NETS = PVD (cost/taller). El PVP = PVD × (1 + margin_percent/100).
+# Àlbum individual: PVD = portada + plecs×preu_plec + suplement material + extres.
+# Packs (boda/comunió): preu fix (PVD).
+ALBUM_PRICING = {
+    'margin_percent': 40.0,
+    'min_sheets': 5,
+    'max_sheets': 40,
+    'default_sheets': 7,
+    'sizes': [
+        {'id': '15x15', 'label': '15×15', 'album_cover': 0,     'booklet_cover': 11.00, 'sheet_price': 2.00},
+        {'id': '20x15', 'label': '20×15', 'album_cover': 27.50, 'booklet_cover': 13.20, 'sheet_price': 3.27},
+        {'id': '20x20', 'label': '20×20', 'album_cover': 27.50, 'booklet_cover': 15.40, 'sheet_price': 3.87},
+        {'id': '25x25', 'label': '25×25', 'album_cover': 33.00, 'booklet_cover': 18.70, 'sheet_price': 4.48},
+        {'id': '30x20', 'label': '30×20', 'album_cover': 35.20, 'booklet_cover': 16.50, 'sheet_price': 5.08},
+        {'id': '30x24', 'label': '30×24', 'album_cover': 38.50, 'booklet_cover': 19.80, 'sheet_price': 5.87},
+        {'id': '30x30', 'label': '30×30', 'album_cover': 32.00, 'booklet_cover': 19.80, 'sheet_price': 6.90},
+        {'id': '30x40', 'label': '30×40', 'album_cover': 44.00, 'booklet_cover': 24.20, 'sheet_price': 8.95},
+        {'id': '40x30', 'label': '40×30', 'album_cover': 44.00, 'booklet_cover': 24.20, 'sheet_price': 8.95},
+        {'id': '35x35', 'label': '35×35', 'album_cover': 33.00, 'booklet_cover': 16.50, 'sheet_price': 9.32},
+    ],
+    'materials': [
+        {'id': 'lino',  'label': 'Lli',          'supplement': 0.0},
+        {'id': 'fusta', 'label': 'Fusta',        'supplement': 15.0},
+        {'id': 'foto',  'label': 'Foto-portada', 'supplement': 0.0},
+    ],
+    'extras': [
+        {'id': 'uvi',     'label': 'Gravació UVI',  'price': 6.0},
+        {'id': 'pintura', 'label': 'Pintura caixa', 'price': 3.0},
+    ],
+    'wedding_packs': [
+        {'id': 'boda_30x30_sol',              'label': 'Boda 30×30 sol (30 plecs, UVI, caixa foto)',            'price': 239.00},
+        {'id': 'boda_30x30_repliques',        'label': 'Boda 30×30 + 2 rèpliques pares 20×20',                  'price': 379.00},
+        {'id': 'boda_30x30_fusta',            'label': 'Boda 30×30 + caixa de fusta',                           'price': 274.00},
+        {'id': 'boda_30x30_fusta_repliques',  'label': 'Boda 30×30 + fusta + 2 rèpliques 20×20',                'price': 414.00},
+        {'id': 'boda_30x40_sol',              'label': 'Boda 30×40 sol (30 plecs, UVI, caixa foto)',            'price': 265.00},
+        {'id': 'boda_30x40_repliques',        'label': 'Boda 30×40 + 2 rèpliques pares 20×30',                  'price': 425.00},
+        {'id': 'boda_30x40_fusta',            'label': 'Boda 30×40 + caixa de fusta',                           'price': 305.00},
+        {'id': 'boda_30x40_fusta_repliques',  'label': 'Boda 30×40 + fusta + 2 rèpliques 20×30',                'price': 465.00},
+    ],
+    'communion_packs': [
+        {'id': 'flop_25_15', 'label': 'Flop 25|15 · Libreto 25×25 (7 f.) + caixa + mini 15×15', 'price': 87.00},
+        {'id': 'flop_25_20', 'label': 'Flop 25|20 · Libreto 25×25 (7 f.) + caixa + mini 20×20', 'price': 104.00},
+        {'id': 'flop_30_15', 'label': 'Flop 30|15 · Libreto 30×30 (7 f.) + caixa + mini 15×15', 'price': 110.00},
+        {'id': 'flop_30_20', 'label': 'Flop 30|20 · Libreto 30×30 (7 f.) + caixa + mini 20×20', 'price': 126.00},
+        {'id': 'jack_25_15', 'label': 'Jack 25|15 · Àlbum 25×25 (7 f.) + caixa + mini 15×15',   'price': 100.00},
+        {'id': 'jack_25_20', 'label': 'Jack 25|20 · Àlbum 25×25 (7 f.) + caixa + mini 20×20',   'price': 104.00},
+        {'id': 'jack_30_15', 'label': 'Jack 30|15 · Àlbum 30×30 (7 f.) + caixa + mini 15×15',   'price': 133.00},
+        {'id': 'jack_30_20', 'label': 'Jack 30|20 · Àlbum 30×30 (7 f.) + caixa + mini 20×20',   'price': 126.00},
+    ],
+}
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3723,6 +3776,7 @@ def calculadora():
                            novetats_ids=[n['id'] for n in novetats_pendents],
                            extras=get_extras_list(),
                            canvas_pricing=CANVAS_PRICING,
+                           album_pricing=ALBUM_PRICING,
                            user_has_email=user_has_email)
 
 @app.route('/api/lookup')
