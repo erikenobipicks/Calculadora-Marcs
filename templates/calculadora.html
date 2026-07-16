@@ -629,6 +629,7 @@ body{
           <button type="button" id="mode-btn-marc" class="mode-chip active" onclick="setBudgetMode('marc')">🖼️ Marc</button>
           <button type="button" id="mode-btn-impressio" class="mode-chip" onclick="setBudgetMode('impressio')">🖨️ Només impressió (còpies)</button>
           <button type="button" id="mode-btn-llenc" class="mode-chip" onclick="setBudgetMode('llenc')">🎨 Llenç</button>
+          <button type="button" id="mode-btn-album" class="mode-chip" onclick="setBudgetMode('album')">📔 Àlbum</button>
         </div>
       </div>
       <div class="card client-card">
@@ -772,6 +773,54 @@ body{
         </div>
         <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
         <button type="button" onclick="afegirLlencACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+      </div>
+
+      <div class="card" id="card-album" style="display:none">
+        <div class="card-t"><span class="ct-n">3</span>Àlbum</div>
+        <div class="mode-selector" style="margin-bottom:.7rem">
+          <button type="button" id="alb-sub-ind" class="mode-chip active" onclick="setAlbumSub('individual')">Individual</button>
+          <button type="button" id="alb-sub-boda" class="mode-chip" onclick="setAlbumSub('boda')">Pack boda</button>
+          <button type="button" id="alb-sub-com" class="mode-chip" onclick="setAlbumSub('comunio')">Pack comunió</button>
+        </div>
+
+        <!-- Individual -->
+        <div id="alb-individual">
+          <div style="margin-bottom:.6rem">
+            <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">Tipus</label>
+            <div class="mode-selector">
+              <button type="button" id="alb-type-album" class="mode-chip active" onclick="setAlbumType('album')">Àlbum</button>
+              <button type="button" id="alb-type-libreto" class="mode-chip" onclick="setAlbumType('libreto')">Libreto</button>
+            </div>
+          </div>
+          <div class="f2">
+            <div class="f"><label>Mida</label><select id="alb-mida" onchange="recalcAlbum()"></select></div>
+            <div class="f"><label>Plecs (fulles)</label><input type="number" id="alb-sheets" min="5" max="40" value="7" inputmode="numeric" oninput="recalcAlbum()"></div>
+          </div>
+          <div class="f" style="margin-top:.6rem"><label>Material de la portada</label><select id="alb-material" onchange="recalcAlbum()"></select></div>
+          <div style="margin-top:.6rem">
+            <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">Extres</label>
+            <div id="alb-extras" style="display:flex;flex-direction:column;gap:.35rem"></div>
+          </div>
+        </div>
+
+        <!-- Pack boda -->
+        <div id="alb-boda" style="display:none">
+          <div class="f"><label>Pack de boda</label><select id="alb-boda-pack" onchange="recalcAlbum()"></select></div>
+        </div>
+
+        <!-- Pack comunió -->
+        <div id="alb-comunio" style="display:none">
+          <div class="f"><label>Pack de comunió</label><select id="alb-com-pack" onchange="recalcAlbum()"></select></div>
+        </div>
+
+        <div class="f" style="margin-top:.6rem" id="alb-qty-wrap"><label>Quantitat</label><input type="number" id="alb-qty" min="1" value="1" inputmode="numeric" oninput="recalcAlbum()"></div>
+
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
+          <span id="alb-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
+          <strong id="alb-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
+        </div>
+        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
+        <button type="button" onclick="afegirAlbumACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
       </div>
 
       <div class="card" id="card-motllures">
@@ -1893,8 +1942,8 @@ function setClientFilter(f, btn){
   for(var i=0;i<chips.length;i++) chips[i].classList.toggle('is-active', chips[i]===btn);
   filterClients();
   // Sense client seleccionat, el filtre també decideix quins preus es mostren
-  // (PVD/PVP/tots) al panell de llenç i a la cistella.
-  if(typeof recalcLlenc === 'function') recalcLlenc();
+  // (PVD/PVP/tots) al resum del producte actiu i a la cistella.
+  if(typeof _refreshActiveResum === 'function') _refreshActiveResum();
   if(typeof renderCistella === 'function') renderCistella();
 }
 
@@ -2036,8 +2085,8 @@ function onClientExternChange(){
     nomInp.readOnly = false;
   }
   updateAlbaraButtons();
-  // El tipus de client determina quins preus es mostren: refresquem llenç i cistella.
-  if(typeof recalcLlenc === 'function') recalcLlenc();
+  // El tipus de client determina quins preus es mostren: refresquem el resum actiu i la cistella.
+  if(typeof _refreshActiveResum === 'function') _refreshActiveResum();
   if(typeof renderCistella === 'function') renderCistella();
 }
 
@@ -2997,34 +3046,41 @@ var _extrasCardDefaultDisplay = (function(){
   return el ? el.style.display : '';
 })();
 function setBudgetMode(mode){
-  _budgetMode = (mode === 'impressio') ? 'impressio' : (mode === 'llenc' ? 'llenc' : 'marc');
+  _budgetMode = (mode === 'impressio') ? 'impressio' : (mode === 'llenc' ? 'llenc' : (mode === 'album' ? 'album' : 'marc'));
   var isImp = _budgetMode === 'impressio';
   var isLlenc = _budgetMode === 'llenc';
-  var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio'), bl = document.getElementById('mode-btn-llenc');
+  var isAlbum = _budgetMode === 'album';
+  var isCustom = isLlenc || isAlbum;  // productes amb panell propi (no marc)
+  var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio'),
+      bl = document.getElementById('mode-btn-llenc'), ba = document.getElementById('mode-btn-album');
   if(bm) bm.classList.toggle('active', _budgetMode === 'marc');
   if(bi) bi.classList.toggle('active', isImp);
   if(bl) bl.classList.toggle('active', isLlenc);
-  // Mode Llenç: panell propi (card-llenc); s'amaga tot el calculador de marc.
+  if(ba) ba.classList.toggle('active', isAlbum);
+  // Panells propis (llenç / àlbum); s'amaga tot el calculador de marc.
   var lc = document.getElementById('card-llenc');
   if(lc) lc.style.display = isLlenc ? '' : 'none';
+  var ac = document.getElementById('card-album');
+  if(ac) ac.style.display = isAlbum ? '' : 'none';
   ['card-peca','card-materials','card-preu'].forEach(function(id){
-    var el = document.getElementById(id); if(el) el.style.display = isLlenc ? 'none' : '';
+    var el = document.getElementById(id); if(el) el.style.display = isCustom ? 'none' : '';
   });
   var extrasCard = document.getElementById('extras-card');
-  if(extrasCard) extrasCard.style.display = isLlenc ? 'none' : _extrasCardDefaultDisplay;
+  if(extrasCard) extrasCard.style.display = isCustom ? 'none' : _extrasCardDefaultDisplay;
   var sbar = document.getElementById('sticky-bar');
-  if(sbar) sbar.style.display = isLlenc ? 'none' : '';
-  // El toggle de cost (€) del resum és per al mode marc; en llenç mana el filtre.
+  if(sbar) sbar.style.display = isCustom ? 'none' : '';
+  // El toggle de cost (€) del resum és per al mode marc; en productes propis mana el filtre.
   var rbCost = document.getElementById('rb-cost');
-  if(rbCost) rbCost.style.display = isLlenc ? 'none' : '';
-  // card-motllures: només en mode marc (amagat en impressió i en llenç).
+  if(rbCost) rbCost.style.display = isCustom ? 'none' : '';
+  // card-motllures: només en mode marc.
   var cmot = document.getElementById('card-motllures');
-  if(cmot) cmot.style.display = (isImp || isLlenc) ? 'none' : '';
+  if(cmot) cmot.style.display = (isImp || isCustom) ? 'none' : '';
   // Seccions només-marc dins de Materials: s'amaguen en "només impressió".
   ['grup-muntatge','grup-proteccio','grup-interior','grup-revers-peu','camp-tipus-peca'].forEach(function(id){
     var el = document.getElementById(id);
     if(el) el.style.display = isImp ? 'none' : '';
   });
+  if(isAlbum){ if(typeof recalcAlbum === 'function') recalcAlbum(); return; }
   if(isLlenc){ if(typeof recalcLlenc === 'function') recalcLlenc(); return; }
   if(isImp){
     // Neteja marc/premarc i materials perquè la còpia només compti la impressió.
@@ -4100,10 +4156,14 @@ function onLlencMidaSelect(){
 function onLlencCustomInput(){ recalcLlenc(); }
 
 // L'"Entrega a compte" del resum: en mode llenç recalcula el llenç; si no, el marc.
-function onEntregaInput(){
-  if(_budgetMode === 'llenc'){ recalcLlenc(); }
+// Recalcula el resum del producte actiu (marc/impressió → calcular; llenç/àlbum
+// → el seu recàlcul propi). S'usa quan canvia el filtre, el client o l'entrega.
+function _refreshActiveResum(){
+  if(_budgetMode === 'llenc'){ if(typeof recalcLlenc === 'function') recalcLlenc(); }
+  else if(_budgetMode === 'album'){ if(typeof recalcAlbum === 'function') recalcAlbum(); }
   else if(typeof calcular === 'function'){ calcular(); }
 }
+function onEntregaInput(){ _refreshActiveResum(); }
 
 // Preu PVD d'una mida a mida: s'INTERPOLA del catàleg (anchors [àrea,preu]
 // monòtons), igual que a la web. Així sempre queda entre els presets que la
@@ -4222,6 +4282,132 @@ function afegirLlencACistella(){
 }
 
 _llencInit();
+
+// ── Mode Àlbum ─────────────────────────────────────────────────────────────
+// Tarifa portada de la web: el preu és el PVD; el PVP = PVD × (1 + marge).
+// Individual: PVD = portada + plecs×preu_plec + suplement material + extres.
+// Packs (boda/comunió): preu fix.
+var ALBUM_PRICING = {{ album_pricing | tojson }};
+var _albumSub = 'individual';
+var _albumType = 'album';
+
+// Alimenta el «Resum econòmic» amb un net (sense IVA) i retorna el total IVA inclòs.
+function _feedResumEconomic(net, view){
+  net = net || 0;
+  var iva = Math.round(net * 0.21 * 100) / 100;
+  var total = Math.round((net + iva) * 100) / 100;
+  function _s(id, v){ var e = document.getElementById(id); if(e) e.textContent = v; }
+  _s('r-subtotal', fmt(net)); _s('r-net', fmt(net)); _s('r-iva', fmt(iva)); _s('r-final', fmt(total));
+  var entrega = parseFloat((document.getElementById('entrega')||{}).value) || 0;
+  _s('r-pend', fmt(Math.max(0, total - entrega)));
+  _s('r-lbl-net', view === 'pvd' ? 'Cost net (sense IVA)' : 'Preu net PVP (sense IVA)');
+  _s('r-lbl-final', 'Total amb IVA 21%');
+  var cr = document.getElementById('r-row-combo'); if(cr) cr.style.display = 'none';
+  var dr = document.getElementById('r-row-desc');  if(dr) dr.style.display = 'none';
+  return total;
+}
+
+function _albumInit(){
+  var sMida = document.getElementById('alb-mida');
+  if(sMida && !sMida.options.length){
+    ALBUM_PRICING.sizes.forEach(function(s){ var o=document.createElement('option'); o.value=s.id; o.textContent=s.label; sMida.appendChild(o); });
+  }
+  var sMat = document.getElementById('alb-material');
+  if(sMat && !sMat.options.length){
+    ALBUM_PRICING.materials.forEach(function(m){ var o=document.createElement('option'); o.value=m.id; o.textContent=m.label+(m.supplement>0?(' (+'+m.supplement.toFixed(2)+' €)'):''); sMat.appendChild(o); });
+  }
+  var ex = document.getElementById('alb-extras');
+  if(ex && !ex.children.length){
+    ALBUM_PRICING.extras.forEach(function(e){
+      var lbl=document.createElement('label'); lbl.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer';
+      var cb=document.createElement('input'); cb.type='checkbox'; cb.value=e.id; cb.className='alb-extra'; cb.onchange=recalcAlbum;
+      lbl.appendChild(cb); lbl.appendChild(document.createTextNode(' '+e.label+' (+'+e.price.toFixed(2)+' €)'));
+      ex.appendChild(lbl);
+    });
+  }
+  var sBoda = document.getElementById('alb-boda-pack');
+  if(sBoda && !sBoda.options.length){
+    ALBUM_PRICING.wedding_packs.forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; sBoda.appendChild(o); });
+  }
+  var sCom = document.getElementById('alb-com-pack');
+  if(sCom && !sCom.options.length){
+    ALBUM_PRICING.communion_packs.forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; sCom.appendChild(o); });
+  }
+}
+
+function setAlbumSub(sub){
+  _albumSub = (sub==='boda'||sub==='comunio') ? sub : 'individual';
+  [['alb-sub-ind','individual'],['alb-sub-boda','boda'],['alb-sub-com','comunio']].forEach(function(p){
+    var b=document.getElementById(p[0]); if(b) b.classList.toggle('active', _albumSub===p[1]);
+  });
+  var di=document.getElementById('alb-individual'); if(di) di.style.display=_albumSub==='individual'?'':'none';
+  var db=document.getElementById('alb-boda');       if(db) db.style.display=_albumSub==='boda'?'':'none';
+  var dc=document.getElementById('alb-comunio');     if(dc) dc.style.display=_albumSub==='comunio'?'':'none';
+  recalcAlbum();
+}
+
+function setAlbumType(t){
+  _albumType = (t==='libreto') ? 'libreto' : 'album';
+  var a=document.getElementById('alb-type-album'), l=document.getElementById('alb-type-libreto');
+  if(a) a.classList.toggle('active', _albumType==='album');
+  if(l) l.classList.toggle('active', _albumType==='libreto');
+  recalcAlbum();
+}
+
+function _albumSelected(){
+  var margin = ALBUM_PRICING.margin_percent || 0;
+  var qty = Math.max(1, parseInt((document.getElementById('alb-qty')||{}).value, 10) || 1);
+  var pvdUnit = 0, desc = '';
+  if(_albumSub === 'boda' || _albumSub === 'comunio'){
+    var list = _albumSub==='boda' ? ALBUM_PRICING.wedding_packs : ALBUM_PRICING.communion_packs;
+    var pid = (document.getElementById(_albumSub==='boda' ? 'alb-boda-pack' : 'alb-com-pack')||{}).value;
+    var pack = list.filter(function(p){return p.id===pid;})[0] || list[0];
+    pvdUnit = pack.price;
+    desc = (_albumSub==='boda' ? 'Pack boda: ' : 'Pack comunió: ') + pack.label;
+  } else {
+    var sid = (document.getElementById('alb-mida')||{}).value;
+    var size = ALBUM_PRICING.sizes.filter(function(s){return s.id===sid;})[0] || ALBUM_PRICING.sizes[0];
+    var sheets = Math.max(ALBUM_PRICING.min_sheets, Math.min(ALBUM_PRICING.max_sheets, parseInt((document.getElementById('alb-sheets')||{}).value, 10) || ALBUM_PRICING.default_sheets));
+    var cover = _albumType==='album' ? size.album_cover : size.booklet_cover;
+    var mid = (document.getElementById('alb-material')||{}).value;
+    var mat = ALBUM_PRICING.materials.filter(function(m){return m.id===mid;})[0] || ALBUM_PRICING.materials[0];
+    var extrasTot = 0, extraLabels = [];
+    document.querySelectorAll('.alb-extra:checked').forEach(function(cb){
+      var e = ALBUM_PRICING.extras.filter(function(x){return x.id===cb.value;})[0];
+      if(e){ extrasTot += e.price; extraLabels.push(e.label); }
+    });
+    pvdUnit = Math.round((cover + size.sheet_price*sheets + (mat.supplement||0) + extrasTot) * 100) / 100;
+    desc = (_albumType==='album' ? 'Àlbum ' : 'Libreto ') + size.label + ' · ' + sheets + ' plecs · ' + mat.label;
+    if(extraLabels.length) desc += ' · ' + extraLabels.join(' + ');
+  }
+  var pvd = Math.round(pvdUnit * qty * 100) / 100;
+  var pvp = Math.round(pvd * (1 + margin/100) * 100) / 100;
+  return {qty:qty, pvd:pvd, pvp:pvp, desc:desc};
+}
+
+function recalcAlbum(){
+  if(!document.getElementById('card-album')) return;
+  var r = _albumSelected();
+  var view = (typeof _priceView === 'function') ? _priceView() : 'both';
+  var isPVD = view === 'pvd';
+  var net = isPVD ? r.pvd : r.pvp;
+  var total = _feedResumEconomic(net, view);
+  var lbl = document.getElementById('alb-preu-label'), val = document.getElementById('alb-preu');
+  if(lbl) lbl.textContent = isPVD ? 'Total PVD (IVA inclòs)' : 'Total (IVA inclòs)';
+  if(val) val.textContent = fmt(total);
+}
+
+function afegirAlbumACistella(){
+  var r = _albumSelected();
+  if(!(r.pvd > 0 || r.pvp > 0)){ showAlert('Configura l\'àlbum abans d\'afegir-lo.', 'err'); return; }
+  _cistella.push({ text: r.desc, quantity: r.qty, preu_net: r.pvp, cost_produccio: r.pvd });
+  renderCistella();
+  var q = document.getElementById('alb-qty'); if(q) q.value = '1';
+  recalcAlbum();
+  showAlert('Àlbum afegit (' + _cistella.length + ' al pressupost).', 'ok');
+}
+
+_albumInit();
 
 // Quins preus s'han de mostrar al pressupost: 'pvd' (només PVD), 'pvp' (només
 // PVP) o 'both' (PVP principal + cost PVD per a admin).
