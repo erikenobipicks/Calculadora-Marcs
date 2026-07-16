@@ -3612,7 +3612,48 @@ CANVAS_PRICING = {
         {'id': 'extend_quality', 'label': 'Ampliar i adaptar qualitat', 'price': 5.0},
         {'id': 'full_retouch',   'label': 'Retoc complet (marges + qualitat + neteja)', 'price': 15.0},
     ],
+    # Mides a mida: l'arxiu és final + 5 cm per costat. Límits del rotlle.
+    'constants':   {'file_margin_cm': 10},
+    'constraints': {'min_cm': 30, 'max_w_cm': 100, 'max_h_cm': 200, 'step_cm': 10},
 }
+
+
+def _build_canvas_price_anchors(sizes):
+    """Punts d'ancoratge [àrea_cm², preu PVD] per interpolar el preu de les mides
+    PERSONALITZADES a partir del catàleg estàndard, de manera que una mida a mida
+    sempre quedi ENTRE els presets que la voregen (mai més barata que una de més
+    petita). Igual que a la web:
+      1) agrupem per àrea (mitjana quan hi ha diverses formes d'igual àrea),
+      2) imposem monotonia creixent amb regressió isotònica (Pool Adjacent
+         Violators),
+      3) retornem [[àrea, preu], ...] ordenat per àrea."""
+    by_area = {}
+    for s in sizes:
+        by_area.setdefault(s['w'] * s['h'], []).append(s['price'])
+    pts = sorted((area, sum(v) / len(v)) for area, v in by_area.items())
+    areas = [a for a, _ in pts]
+    vals  = [p for _, p in pts]
+    wts   = [1.0] * len(vals)
+    idx   = [[i] for i in range(len(vals))]
+    i = 0
+    while i < len(vals) - 1:
+        if vals[i] > vals[i + 1] + 1e-9:
+            vals[i] = (vals[i] * wts[i] + vals[i + 1] * wts[i + 1]) / (wts[i] + wts[i + 1])
+            wts[i] += wts[i + 1]
+            idx[i] += idx[i + 1]
+            del vals[i + 1], wts[i + 1], idx[i + 1]
+            if i > 0:
+                i -= 1
+        else:
+            i += 1
+    iso = [0.0] * len(areas)
+    for v, group_idx in zip(vals, idx):
+        for j in group_idx:
+            iso[j] = round(v, 2)
+    return [[areas[k], iso[k]] for k in range(len(areas))]
+
+
+CANVAS_PRICING['anchors'] = _build_canvas_price_anchors(CANVAS_PRICING['sizes'])
 
 
 @app.route('/calculadora')
