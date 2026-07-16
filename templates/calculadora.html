@@ -646,9 +646,9 @@ body{
           <input type="text" id="client-search" placeholder="Cerca per nom, telèfon o NIF…" autocomplete="off" oninput="filterClients()" onfocus="filterClients()">
           {% if session.is_admin %}
           <div class="client-filter" id="client-filter">
-            <button type="button" class="cf-chip is-active" data-cf="tots" onclick="setClientFilter('tots',this)">Tots</button>
+            <button type="button" class="cf-chip" data-cf="tots" onclick="setClientFilter('tots',this)">Tots</button>
             <button type="button" class="cf-chip" data-cf="taller" onclick="setClientFilter('taller',this)">PVD</button>
-            <button type="button" class="cf-chip" data-cf="pvp" onclick="setClientFilter('pvp',this)">PVP</button>
+            <button type="button" class="cf-chip is-active" data-cf="pvp" onclick="setClientFilter('pvp',this)">PVP</button>
           </div>
           {% endif %}
           <div class="client-results" id="client-results"></div>
@@ -763,12 +763,10 @@ body{
         </div>
         <div id="llenc-fitxer-hint" style="font-size:11px;color:var(--hint);margin-top:.5rem"></div>
         <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
-          <span id="llenc-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">PVP</span>
+          <span id="llenc-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
           <strong id="llenc-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
         </div>
-        {% if session.is_admin %}
-        <div id="llenc-preu-pvd" style="font-size:12px;color:var(--muted);text-align:right;margin-top:2px"></div>
-        {% endif %}
+        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
         <button type="button" onclick="afegirLlencACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
       </div>
 
@@ -1154,7 +1152,7 @@ body{
           <div class="r-row" id="r-row-desc" style="display:none"><span class="r-lbl" id="r-lbl-desc">Descompte</span><span class="r-val" style="color:var(--amber)" id="r-desc">— €</span></div>
           <div class="r-row"><span class="r-lbl">IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
           <div class="r-row"><span class="r-lbl" id="r-lbl-final">Total amb IVA</span><span class="r-val big" id="r-final">0,00 €</span></div>
-          <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="calcular()"></div>
+          <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="onEntregaInput()"></div>
           <div class="r-row"><span class="r-lbl">Pendent de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
         </div>
       </div>
@@ -1875,7 +1873,7 @@ fetch('/api/marge').then(function(r){return r.json();}).then(function(d){
 // el dropdown amb la llista d'actius de la BD i, en seleccionar-ne un,
 // auto-omplim el camp Nom del client i el blokegem com a read-only.
 var CLIENTS_EXTERNS = [];
-var clientFilter = 'tots';
+var clientFilter = 'pvp';
 
 (function loadClientsExterns(){
   fetch('/api/clients-externs').then(function(r){return r.json();}).then(function(d){
@@ -3008,6 +3006,9 @@ function setBudgetMode(mode){
   if(extrasCard) extrasCard.style.display = isLlenc ? 'none' : _extrasCardDefaultDisplay;
   var sbar = document.getElementById('sticky-bar');
   if(sbar) sbar.style.display = isLlenc ? 'none' : '';
+  // El toggle de cost (€) del resum és per al mode marc; en llenç mana el filtre.
+  var rbCost = document.getElementById('rb-cost');
+  if(rbCost) rbCost.style.display = isLlenc ? 'none' : '';
   // card-motllures: només en mode marc (amagat en impressió i en llenç).
   var cmot = document.getElementById('card-motllures');
   if(cmot) cmot.style.display = (isImp || isLlenc) ? 'none' : '';
@@ -4090,6 +4091,12 @@ function onLlencMidaSelect(){
 }
 function onLlencCustomInput(){ recalcLlenc(); }
 
+// L'"Entrega a compte" del resum: en mode llenç recalcula el llenç; si no, el marc.
+function onEntregaInput(){
+  if(_budgetMode === 'llenc'){ recalcLlenc(); }
+  else if(typeof calcular === 'function'){ calcular(); }
+}
+
 // Preu PVD d'una mida a mida: s'INTERPOLA del catàleg (anchors [àrea,preu]
 // monòtons), igual que a la web. Així sempre queda entre els presets que la
 // voregen i mai surt més barata que una de més petita.
@@ -4156,23 +4163,31 @@ function recalcLlenc(){
   if(!document.getElementById('llenc-mida')) return;
   var r = _llencSelected();
   var view = (typeof _priceView === 'function') ? _priceView() : 'both';
+  var isPVD = view === 'pvd';
+  // Net (sense IVA), amb quantitat inclosa. PVD si es mira PVD, si no PVP.
+  var net = r.invalid ? 0 : (isPVD ? r.pvd : r.pvp);
+  var iva = Math.round(net * 0.21 * 100) / 100;
+  var total = Math.round((net + iva) * 100) / 100;
+
+  // Total (IVA inclòs) compacte, al costat del botó d'afegir.
   var lbl = document.getElementById('llenc-preu-label');
   var val = document.getElementById('llenc-preu');
-  var pvdRow = document.getElementById('llenc-preu-pvd');
-  if(r.invalid){
-    if(lbl) lbl.textContent = view === 'pvd' ? 'PVD (taller)' : 'PVP (client)';
-    if(val) val.textContent = '—';
-    if(pvdRow) pvdRow.textContent = '';
-  } else if(view === 'pvd'){
-    if(lbl) lbl.textContent = 'PVD (taller)';
-    if(val) val.textContent = r.pvd.toFixed(2) + ' € + IVA';
-    if(pvdRow) pvdRow.textContent = '';
-  } else {
-    if(lbl) lbl.textContent = 'PVP (client)';
-    if(val) val.textContent = r.pvp.toFixed(2) + ' € + IVA';
-    // El cost PVD només en vista "both" (Tots); en filtre PVP s'amaga.
-    if(pvdRow) pvdRow.textContent = (view === 'both') ? ('Cost taller (PVD): ' + r.pvd.toFixed(2) + ' €') : '';
-  }
+  if(lbl) lbl.textContent = isPVD ? 'Total PVD (IVA inclòs)' : 'Total (IVA inclòs)';
+  if(val) val.textContent = r.invalid ? '—' : fmt(total);
+
+  // Alimentem el «Resum econòmic» com fa la calculadora de marcs.
+  function _setTxt(id, v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+  _setTxt('r-subtotal', fmt(net));
+  _setTxt('r-net',      fmt(net));
+  _setTxt('r-iva',      fmt(iva));
+  _setTxt('r-final',    fmt(total));
+  var entrega = parseFloat((document.getElementById('entrega')||{}).value) || 0;
+  _setTxt('r-pend',     fmt(Math.max(0, total - entrega)));
+  _setTxt('r-lbl-net',  isPVD ? 'Cost net (sense IVA)' : 'Preu net PVP (sense IVA)');
+  _setTxt('r-lbl-final','Total amb IVA 21%');
+  var comboRow=document.getElementById('r-row-combo'); if(comboRow) comboRow.style.display='none';
+  var descRow=document.getElementById('r-row-desc');  if(descRow)  descRow.style.display='none';
+
   var hint = document.getElementById('llenc-fitxer-hint');
   if(hint) hint.textContent = 'Arxiu recomanat amb marges: ' + r.fileW + ' × ' + r.fileH + ' cm.';
   // Estat de la mida a mida (estàndard / especial / fora de límits).
