@@ -31,6 +31,30 @@
 .desc{margin-top:.75rem;font-size:13px;color:var(--muted);line-height:1.65;min-height:3.2em}
 .empty{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:2.5rem 1.5rem;text-align:center;color:var(--hint)}
 @media(max-width:700px){.wrap{padding:1.25rem 1rem 2rem}.page-head h1{font-size:26px}.foto{height:160px}}
+
+/* ===== Redisseny modern (mateix llenguatge que /inici) ===== */
+.wrap{max-width:1180px;padding:1.9rem 1.25rem 3.5rem}
+.page-head{
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--green) 13%, transparent), transparent 55%),
+    linear-gradient(180deg, #ffffff, #fcfaf6);
+  border:1px solid var(--border); border-radius:20px;
+  padding:1.5rem 1.7rem; margin-bottom:1.4rem;
+  box-shadow:0 1px 2px rgba(18,16,12,.04), 0 12px 32px rgba(18,16,12,.05);
+}
+.page-head h1{font-size:clamp(1.8rem,3vw,2.3rem);letter-spacing:-.02em;line-height:1.05}
+.page-head p{font-size:13.5px;margin-top:.45rem;max-width:62ch;line-height:1.55}
+.search-card{border-radius:16px;padding:1.1rem 1.2rem;box-shadow:0 1px 2px rgba(18,16,12,.04)}
+.search-row input,.search-row select{border-radius:11px;padding:11px 13px}
+.grid{gap:1.1rem}
+.card{border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(18,16,12,.04),0 6px 16px rgba(18,16,12,.05);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+.card:hover{transform:translateY(-3px);border-color:#cdbfa6;box-shadow:0 10px 24px rgba(18,16,12,.08),0 20px 44px rgba(18,16,12,.07)}
+.foto{height:190px}
+.ref{font-size:15.5px;font-weight:700;letter-spacing:-.01em}
+.chip{border-radius:999px;padding:4px 11px;font-weight:700;letter-spacing:.04em}
+.btn-g{background:var(--green);color:#fff;border:1px solid var(--green);font-weight:700}
+.btn-g:hover{filter:brightness(1.05);transform:translateY(-1px)}
+.empty{border-radius:18px;padding:3.5rem 2rem}
 </style>
 {% endblock %}
 {% block content %}
