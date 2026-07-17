@@ -4232,6 +4232,13 @@ function eliminarDeCistella(i){ _cistella.splice(i,1); renderCistella(); }
 // Tarifa portada de la web: el preu de cada mida és el PVD (cost/taller); el
 // PVP = PVD + marge. Sense bastidor = PVD × print_only_factor.
 var CANVAS_PRICING = {{ canvas_pricing | tojson }};
+// Marges comercials per categoria, configurables a Ajustos. Cada producte
+// agafa el seu; si no n'hi ha, es fa servir el valor per defecte del catàleg.
+var COMMERCIAL_MARGINS = {{ commercial_margins | tojson }};
+function _prodMargin(key, fallback){
+  var m = COMMERCIAL_MARGINS ? parseFloat(COMMERCIAL_MARGINS[key]) : NaN;
+  return (isFinite(m) && m >= 0) ? m : (parseFloat(fallback) || 0);
+}
 var _llencBastidor = true;
 
 function _llencInit(){
@@ -4337,7 +4344,7 @@ function _llencSelected(){
   if(!_llencBastidor) baseUnit = Math.round(baseUnit * CANVAS_PRICING.print_only_factor * 100) / 100;
   var pvdUnit = baseUnit + (edit.price || 0);
   var pvdSub = Math.round(pvdUnit * qty * 100) / 100;
-  var margin = CANVAS_PRICING.margin_percent || 0;
+  var margin = _prodMargin('canvas', CANVAS_PRICING.margin_percent);
   var pvpSub = Math.round(pvdSub * (1 + margin/100) * 100) / 100;
   return {w:w, h:h, fileW:fileW, fileH:fileH, special:special, custom:custom, invalid:invalid, invalidMsg:invalidMsg,
           edit:edit, qty:qty, bastidor:_llencBastidor, pvd:pvdSub, pvp:pvpSub};
@@ -4477,7 +4484,7 @@ function setAlbumType(t){
 }
 
 function _albumSelected(){
-  var margin = ALBUM_PRICING.margin_percent || 0;
+  var margin = _prodMargin('albums', ALBUM_PRICING.margin_percent);
   var qty = Math.max(1, parseInt((document.getElementById('alb-qty')||{}).value, 10) || 1);
   var pvdUnit = 0, desc = '';
   if(_albumSub === 'boda' || _albumSub === 'comunio'){
@@ -4648,7 +4655,7 @@ function _digitalSelected(){
 // Aplica el marge (segons PVD/PVP) i les reparacions. Total SENSE IVA.
 function _digitalTotals(r, view){
   var isPVD = view === 'pvd';
-  var margin = DIGITAL_PRICING.margin_percent || 0;
+  var margin = _prodMargin('digital', DIGITAL_PRICING.margin_percent);
   var factor = isPVD ? 1 : (1 + margin/100);
   var digCharged = Math.round(r.pvd_base * factor * 100) / 100;
   var total = Math.round((digCharged + r.rep_total) * 100) / 100;
@@ -4749,7 +4756,7 @@ function _orlaInit(){
 function _orlaTierKey(qty){ return qty>=150 ? 't150' : (qty>=100 ? 't100' : 't50'); }
 
 function _orlaSelected(){
-  var margin=ORLAS_PRICING.margin_percent||0;
+  var margin=_prodMargin('orles', ORLAS_PRICING.margin_percent);
   var pid=(document.getElementById('orla-prod')||{}).value;
   var prod=ORLAS_PRICING.products.filter(function(p){return p.id===pid;})[0] || ORLAS_PRICING.products[0];
   var qty=Math.max(1, parseInt((document.getElementById('orla-qty')||{}).value,10)||1);
@@ -4822,7 +4829,7 @@ function setRegalsSub(sub){
 }
 
 function _regalsSelected(){
-  var margin=REGALS_PRICING.margin_percent||0;
+  var margin=_prodMargin('regals', REGALS_PRICING.margin_percent);
   var qty=Math.max(1, parseInt((document.getElementById('reg-qty')||{}).value,10)||1);
   var unit=0, desc='';
   if(_regalsSub==='imants'){
