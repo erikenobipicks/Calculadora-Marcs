@@ -3215,6 +3215,9 @@ function setBudgetMode(mode){
   if(rc) rc.style.display = isRegals ? '' : 'none';
   var ofc = document.getElementById('card-offset');
   if(ofc) ofc.style.display = isOffset ? '' : 'none';
+  // En modes de producte el PDF es genera del producte actual (no cal desar cap marc).
+  var btnPdf = document.getElementById('btn-pdf');
+  if(btnPdf && isCustom) btnPdf.disabled = false;
   // La digitalització és sense IVA i a part de FD: amaguem el «Resum econòmic».
   var resCard = document.querySelector('.res-card');
   if(resCard) resCard.style.display = isDigital ? 'none' : '';
@@ -3720,7 +3723,52 @@ function desarMarge(){
 }
 
 // ── Guardar ───────────────────────────────────────────────────────────────
+// Productes nous (no marc): tenen la seva pròpia manera d'afegir-se i de PDF.
+function _isProductMode(){ return ['llenc','album','digital','orla','regals','offset'].indexOf(_budgetMode) >= 0; }
+function _productModeLine(){
+  var r;
+  if(_budgetMode==='llenc'){ r=_llencSelected(); if(r.invalid) return null; return {text:_llencDescripcio(r), quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='album'){ r=_albumSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='orla'){ r=_orlaSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='regals'){ r=_regalsSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='offset'){ r=_offsetSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  return null;
+}
+function _productModeAfegir(){
+  if(_budgetMode==='llenc') return afegirLlencACistella();
+  if(_budgetMode==='album') return afegirAlbumACistella();
+  if(_budgetMode==='orla') return afegirOrlaACistella();
+  if(_budgetMode==='regals') return afegirRegalsACistella();
+  if(_budgetMode==='offset') return afegirOffsetACistella();
+  if(_budgetMode==='digital') return copiarDigital();
+}
+// Genera un PDF del producte actual (una sola línia) via el mateix endpoint que la cistella.
+function productPDF(){
+  if(_budgetMode==='digital'){ showAlert('La digitalització es fa sense IVA: fes servir «Copiar pressupost» al panell.', 'err'); return; }
+  var line=_productModeLine();
+  if(!line || !((line.preu_net||0)>0 || (line.cost_produccio||0)>0)){ showAlert('Configura el producte abans de generar el PDF.', 'err'); return; }
+  var payload={
+    items:[line],
+    client_nom:(document.getElementById('client_nom')||{}).value||'',
+    client_tel:(document.getElementById('client_tel')||{}).value||'',
+    client_extern_id:(document.getElementById('client_extern_id')||{}).value||'',
+    num_pressupost:window._numPressupost||'',
+    observacions:(document.getElementById('observacions')||{}).value||'',
+    mode_preu: cistellaClientIsPVD() ? 'cost' : 'pvp'
+  };
+  fetch('/api/pdf-marcs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ if(!r.ok) return r.json().then(function(d){throw new Error(d.error||'Error');}); return r.blob(); })
+    .then(function(blob){
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download='pressupost.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(url);},1500);
+    }).catch(function(e){ showAlert('Error PDF: '+e.message, 'err'); });
+}
+
 function guardar(){
+  // En modes de producte, «Desar opció» afegeix el producte al pressupost (cistella).
+  if(_isProductMode()){ return _productModeAfegir(); }
   if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
   var d={
     comanda_id: uid || null,
@@ -3892,7 +3940,11 @@ function guardarTotes(){
   next();
 }
 
-function generarPDF(){if(!uid){alert('Primer guarda el pressupost.');return;}window.open('/pdf/'+uid,'_blank');}
+function generarPDF(){
+  if(_isProductMode()){ return productPDF(); }
+  if(!uid){alert('Primer guarda el pressupost.');return;}
+  window.open('/pdf/'+uid,'_blank');
+}
 
 function buildWebOrderPayload(){
   var pieceType = (document.getElementById('tipus_peca') || {}).value || '';
