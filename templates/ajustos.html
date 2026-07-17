@@ -240,6 +240,22 @@ nav{background:var(--nav);height:54px;display:flex;align-items:center;justify-co
     </div>
   </div>
 
+  {% if session.is_admin %}
+  <div class="section">
+    <div class="section-title">Marca per a pressupostos PVD (Reus Revela)</div>
+    <div class="card">
+      <div class="hint-box">Els pressupostos a preu <strong>PVD</strong> (taller) sortiran amb aquesta marca i logo; els de <strong>PVP</strong> (client final), amb la marca del negoci de dalt.</div>
+      <div class="f"><label>Nom</label><input type="text" id="pvd-nom" placeholder="Reus Revela"></div>
+      <div class="f"><label>Adreça <span style="color:var(--hint);font-size:11px;font-weight:400">(opcional — buit = adreça del negoci)</span></label><input type="text" id="pvd-adreca" placeholder="Deixa-ho buit per mantenir l'adreça del negoci"></div>
+      <div id="pvd-logo-preview" style="margin:.85rem 0;min-height:50px;display:flex;align-items:center">
+        <span style="color:var(--hint);font-size:13px" id="pvd-logo-txt">Cap logo carregat</span>
+      </div>
+      <input type="file" id="pvd-logo-file" accept=".png,.jpg,.jpeg" style="display:none" onchange="pujarPvdLogo()">
+      <button onclick="document.getElementById('pvd-logo-file').click()" class="btn-g" style="width:auto;padding:9px 20px;margin-top:0">Seleccionar logo Reus Revela</button>
+    </div>
+  </div>
+  {% endif %}
+
   <button class="btn-g" onclick="desarTot()">Desar tots els canvis</button>
 </div>
 <script>
@@ -277,9 +293,12 @@ function desarTot(){
   var bcs=document.getElementById('brand-color-secondary').value||'#C8873A';
   var bcm=document.getElementById('brand-color-menu').value||bc;
   {% if session.get('is_admin') %}
+  var pvdNom=(document.getElementById('pvd-nom')||{}).value||'';
+  var pvdAdr=(document.getElementById('pvd-adreca')||{}).value||'';
   Promise.all([
     fetch('/api/desar-marge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({marge:m,marge_impressio:mi,margins:margins,nom_empresa:ne,nom_fiscal:nf,fiscal_id:fi,email:em,brand_color:bc,brand_color_secondary:bcs,brand_color_menu:bcm})}).then(function(r){return r.json();}),
-    fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();})
+    fetch('/api/empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:ne,adreca:ea,tel:et})}).then(function(r){return r.json();}),
+    fetch('/api/pvd-brand',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom:pvdNom,adreca:pvdAdr})}).then(function(r){return r.json();})
   ]).then(function(res){
     if(res[0].ok&&res[1].ok) showAlert('Canvis desats correctament.','ok');
     else showAlert('Error en desar.','err');
@@ -353,6 +372,32 @@ function pujarLogo(){
       if(d.ok) showAlert('Logo desat correctament. Apareixerà als PDFs.','ok');
     });
 }
+
+// ── Marca PVD (Reus Revela) — admin ──────────────────────────────────────
+{% if session.is_admin %}
+fetch('/api/pvd-brand').then(function(r){return r.json();}).then(function(d){
+  if(!d) return;
+  var n=document.getElementById('pvd-nom'); if(n && d.nom) n.value=d.nom;
+  var a=document.getElementById('pvd-adreca'); if(a) a.value=d.adreca||'';
+  if(d.logo && d.logo.indexOf('data:')===0){
+    document.getElementById('pvd-logo-preview').innerHTML='<img src="'+d.logo+'" style="max-height:80px;max-width:300px;border-radius:4px">';
+    var t=document.getElementById('pvd-logo-txt'); if(t) t.style.display='none';
+  }
+});
+function pujarPvdLogo(){
+  var file=document.getElementById('pvd-logo-file').files[0];
+  if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(e){ document.getElementById('pvd-logo-preview').innerHTML='<img src="'+e.target.result+'" style="max-height:80px;max-width:300px;border-radius:4px">'; };
+  reader.readAsDataURL(file);
+  var fd=new FormData(); fd.append('logo', file);
+  fetch('/api/pvd-brand/logo', {method:'POST', body:fd})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok) showAlert('Logo de Reus Revela desat. Sortirà als pressupostos PVD.','ok');
+      else showAlert('Error en pujar el logo.','err');
+    });
+}
+{% endif %}
 
 // ── Marges per a marcs (trams per àrea) ──────────────────────────────────
 window.MR_TRAMS_DATA = null;
