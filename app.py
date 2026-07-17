@@ -3752,6 +3752,45 @@ DIGITAL_PRICING = {
 }
 
 
+# ── Tarifa d'orles (portada de la web) ─────────────────────────────────────
+# Preus per unitat segons tram de quantitat (net PVD). PVP = PVD × (1+marge).
+# Muntatge opcional: primer disseny (una vegada) + muntatge per alumne.
+ORLAS_PRICING = {
+    'margin_percent': 40.0,
+    'montatge': {'primer_disseny': 25.00, 'per_alumne': 1.00},
+    'products': [
+        {'id': 'lustre_30x40', 'group': 'Foto Lustre 260 gr', 'label': 'Orla 30×40',              't50': 2.70, 't100': 2.55, 't150': 2.40},
+        {'id': 'lustre_30x45', 'group': 'Foto Lustre 260 gr', 'label': 'Orla 30×45',              't50': 3.24, 't100': 3.06, 't150': 2.88},
+        {'id': 'lustre_40x50', 'group': 'Foto Lustre 260 gr', 'label': 'Orla 40×50',              't50': 5.40, 't100': 5.10, 't150': 4.80},
+        {'id': 'lustre_50x60', 'group': 'Foto Lustre 260 gr', 'label': 'Orla 50×60',              't50': 7.65, 't100': 7.22, 't150': 6.80},
+        {'id': 'offset_30x40', 'group': 'Offset Matte 300 gr', 'label': 'Orla 30×40 o 32×45 (SRA3)', 't50': 1.73, 't100': 1.64, 't150': 1.55},
+        {'id': 'carnet_10x15', 'group': 'Multi foto carnet',   'label': '10×15 · 8 DNI o 4 DNI + 1 cartera', 't50': 0.48, 't100': 0.43, 't150': 0.38},
+        {'id': 'carnet_15x20', 'group': 'Multi foto carnet',   'label': '15×20 · 8 DNI + cartera 7×9',       't50': 0.73, 't100': 0.67, 't150': 0.64},
+    ],
+}
+
+
+# ── Tarifa de regals personalitzats (portada de la web) ────────────────────
+# Preus per unitat (net PVD). PVP = PVD × (1+marge).
+REGALS_PRICING = {
+    'margin_percent': 40.0,
+    'tasses': [
+        {'id': 'blanca',       'label': 'Tassa blanca',              'price': 7.00,  'color': False},
+        {'id': 'interior_asa', 'label': 'Interior + ansa de color',  'price': 8.00,  'color': True},
+        {'id': 'magica',       'label': 'Tassa màgica',              'price': 10.00, 'color': False},
+    ],
+    'tassa_colors': [
+        {'id': 'blanc', 'label': 'Blanc'}, {'id': 'negre', 'label': 'Negre'},
+        {'id': 'marro', 'label': 'Marró'}, {'id': 'blau',  'label': 'Blau'},
+    ],
+    'imants': [
+        {'id': '7x10',  'label': 'Imant 7×10',           'price': 1.60},
+        {'id': '9x13',  'label': 'Imant 9×13 / 10×15',   'price': 3.10},
+        {'id': '13x18', 'label': 'Imant 13×18 / 15×20',  'price': 5.90},
+    ],
+}
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3821,6 +3860,8 @@ def calculadora():
                            canvas_pricing=CANVAS_PRICING,
                            album_pricing=ALBUM_PRICING,
                            digital_pricing=DIGITAL_PRICING,
+                           orlas_pricing=ORLAS_PRICING,
+                           regals_pricing=REGALS_PRICING,
                            user_has_email=user_has_email)
 
 @app.route('/api/lookup')

@@ -631,6 +631,8 @@ body{
           <button type="button" id="mode-btn-llenc" class="mode-chip" onclick="setBudgetMode('llenc')">🎨 Llenç</button>
           <button type="button" id="mode-btn-album" class="mode-chip" onclick="setBudgetMode('album')">📔 Àlbum</button>
           <button type="button" id="mode-btn-digital" class="mode-chip" onclick="setBudgetMode('digital')">💾 Digitalització</button>
+          <button type="button" id="mode-btn-orla" class="mode-chip" onclick="setBudgetMode('orla')">🎓 Orla</button>
+          <button type="button" id="mode-btn-regals" class="mode-chip" onclick="setBudgetMode('regals')">🎁 Regals</button>
         </div>
       </div>
       <div class="card client-card">
@@ -875,6 +877,48 @@ body{
           <strong id="dig-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
         </div>
         <button type="button" onclick="copiarDigital()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">📋 Copiar pressupost</button>
+      </div>
+
+      <div class="card" id="card-orla" style="display:none">
+        <div class="card-t"><span class="ct-n">3</span>Orla</div>
+        <div class="f"><label>Producte</label><select id="orla-prod" onchange="recalcOrla()"></select></div>
+        <div class="f" style="margin-top:.6rem"><label>Quantitat (alumnes)</label><input type="number" id="orla-qty" min="1" value="50" inputmode="numeric" oninput="recalcOrla()"></div>
+        <div style="margin-top:.6rem">
+          <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">Muntatge (opcional)</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:.3rem"><input type="checkbox" id="orla-disseny" onchange="recalcOrla()"> Primer disseny (+25 € una vegada)</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="orla-muntatge" onchange="recalcOrla()"> Muntatge per alumne (+1 €/u)</label>
+        </div>
+        <div id="orla-hint" style="font-size:11px;color:var(--hint);margin-top:.5rem"></div>
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
+          <span id="orla-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
+          <strong id="orla-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
+        </div>
+        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
+        <button type="button" onclick="afegirOrlaACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+      </div>
+
+      <div class="card" id="card-regals" style="display:none">
+        <div class="card-t"><span class="ct-n">3</span>Regals</div>
+        <div class="mode-selector" style="margin-bottom:.7rem">
+          <button type="button" id="reg-sub-tasses" class="mode-chip active" onclick="setRegalsSub('tasses')">Tasses</button>
+          <button type="button" id="reg-sub-imants" class="mode-chip" onclick="setRegalsSub('imants')">Imants</button>
+        </div>
+        <!-- Tasses -->
+        <div id="reg-tasses">
+          <div class="f"><label>Tipus de tassa</label><select id="reg-tassa-type" onchange="recalcRegals()"></select></div>
+          <div class="f" style="margin-top:.6rem" id="reg-tassa-color-wrap"><label>Color (interior/ansa)</label><select id="reg-tassa-color" onchange="recalcRegals()"></select></div>
+        </div>
+        <!-- Imants -->
+        <div id="reg-imants" style="display:none">
+          <div class="f"><label>Mida de l'imant</label><select id="reg-imant" onchange="recalcRegals()"></select></div>
+        </div>
+        <div class="f" style="margin-top:.6rem"><label>Quantitat</label><input type="number" id="reg-qty" min="1" value="1" inputmode="numeric" oninput="recalcRegals()"></div>
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
+          <span id="reg-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
+          <strong id="reg-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
+        </div>
+        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
+        <button type="button" onclick="afegirRegalsACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
       </div>
 
       <div class="card" id="card-motllures">
@@ -3100,27 +3144,37 @@ var _extrasCardDefaultDisplay = (function(){
   return el ? el.style.display : '';
 })();
 function setBudgetMode(mode){
-  _budgetMode = (mode === 'impressio') ? 'impressio' : (mode === 'llenc' ? 'llenc' : (mode === 'album' ? 'album' : (mode === 'digital' ? 'digital' : 'marc')));
+  var _valid = ['impressio','llenc','album','digital','orla','regals'];
+  _budgetMode = _valid.indexOf(mode) >= 0 ? mode : 'marc';
   var isImp = _budgetMode === 'impressio';
   var isLlenc = _budgetMode === 'llenc';
   var isAlbum = _budgetMode === 'album';
   var isDigital = _budgetMode === 'digital';
-  var isCustom = isLlenc || isAlbum || isDigital;  // productes amb panell propi (no marc)
+  var isOrla = _budgetMode === 'orla';
+  var isRegals = _budgetMode === 'regals';
+  var isCustom = isLlenc || isAlbum || isDigital || isOrla || isRegals;  // panell propi (no marc)
   var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio'),
       bl = document.getElementById('mode-btn-llenc'), ba = document.getElementById('mode-btn-album'),
-      bd = document.getElementById('mode-btn-digital');
+      bd = document.getElementById('mode-btn-digital'), bo = document.getElementById('mode-btn-orla'),
+      br = document.getElementById('mode-btn-regals');
   if(bm) bm.classList.toggle('active', _budgetMode === 'marc');
   if(bi) bi.classList.toggle('active', isImp);
   if(bl) bl.classList.toggle('active', isLlenc);
   if(ba) ba.classList.toggle('active', isAlbum);
   if(bd) bd.classList.toggle('active', isDigital);
-  // Panells propis (llenç / àlbum / digitalització); s'amaga tot el calculador de marc.
+  if(bo) bo.classList.toggle('active', isOrla);
+  if(br) br.classList.toggle('active', isRegals);
+  // Panells propis; s'amaga tot el calculador de marc.
   var lc = document.getElementById('card-llenc');
   if(lc) lc.style.display = isLlenc ? '' : 'none';
   var ac = document.getElementById('card-album');
   if(ac) ac.style.display = isAlbum ? '' : 'none';
   var dc2 = document.getElementById('card-digital');
   if(dc2) dc2.style.display = isDigital ? '' : 'none';
+  var oc = document.getElementById('card-orla');
+  if(oc) oc.style.display = isOrla ? '' : 'none';
+  var rc = document.getElementById('card-regals');
+  if(rc) rc.style.display = isRegals ? '' : 'none';
   // La digitalització és sense IVA i a part de FD: amaguem el «Resum econòmic».
   var resCard = document.querySelector('.res-card');
   if(resCard) resCard.style.display = isDigital ? 'none' : '';
@@ -3143,6 +3197,8 @@ function setBudgetMode(mode){
     if(el) el.style.display = isImp ? 'none' : '';
   });
   if(isDigital){ if(typeof recalcDigital === 'function') recalcDigital(); return; }
+  if(isOrla){ if(typeof recalcOrla === 'function') recalcOrla(); return; }
+  if(isRegals){ if(typeof recalcRegals === 'function') recalcRegals(); return; }
   if(isAlbum){ if(typeof recalcAlbum === 'function') recalcAlbum(); return; }
   if(isLlenc){ if(typeof recalcLlenc === 'function') recalcLlenc(); return; }
   if(isImp){
@@ -4225,6 +4281,8 @@ function _refreshActiveResum(){
   if(_budgetMode === 'llenc'){ if(typeof recalcLlenc === 'function') recalcLlenc(); }
   else if(_budgetMode === 'album'){ if(typeof recalcAlbum === 'function') recalcAlbum(); }
   else if(_budgetMode === 'digital'){ if(typeof recalcDigital === 'function') recalcDigital(); }
+  else if(_budgetMode === 'orla'){ if(typeof recalcOrla === 'function') recalcOrla(); }
+  else if(_budgetMode === 'regals'){ if(typeof recalcRegals === 'function') recalcRegals(); }
   else if(typeof calcular === 'function'){ calcular(); }
 }
 function onEntregaInput(){ _refreshActiveResum(); }
@@ -4671,6 +4729,146 @@ function copiarDigital(){
 }
 
 _digitalInit();
+
+// ── Mode Orla ───────────────────────────────────────────────────────────────
+var ORLAS_PRICING = {{ orlas_pricing | tojson }};
+
+function _orlaInit(){
+  var s=document.getElementById('orla-prod');
+  if(s && !s.options.length){
+    var groups={};
+    ORLAS_PRICING.products.forEach(function(p){ (groups[p.group]=groups[p.group]||[]).push(p); });
+    Object.keys(groups).forEach(function(g){
+      var og=document.createElement('optgroup'); og.label=g;
+      groups[g].forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; og.appendChild(o); });
+      s.appendChild(og);
+    });
+  }
+}
+
+function _orlaTierKey(qty){ return qty>=150 ? 't150' : (qty>=100 ? 't100' : 't50'); }
+
+function _orlaSelected(){
+  var margin=ORLAS_PRICING.margin_percent||0;
+  var pid=(document.getElementById('orla-prod')||{}).value;
+  var prod=ORLAS_PRICING.products.filter(function(p){return p.id===pid;})[0] || ORLAS_PRICING.products[0];
+  var qty=Math.max(1, parseInt((document.getElementById('orla-qty')||{}).value,10)||1);
+  var tk=_orlaTierKey(qty);
+  var unit=prod[tk];
+  var pvd=Math.round(unit*qty*100)/100;
+  var disseny=!!(document.getElementById('orla-disseny')||{}).checked;
+  var muntatge=!!(document.getElementById('orla-muntatge')||{}).checked;
+  var extra=0, extraLbl=[];
+  if(disseny){ extra+=ORLAS_PRICING.montatge.primer_disseny; extraLbl.push('primer disseny'); }
+  if(muntatge){ extra+=ORLAS_PRICING.montatge.per_alumne*qty; extraLbl.push('muntatge/alumne'); }
+  pvd=Math.round((pvd+extra)*100)/100;
+  var pvp=Math.round(pvd*(1+margin/100)*100)/100;
+  var desc=prod.label+' · '+qty+' u'+(extraLbl.length?(' + '+extraLbl.join(' + ')):'');
+  return {qty:qty, pvd:pvd, pvp:pvp, desc:desc, unit:unit, tierKey:tk};
+}
+
+function recalcOrla(){
+  if(!document.getElementById('card-orla')) return;
+  var r=_orlaSelected();
+  var view=(typeof _priceView==='function')?_priceView():'both';
+  var isPVD=view==='pvd';
+  var net=isPVD?r.pvd:r.pvp;
+  var total=_feedResumEconomic(net, view);
+  var lbl=document.getElementById('orla-preu-label'), val=document.getElementById('orla-preu');
+  if(lbl) lbl.textContent=isPVD?'Total PVD (IVA inclòs)':'Total (IVA inclòs)';
+  if(val) val.textContent=fmt(total);
+  var hint=document.getElementById('orla-hint');
+  if(hint) hint.textContent='Preu unitari: '+fmt(r.unit)+' (tram '+r.tierKey.replace('t','+')+').';
+}
+
+function afegirOrlaACistella(){
+  var r=_orlaSelected();
+  if(!(r.pvd>0||r.pvp>0)){ showAlert('Configura l\'orla abans d\'afegir-la.', 'err'); return; }
+  _cistella.push({ text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd });
+  renderCistella(); recalcOrla();
+  showAlert('Orla afegida (' + _cistella.length + ' al pressupost).', 'ok');
+}
+
+_orlaInit();
+
+// ── Mode Regals ─────────────────────────────────────────────────────────────
+var REGALS_PRICING = {{ regals_pricing | tojson }};
+var _regalsSub = 'tasses';
+
+function _regalsInit(){
+  var st=document.getElementById('reg-tassa-type');
+  if(st && !st.options.length){
+    REGALS_PRICING.tasses.forEach(function(t){ var o=document.createElement('option'); o.value=t.id; o.textContent=t.label+' — '+t.price.toFixed(2)+' €'; st.appendChild(o); });
+  }
+  var sc=document.getElementById('reg-tassa-color');
+  if(sc && !sc.options.length){
+    REGALS_PRICING.tassa_colors.forEach(function(c){ var o=document.createElement('option'); o.value=c.id; o.textContent=c.label; sc.appendChild(o); });
+  }
+  var si=document.getElementById('reg-imant');
+  if(si && !si.options.length){
+    REGALS_PRICING.imants.forEach(function(m){ var o=document.createElement('option'); o.value=m.id; o.textContent=m.label+' — '+m.price.toFixed(2)+' €'; si.appendChild(o); });
+  }
+}
+
+function setRegalsSub(sub){
+  _regalsSub = (sub==='imants') ? 'imants' : 'tasses';
+  var bt=document.getElementById('reg-sub-tasses'), bi=document.getElementById('reg-sub-imants');
+  if(bt) bt.classList.toggle('active', _regalsSub==='tasses');
+  if(bi) bi.classList.toggle('active', _regalsSub==='imants');
+  var dt=document.getElementById('reg-tasses'), di=document.getElementById('reg-imants');
+  if(dt) dt.style.display=_regalsSub==='tasses'?'':'none';
+  if(di) di.style.display=_regalsSub==='imants'?'':'none';
+  recalcRegals();
+}
+
+function _regalsSelected(){
+  var margin=REGALS_PRICING.margin_percent||0;
+  var qty=Math.max(1, parseInt((document.getElementById('reg-qty')||{}).value,10)||1);
+  var unit=0, desc='';
+  if(_regalsSub==='imants'){
+    var mid=(document.getElementById('reg-imant')||{}).value;
+    var im=REGALS_PRICING.imants.filter(function(m){return m.id===mid;})[0] || REGALS_PRICING.imants[0];
+    unit=im.price; desc=im.label+' · '+qty+' u';
+  } else {
+    var tid=(document.getElementById('reg-tassa-type')||{}).value;
+    var ta=REGALS_PRICING.tasses.filter(function(t){return t.id===tid;})[0] || REGALS_PRICING.tasses[0];
+    unit=ta.price; desc=ta.label;
+    // Mostra/amaga el color segons el tipus.
+    var cw=document.getElementById('reg-tassa-color-wrap');
+    if(cw) cw.style.display = ta.color ? '' : 'none';
+    if(ta.color){
+      var cid=(document.getElementById('reg-tassa-color')||{}).value;
+      var col=REGALS_PRICING.tassa_colors.filter(function(c){return c.id===cid;})[0];
+      if(col) desc += ' (' + col.label + ')';
+    }
+    desc += ' · ' + qty + ' u';
+  }
+  var pvd=Math.round(unit*qty*100)/100;
+  var pvp=Math.round(pvd*(1+margin/100)*100)/100;
+  return {qty:qty, pvd:pvd, pvp:pvp, desc:desc, unit:unit};
+}
+
+function recalcRegals(){
+  if(!document.getElementById('card-regals')) return;
+  var r=_regalsSelected();
+  var view=(typeof _priceView==='function')?_priceView():'both';
+  var isPVD=view==='pvd';
+  var net=isPVD?r.pvd:r.pvp;
+  var total=_feedResumEconomic(net, view);
+  var lbl=document.getElementById('reg-preu-label'), val=document.getElementById('reg-preu');
+  if(lbl) lbl.textContent=isPVD?'Total PVD (IVA inclòs)':'Total (IVA inclòs)';
+  if(val) val.textContent=fmt(total);
+}
+
+function afegirRegalsACistella(){
+  var r=_regalsSelected();
+  if(!(r.pvd>0||r.pvp>0)){ showAlert('Configura el regal abans d\'afegir-lo.', 'err'); return; }
+  _cistella.push({ text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd });
+  renderCistella(); recalcRegals();
+  showAlert('Regal afegit (' + _cistella.length + ' al pressupost).', 'ok');
+}
+
+_regalsInit();
 
 // Quins preus s'han de mostrar al pressupost: 'pvd' (només PVD), 'pvp' (només
 // PVP) o 'both' (PVP principal + cost PVD per a admin).
