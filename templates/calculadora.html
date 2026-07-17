@@ -5193,6 +5193,33 @@ function copiarCistella(){
   }
 }
 
+// Text de la comanda per al TALLER (Reus Revela): detall + PVD (preu de producció).
+function _cistellaComandaText(){
+  var nom = ((document.getElementById('client_nom')||{}).value||'').trim();
+  var num = window._numPressupost || '';
+  var L = ['COMANDA AL TALLER' + (num ? (' · ' + num) : '')];
+  if(nom) L.push('Client final: ' + nom);
+  L.push('');
+  var totPvd = 0;
+  _cistella.forEach(function(it){
+    var pvd = it.cost_produccio || 0; totPvd += pvd;
+    L.push('• ' + it.text + ' — ' + it.quantity + ' u' + (pvd > 0 ? (' · PVD ' + pvd.toFixed(2) + ' €') : ''));
+  });
+  L.push('');
+  L.push('Total taller (PVD): ' + totPvd.toFixed(2) + ' € + IVA');
+  var obs = ((document.getElementById('observacions')||{}).value||'').trim();
+  if(obs){ L.push(''); L.push('Observacions: ' + obs); }
+  return L.join('\n');
+}
+function cistellaComandaTaller(){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  var num = window._numPressupost || '';
+  var subject = 'Comanda al taller' + (num ? (' · ' + num) : '');
+  var body = _cistellaComandaText();
+  var dest = 'reusrevela@gmail.com';
+  window.location.href = 'mailto:' + encodeURIComponent(dest) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
+
 function obrirCistella(){ renderCistella(); var m=document.getElementById('cistella-modal'); if(m) m.style.display='flex'; }
 function tancarCistella(){ var m=document.getElementById('cistella-modal'); if(m) m.style.display='none'; }
 
@@ -5827,6 +5854,7 @@ recalcMides();
     <div id="cistella-actions" style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end">
       <button type="button" onclick="copiarCistella()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text del pressupost per enganxar-lo a WhatsApp">📋 Copiar text</button>
       <button type="button" onclick="cistellaPDF()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">📄 PDF</button>
+      <button type="button" onclick="cistellaComandaTaller()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per correu, amb el detall i el PVD">📥 Comanda al taller</button>
       {% if session.is_admin %}
       <button type="button" onclick="cistellaFD('pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa; usa PVD si el client és de taller">Pressupost FD</button>
       <button type="button" onclick="cistellaFD('albara','pvp')" class="albara-btn albara-pvp">Albarà PVP</button>
