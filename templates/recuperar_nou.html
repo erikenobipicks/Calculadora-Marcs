@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta name="theme-color" content="#1A6B45">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova contrasenya — Reus Revela</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f5f6fa;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border-radius:12px;border:1px solid #dfe6e9;padding:2.5rem 2rem;width:100%;max-width:380px;box-shadow:0 2px 16px rgba(0,0,0,.06)}
+.logo{text-align:center;margin-bottom:1.6rem}
+.logo h1{font-size:22px;color:#2f3640;font-weight:700;letter-spacing:.5px}
+.logo p{font-size:13px;color:#636e72;margin-top:4px}
+.bar{width:40px;height:4px;background:#1A6B45;border-radius:2px;margin:0 auto 1.4rem}
+label{display:block;font-size:13px;font-weight:600;color:#2f3640;margin-bottom:5px}
+input[type=password]{width:100%;padding:10px 12px;border:1px solid #dfe6e9;border-radius:8px;font-size:14px;color:#2f3640;outline:none;transition:border .2s}
+input:focus{border-color:#0984e3}
+.field{margin-bottom:1.2rem}
+button{width:100%;padding:11px;background:#1A6B45;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
+button:hover{background:#155c3a}
+.alert{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1.2rem}
+.hint{font-size:13px;color:#636e72;line-height:1.5;margin-bottom:1.2rem}
+.back{margin-top:1.2rem;text-align:center}
+.back a{color:#1A6B45;font-weight:700;text-decoration:none;font-size:13px}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="bar"></div>
+    <h1>Nova contrasenya</h1>
+    <p>Reus Revela · calculadora</p>
+  </div>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="alert">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% if valid %}
+    <p class="hint">Escriu la teva contrasenya nova (mínim 6 caràcters).</p>
+    <form method="post">
+      <div class="field">
+        <label>Contrasenya nova</label>
+        <input type="password" name="password" autocomplete="new-password" required autofocus>
+      </div>
+      <div class="field">
+        <label>Repeteix la contrasenya</label>
+        <input type="password" name="password2" autocomplete="new-password" required>
+      </div>
+      <button type="submit">Desar la contrasenya</button>
+    </form>
+  {% else %}
+    <p class="hint">Aquest enllaç no és vàlid o ha caducat. Torna a demanar-ne un de nou.</p>
+    <div class="back"><a href="{{ url_for('recuperar') }}">Demanar un enllaç nou</a></div>
+  {% endif %}
+  <div class="back"><a href="{{ url_for('login') }}">← Tornar a l'accés</a></div>
+</div>
+</body>
+</html>
