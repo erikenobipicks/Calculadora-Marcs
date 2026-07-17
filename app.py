@@ -4553,6 +4553,47 @@ def get_logo():
     r = query('SELECT logo_b64 FROM usuaris WHERE id=?', [session['user_id']], one=True)
     return jsonify({'url': _row_get(r, 'logo_b64', '') or ''})
 
+
+# ── Marca per a pressupostos PVD (Reus Revela) ─────────────────────────────
+# Els pressupostos a preu PVD (taller) surten amb la marca Reus Revela; a PVP
+# (client final) surten amb la marca actual (Objectiu Fotògrafs). Nom, adreça i
+# logo de la marca PVD es guarden a config (global, admin).
+@app.route('/api/pvd-brand', methods=['GET'])
+@admin_required
+def get_pvd_brand():
+    def _cfg(k):
+        r = query("SELECT valor FROM config WHERE clau=?", [k], one=True)
+        return (r['valor'] if r else '') or ''
+    return jsonify({
+        'nom': _cfg('pvd_brand_nom') or 'Reus Revela',
+        'adreca': _cfg('pvd_brand_adreca'),
+        'logo': _cfg('pvd_brand_logo_b64'),
+    })
+
+@app.route('/api/pvd-brand', methods=['POST'])
+@admin_required
+def save_pvd_brand():
+    d = request.get_json(silent=True) or {}
+    nom = (d.get('nom') or '').strip()
+    adreca = (d.get('adreca') or '').strip()
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('pvd_brand_nom', ?)", [nom])
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('pvd_brand_adreca', ?)", [adreca])
+    return jsonify({'ok': True})
+
+@app.route('/api/pvd-brand/logo', methods=['POST'])
+@admin_required
+def upload_pvd_brand_logo():
+    f = request.files.get('logo')
+    if not f:
+        return jsonify({'ok': False, 'error': 'missing_file'}), 400
+    import base64
+    data = f.read()
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in (f.filename or '') else 'png'
+    mime = 'image/png' if ext == 'png' else 'image/jpeg'
+    b64 = 'data:' + mime + ';base64,' + base64.b64encode(data).decode()
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('pvd_brand_logo_b64', ?)", [b64])
+    return jsonify({'ok': True})
+
 @app.route('/static/logo-preview')
 @login_required
 def logo_preview():
@@ -10975,6 +11016,20 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
     if not adreca:
         r_adr = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
         adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
+    # Marca segons el mode: pressupost a PVD (preu taller) → Reus Revela;
+    # a PVP (preu client) → marca actual (Objectiu Fotògrafs). El logo i, si
+    # s'ha configurat, l'adreça també canvien.
+    is_pvd_doc = str(mode).strip().lower() in ('pvd', 'cost', 'taller')
+    pvd_logo_override = ''
+    if is_pvd_doc:
+        _rbn = query("SELECT valor FROM config WHERE clau='pvd_brand_nom'", one=True)
+        nom_empresa = ((_rbn['valor'] if _rbn else '') or '').strip() or 'Reus Revela'
+        _rba = query("SELECT valor FROM config WHERE clau='pvd_brand_adreca'", one=True)
+        _rba_val = ((_rba['valor'] if _rba else '') or '').strip()
+        if _rba_val:
+            adreca = _rba_val
+        _rbl = query("SELECT valor FROM config WHERE clau='pvd_brand_logo_b64'", one=True)
+        pvd_logo_override = (_rbl['valor'] if _rbl else '') or ''
     GREEN = colors.HexColor(green_hex)
 
     header = Table([[
@@ -10993,8 +11048,11 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
 
     # ── Logo (si existeix) ────────────────────────────────────────────────
     try:
-        u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [user_id or 0], one=True)
-        logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
+        if is_pvd_doc and pvd_logo_override:
+            logo_data_url = pvd_logo_override
+        else:
+            u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [user_id or 0], one=True)
+            logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
         if logo_data_url and logo_data_url.startswith('data:'):
             import base64 as _b64
             from reportlab.platypus import Image as RLImg2
