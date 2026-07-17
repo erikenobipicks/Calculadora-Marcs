@@ -2183,6 +2183,98 @@ def logout():
     return redirect(url_for('login'))
 
 
+# ── Restabliment de contrasenya (token per email) ──────────────────────────
+_reset_cols_ready = False
+def _ensure_reset_columns():
+    """Assegura les columnes reset_token / reset_token_exp a usuaris."""
+    global _reset_cols_ready
+    if _reset_cols_ready:
+        return
+    for col in ('reset_token', 'reset_token_exp'):
+        try:
+            execute(f"ALTER TABLE usuaris ADD COLUMN IF NOT EXISTS {col} TEXT")
+        except Exception as e:
+            print(f"[reset] ensure col {col}: {e}")
+    _reset_cols_ready = True
+
+
+def _send_reset_email(email, name, link):
+    nom_visible = (name or '').strip() or 'professional'
+    html = f"""\
+<div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1C1B18">
+  <h2 style="color:#1A6B45;border-bottom:2px solid #1A6B45;padding-bottom:8px;margin-bottom:18px">Restablir la contrasenya</h2>
+  <p style="font-size:14px;line-height:1.6">Hola {nom_visible},</p>
+  <p style="font-size:14px;line-height:1.6">Has demanat posar una contrasenya nova al teu compte de la calculadora de Reus Revela. Clica el botó per fer-ho:</p>
+  <p style="margin:22px 0">
+    <a href="{link}" style="display:inline-block;background:#1A6B45;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;font-size:14px">Posar una contrasenya nova →</a>
+  </p>
+  <p style="font-size:13px;color:#6B6860;line-height:1.5">L'enllaç caduca en 2 hores. Si no has demanat aquest canvi, pots ignorar aquest correu: la teva contrasenya no canviarà.</p>
+  <p style="font-size:12px;color:#9E9B94;line-height:1.5;margin-top:16px;word-break:break-all">Si el botó no funciona, copia aquest enllaç al navegador:<br>{link}</p>
+  <p style="font-size:14px;line-height:1.6;margin-top:22px">Una salutació,<br><b>Equip Reus Revela</b></p>
+</div>
+"""
+    return _send_user_email_html(email, 'Restablir la contrasenya · Reus Revela', html, log_tag='reset_email')
+
+
+@app.route('/recuperar', methods=['GET', 'POST'])
+def recuperar():
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        _ensure_reset_columns()
+        try:
+            if email and '@' in email:
+                user = query(
+                    'SELECT id, nom, username, email, is_admin, access_status FROM usuaris '
+                    'WHERE lower(username)=? OR lower(email)=?', [email, email], one=True)
+                if user and _user_is_allowed(user):
+                    token = secrets.token_urlsafe(32)
+                    exp = (datetime.now() + timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S')
+                    execute('UPDATE usuaris SET reset_token=?, reset_token_exp=? WHERE id=?',
+                            [token, exp, user['id']])
+                    dest = (_row_get(user, 'email', '') or '').strip() or (_row_get(user, 'username', '') or '')
+                    link = f"{request.url_root.rstrip('/')}/recuperar/{token}"
+                    _send_reset_email(dest, _row_get(user, 'nom', ''), link)
+        except Exception as e:
+            print(f"[reset] request error ({email}): {e}")
+        # Resposta genèrica sempre (no revelem si l'email existeix).
+        return render_template('recuperar.html', done=True)
+    return render_template('recuperar.html', done=False)
+
+
+@app.route('/recuperar/<token>', methods=['GET', 'POST'])
+def recuperar_token(token):
+    _ensure_reset_columns()
+    user = None
+    try:
+        if token:
+            user = query('SELECT id, nom, reset_token_exp FROM usuaris WHERE reset_token=?', [token], one=True)
+    except Exception as e:
+        print(f"[reset] lookup error: {e}")
+    valid = False
+    if user:
+        exp = (_row_get(user, 'reset_token_exp', '') or '').strip()
+        try:
+            valid = bool(exp) and datetime.now() <= datetime.strptime(exp, '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            valid = False
+    if not valid:
+        return render_template('recuperar_nou.html', valid=False)
+    if request.method == 'POST':
+        pw1 = request.form.get('password') or ''
+        pw2 = request.form.get('password2') or ''
+        if len(pw1) < 6:
+            flash('La contrasenya ha de tenir com a mínim 6 caràcters.', 'error')
+            return render_template('recuperar_nou.html', valid=True, token=token)
+        if pw1 != pw2:
+            flash('Les contrasenyes no coincideixen.', 'error')
+            return render_template('recuperar_nou.html', valid=True, token=token)
+        execute('UPDATE usuaris SET password=?, reset_token=NULL, reset_token_exp=NULL WHERE id=?',
+                [hash_pw(pw1), user['id']])
+        flash('Contrasenya actualitzada. Ja pots entrar amb la nova.', 'ok')
+        return redirect(url_for('login'))
+    return render_template('recuperar_nou.html', valid=True, token=token)
+
+
 @app.route('/api/public/professional-signup', methods=['POST'])
 def public_professional_signup():
     expected_token = os.environ.get('PUBLIC_SIGNUP_TOKEN', '').strip()
