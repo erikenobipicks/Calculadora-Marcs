@@ -632,6 +632,7 @@ body{
           <button type="button" id="mode-btn-digital" class="mode-chip" onclick="setBudgetMode('digital')">💾 Digitalització</button>
           <button type="button" id="mode-btn-orla" class="mode-chip" onclick="setBudgetMode('orla')">🎓 Orla</button>
           <button type="button" id="mode-btn-regals" class="mode-chip" onclick="setBudgetMode('regals')">🎁 Regals</button>
+          <button type="button" id="mode-btn-offset" class="mode-chip" onclick="setBudgetMode('offset')">📇 Offset</button>
         </div>
       </div>
       <div class="card client-card">
@@ -918,6 +919,42 @@ body{
         </div>
         <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
         <button type="button" onclick="afegirRegalsACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+      </div>
+
+      <div class="card" id="card-offset" style="display:none">
+        <div class="card-t"><span class="ct-n">3</span>Impressió digital · Offset</div>
+        <div class="mode-selector" style="margin-bottom:.7rem">
+          <button type="button" id="off-sub-prod" class="mode-chip active" onclick="setOffsetSub('productes')">Productes</button>
+          <button type="button" id="off-sub-full" class="mode-chip" onclick="setOffsetSub('full')">Full sencer SRA3</button>
+        </div>
+
+        <!-- Productes (papereria + calendaris) -->
+        <div id="off-productes">
+          <div class="f"><label>Producte</label><select id="off-prod" onchange="recalcOffset()"></select></div>
+          <div style="margin-top:.6rem">
+            <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--hint);margin-bottom:.35rem">Paper</label>
+            <div class="mode-selector">
+              <button type="button" id="off-paper-basic" class="mode-chip active" onclick="setOffsetPaper('basic')">Bàsic 300gr</button>
+              <button type="button" id="off-paper-esp" class="mode-chip" onclick="setOffsetPaper('esp')">Especial</button>
+            </div>
+          </div>
+          <div id="off-prod-hint" style="font-size:11px;color:var(--hint);margin-top:.5rem"></div>
+        </div>
+
+        <!-- Full sencer SRA3 -->
+        <div id="off-full" style="display:none">
+          <div class="f"><label>Tipus d'impressió</label><select id="off-full-opt" onchange="recalcOffset()"></select></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:.6rem"><input type="checkbox" id="off-full-sup" onchange="recalcOffset()"> Suplement acabat (Plata / Daurat / Kraft / Rústic) (+1,00 €)</label>
+        </div>
+
+        <div class="f" style="margin-top:.6rem"><label>Quantitat</label><input type="number" id="off-qty" min="1" value="1" inputmode="numeric" oninput="recalcOffset()"></div>
+
+        <div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline">
+          <span id="off-preu-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total (IVA inclòs)</span>
+          <strong id="off-preu" style="font-size:20px;color:var(--green,#1A6B45)">—</strong>
+        </div>
+        <div style="font-size:11px;color:var(--hint);text-align:right;margin-top:2px">Desglossament al «Resum econòmic».</div>
+        <button type="button" onclick="afegirOffsetACistella()" style="width:100%;margin-top:.8rem;padding:11px 14px;border:none;border-radius:9px;background:var(--green,#1A6B45);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
       </div>
 
       <div class="card" id="card-motllures">
@@ -3143,7 +3180,7 @@ var _extrasCardDefaultDisplay = (function(){
   return el ? el.style.display : '';
 })();
 function setBudgetMode(mode){
-  var _valid = ['impressio','llenc','album','digital','orla','regals'];
+  var _valid = ['impressio','llenc','album','digital','orla','regals','offset'];
   _budgetMode = _valid.indexOf(mode) >= 0 ? mode : 'marc';
   var isImp = _budgetMode === 'impressio';
   var isLlenc = _budgetMode === 'llenc';
@@ -3151,11 +3188,12 @@ function setBudgetMode(mode){
   var isDigital = _budgetMode === 'digital';
   var isOrla = _budgetMode === 'orla';
   var isRegals = _budgetMode === 'regals';
-  var isCustom = isLlenc || isAlbum || isDigital || isOrla || isRegals;  // panell propi (no marc)
+  var isOffset = _budgetMode === 'offset';
+  var isCustom = isLlenc || isAlbum || isDigital || isOrla || isRegals || isOffset;  // panell propi (no marc)
   var bm = document.getElementById('mode-btn-marc'), bi = document.getElementById('mode-btn-impressio'),
       bl = document.getElementById('mode-btn-llenc'), ba = document.getElementById('mode-btn-album'),
       bd = document.getElementById('mode-btn-digital'), bo = document.getElementById('mode-btn-orla'),
-      br = document.getElementById('mode-btn-regals');
+      br = document.getElementById('mode-btn-regals'), bof = document.getElementById('mode-btn-offset');
   if(bm) bm.classList.toggle('active', _budgetMode === 'marc');
   if(bi) bi.classList.toggle('active', isImp);
   if(bl) bl.classList.toggle('active', isLlenc);
@@ -3163,6 +3201,7 @@ function setBudgetMode(mode){
   if(bd) bd.classList.toggle('active', isDigital);
   if(bo) bo.classList.toggle('active', isOrla);
   if(br) br.classList.toggle('active', isRegals);
+  if(bof) bof.classList.toggle('active', isOffset);
   // Panells propis; s'amaga tot el calculador de marc.
   var lc = document.getElementById('card-llenc');
   if(lc) lc.style.display = isLlenc ? '' : 'none';
@@ -3174,6 +3213,11 @@ function setBudgetMode(mode){
   if(oc) oc.style.display = isOrla ? '' : 'none';
   var rc = document.getElementById('card-regals');
   if(rc) rc.style.display = isRegals ? '' : 'none';
+  var ofc = document.getElementById('card-offset');
+  if(ofc) ofc.style.display = isOffset ? '' : 'none';
+  // En modes de producte el PDF es genera del producte actual (no cal desar cap marc).
+  var btnPdf = document.getElementById('btn-pdf');
+  if(btnPdf && isCustom) btnPdf.disabled = false;
   // La digitalització és sense IVA i a part de FD: amaguem el «Resum econòmic».
   var resCard = document.querySelector('.res-card');
   if(resCard) resCard.style.display = isDigital ? 'none' : '';
@@ -3198,6 +3242,7 @@ function setBudgetMode(mode){
   if(isDigital){ if(typeof recalcDigital === 'function') recalcDigital(); return; }
   if(isOrla){ if(typeof recalcOrla === 'function') recalcOrla(); return; }
   if(isRegals){ if(typeof recalcRegals === 'function') recalcRegals(); return; }
+  if(isOffset){ if(typeof recalcOffset === 'function') recalcOffset(); return; }
   if(isAlbum){ if(typeof recalcAlbum === 'function') recalcAlbum(); return; }
   if(isLlenc){ if(typeof recalcLlenc === 'function') recalcLlenc(); return; }
   if(isImp){
@@ -3678,7 +3723,52 @@ function desarMarge(){
 }
 
 // ── Guardar ───────────────────────────────────────────────────────────────
+// Productes nous (no marc): tenen la seva pròpia manera d'afegir-se i de PDF.
+function _isProductMode(){ return ['llenc','album','digital','orla','regals','offset'].indexOf(_budgetMode) >= 0; }
+function _productModeLine(){
+  var r;
+  if(_budgetMode==='llenc'){ r=_llencSelected(); if(r.invalid) return null; return {text:_llencDescripcio(r), quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='album'){ r=_albumSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='orla'){ r=_orlaSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='regals'){ r=_regalsSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  if(_budgetMode==='offset'){ r=_offsetSelected(); return {text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd}; }
+  return null;
+}
+function _productModeAfegir(){
+  if(_budgetMode==='llenc') return afegirLlencACistella();
+  if(_budgetMode==='album') return afegirAlbumACistella();
+  if(_budgetMode==='orla') return afegirOrlaACistella();
+  if(_budgetMode==='regals') return afegirRegalsACistella();
+  if(_budgetMode==='offset') return afegirOffsetACistella();
+  if(_budgetMode==='digital') return copiarDigital();
+}
+// Genera un PDF del producte actual (una sola línia) via el mateix endpoint que la cistella.
+function productPDF(){
+  if(_budgetMode==='digital'){ showAlert('La digitalització es fa sense IVA: fes servir «Copiar pressupost» al panell.', 'err'); return; }
+  var line=_productModeLine();
+  if(!line || !((line.preu_net||0)>0 || (line.cost_produccio||0)>0)){ showAlert('Configura el producte abans de generar el PDF.', 'err'); return; }
+  var payload={
+    items:[line],
+    client_nom:(document.getElementById('client_nom')||{}).value||'',
+    client_tel:(document.getElementById('client_tel')||{}).value||'',
+    client_extern_id:(document.getElementById('client_extern_id')||{}).value||'',
+    num_pressupost:window._numPressupost||'',
+    observacions:(document.getElementById('observacions')||{}).value||'',
+    mode_preu: cistellaClientIsPVD() ? 'cost' : 'pvp'
+  };
+  fetch('/api/pdf-marcs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ if(!r.ok) return r.json().then(function(d){throw new Error(d.error||'Error');}); return r.blob(); })
+    .then(function(blob){
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download='pressupost.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(url);},1500);
+    }).catch(function(e){ showAlert('Error PDF: '+e.message, 'err'); });
+}
+
 function guardar(){
+  // En modes de producte, «Desar opció» afegeix el producte al pressupost (cistella).
+  if(_isProductMode()){ return _productModeAfegir(); }
   if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de desar.', 'err'); return; }
   var d={
     comanda_id: uid || null,
@@ -3850,7 +3940,11 @@ function guardarTotes(){
   next();
 }
 
-function generarPDF(){if(!uid){alert('Primer guarda el pressupost.');return;}window.open('/pdf/'+uid,'_blank');}
+function generarPDF(){
+  if(_isProductMode()){ return productPDF(); }
+  if(!uid){alert('Primer guarda el pressupost.');return;}
+  window.open('/pdf/'+uid,'_blank');
+}
 
 function buildWebOrderPayload(){
   var pieceType = (document.getElementById('tipus_peca') || {}).value || '';
@@ -4289,6 +4383,7 @@ function _refreshActiveResum(){
   else if(_budgetMode === 'digital'){ if(typeof recalcDigital === 'function') recalcDigital(); }
   else if(_budgetMode === 'orla'){ if(typeof recalcOrla === 'function') recalcOrla(); }
   else if(_budgetMode === 'regals'){ if(typeof recalcRegals === 'function') recalcRegals(); }
+  else if(_budgetMode === 'offset'){ if(typeof recalcOffset === 'function') recalcOffset(); }
   else if(typeof calcular === 'function'){ calcular(); }
 }
 function onEntregaInput(){ _refreshActiveResum(); }
@@ -4876,6 +4971,95 @@ function afegirRegalsACistella(){
 
 _regalsInit();
 
+// ── Mode Offset (impressió digital) ─────────────────────────────────────────
+var OFFSET_PRICING = {{ offset_pricing | tojson }};
+var _offsetSub = 'productes';
+var _offsetPaper = 'basic';
+
+function _offsetInit(){
+  var sp=document.getElementById('off-prod');
+  if(sp && !sp.options.length){
+    var groups={};
+    OFFSET_PRICING.products.forEach(function(p){ (groups[p.group]=groups[p.group]||[]).push(p); });
+    Object.keys(groups).forEach(function(g){
+      var og=document.createElement('optgroup'); og.label=g;
+      groups[g].forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; og.appendChild(o); });
+      sp.appendChild(og);
+    });
+  }
+  var sf=document.getElementById('off-full-opt');
+  if(sf && !sf.options.length){
+    OFFSET_PRICING.full_sheet.options.forEach(function(o2){ var o=document.createElement('option'); o.value=o2.id; o.textContent=o2.label+' — '+o2.price.toFixed(2)+' €'; sf.appendChild(o); });
+  }
+}
+
+function setOffsetSub(sub){
+  _offsetSub = (sub==='full') ? 'full' : 'productes';
+  var bp=document.getElementById('off-sub-prod'), bf=document.getElementById('off-sub-full');
+  if(bp) bp.classList.toggle('active', _offsetSub==='productes');
+  if(bf) bf.classList.toggle('active', _offsetSub==='full');
+  var dp=document.getElementById('off-productes'), df=document.getElementById('off-full');
+  if(dp) dp.style.display=_offsetSub==='productes'?'':'none';
+  if(df) df.style.display=_offsetSub==='full'?'':'none';
+  recalcOffset();
+}
+
+function setOffsetPaper(p){
+  _offsetPaper = (p==='esp') ? 'esp' : 'basic';
+  var bb=document.getElementById('off-paper-basic'), be=document.getElementById('off-paper-esp');
+  if(bb) bb.classList.toggle('active', _offsetPaper==='basic');
+  if(be) be.classList.toggle('active', _offsetPaper==='esp');
+  recalcOffset();
+}
+
+function _offsetSelected(){
+  var margin=_prodMargin('offset', OFFSET_PRICING.margin_percent);
+  var qty=Math.max(1, parseInt((document.getElementById('off-qty')||{}).value,10)||1);
+  var unit=0, desc='', hint='', noEsp=false;
+  if(_offsetSub==='full'){
+    var oid=(document.getElementById('off-full-opt')||{}).value;
+    var opt=OFFSET_PRICING.full_sheet.options.filter(function(o){return o.id===oid;})[0] || OFFSET_PRICING.full_sheet.options[0];
+    var sup=!!(document.getElementById('off-full-sup')||{}).checked;
+    unit=opt.price + (sup ? OFFSET_PRICING.full_sheet.suplement.price : 0);
+    desc='Offset ' + opt.label.replace('Full sencer · ','full sencer ') + (sup ? ' + suplement' : '') + ' · ' + qty + ' fulls';
+  } else {
+    var pid=(document.getElementById('off-prod')||{}).value;
+    var prod=OFFSET_PRICING.products.filter(function(p){return p.id===pid;})[0] || OFFSET_PRICING.products[0];
+    var esp=(_offsetPaper==='esp');
+    if(esp && (prod.preu_esp===null || prod.preu_esp===undefined)){ esp=false; noEsp=true; }
+    unit = esp ? prod.preu_esp : prod.preu;
+    desc = prod.label + ' · ' + (esp ? 'paper especial' : 'paper bàsic') + ' · ' + qty + ' u';
+    hint = 'En surten ' + prod.mult + ' per full SRA3.' + (noEsp ? ' Aquest producte no té paper especial.' : '');
+  }
+  var pvd=Math.round(unit*qty*100)/100;
+  var pvp=Math.round(pvd*(1+margin/100)*100)/100;
+  return {qty:qty, pvd:pvd, pvp:pvp, desc:desc, unit:unit, hint:hint};
+}
+
+function recalcOffset(){
+  if(!document.getElementById('card-offset')) return;
+  var r=_offsetSelected();
+  var view=(typeof _priceView==='function')?_priceView():'both';
+  var isPVD=view==='pvd';
+  var net=isPVD?r.pvd:r.pvp;
+  var total=_feedResumEconomic(net, view);
+  var lbl=document.getElementById('off-preu-label'), val=document.getElementById('off-preu');
+  if(lbl) lbl.textContent=isPVD?'Total PVD (IVA inclòs)':'Total (IVA inclòs)';
+  if(val) val.textContent=fmt(total);
+  var hint=document.getElementById('off-prod-hint');
+  if(hint) hint.textContent = (_offsetSub==='productes') ? (r.hint + ' Preu unitari: ' + fmt(r.unit) + '.') : '';
+}
+
+function afegirOffsetACistella(){
+  var r=_offsetSelected();
+  if(!(r.pvd>0||r.pvp>0)){ showAlert('Configura la impressió abans d\'afegir-la.', 'err'); return; }
+  _cistella.push({ text:r.desc, quantity:r.qty, preu_net:r.pvp, cost_produccio:r.pvd });
+  renderCistella(); recalcOffset();
+  showAlert('Impressió offset afegida (' + _cistella.length + ' al pressupost).', 'ok');
+}
+
+_offsetInit();
+
 // Obre la calculadora directament en un producte segons ?mode= (o ?service=,
 // per compatibilitat amb els enllaços antics de la web).
 (function(){
@@ -4890,7 +5074,7 @@ _regalsInit();
                  regals:'regals', digital:'digital', digitalitzacio:'digital'};
       mode = map[svc] || '';
     }
-    var valid = ['marc','impressio','llenc','album','digital','orla','regals'];
+    var valid = ['marc','impressio','llenc','album','digital','orla','regals','offset'];
     if(mode && valid.indexOf(mode) >= 0 && typeof setBudgetMode === 'function'){
       setBudgetMode(mode);
     }

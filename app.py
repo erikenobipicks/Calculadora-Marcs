@@ -1231,6 +1231,7 @@ def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None
         'digital': max(_safe_float(data.get('digital'), 40.0), 0.0),
         'orles': max(_safe_float(data.get('orles'), 40.0), 0.0),
         'regals': max(_safe_float(data.get('regals'), 40.0), 0.0),
+        'offset': max(_safe_float(data.get('offset'), 40.0), 0.0),
     }
     return normalized
 
@@ -3833,6 +3834,48 @@ REGALS_PRICING = {
 }
 
 
+# ── Tarifa d'impressió digital en offset (portada de la web) ───────────────
+# Preus NETS = PVD. PVP = PVD × (1 + marge). IVA 21% al resum. 'mult' = unitats
+# que surten per full SRA3 32×45 (informatiu). 'preu'/'preu_esp' = paper bàsic /
+# paper especial. Preus amb impressió doble cara i tall/hendido inclosos.
+OFFSET_PRICING = {
+    'margin_percent': 40.0,
+    # Full sencer SRA3 (32×45) imprès sense tall.
+    'full_sheet': {
+        'options': [
+            {'id': '1cara',  'label': 'Full sencer · 1 cara a color (paper bàsic 300gr)',  'price': 1.82},
+            {'id': '2cares', 'label': 'Full sencer · 2 cares a color (paper bàsic 300gr)', 'price': 2.42},
+        ],
+        'suplement': {'label': 'Suplement acabat (Plata / Daurat / Kraft / Rústic)', 'price': 1.00},
+    },
+    'products': [
+        # Papereria (pàg. 15)
+        {'id': 'rec_10x15',     'group': 'Papereria', 'label': 'Recordatoris/Invitacions 10×15',            'mult': 8,  'preu': 0.61, 'preu_esp': 0.73},
+        {'id': 'rec_15x15',     'group': 'Papereria', 'label': 'Recordatoris/Invitacions 15×15 o 10×20',    'mult': 6,  'preu': 0.72, 'preu_esp': 0.92},
+        {'id': 'rec_13x18',     'group': 'Papereria', 'label': 'Recordatoris/Invitacions 13×18 o 15×20',    'mult': 4,  'preu': 0.79, 'preu_esp': 1.09},
+        {'id': 'targeta_visita','group': 'Papereria', 'label': 'Targetes de visita 5,5×8,5',                'mult': 25, 'preu': 0.24, 'preu_esp': 0.28},
+        {'id': 'flyer_7x14',    'group': 'Papereria', 'label': 'Flyer 7×14',                                'mult': 12, 'preu': 0.48, 'preu_esp': 0.58},
+        {'id': 'targeta_6x6',   'group': 'Papereria', 'label': 'Targetes 6×6',                              'mult': 35, 'preu': 0.24, 'preu_esp': 0.28},
+        {'id': 'punt_5x20',     'group': 'Papereria', 'label': 'Punts de llibre 5,5×20',                    'mult': 10, 'preu': 0.55, 'preu_esp': 0.67},
+        {'id': 'punt_7x22',     'group': 'Papereria', 'label': 'Punts de llibre 7×22',                      'mult': 8,  'preu': 0.61, 'preu_esp': 0.73},
+        {'id': 'diptic_15x20',  'group': 'Papereria', 'label': 'Díptic 15×20 (15×40 obert)',               'mult': 2,  'preu': 1.40, 'preu_esp': 2.00},
+        {'id': 'diptic_15x15',  'group': 'Papereria', 'label': 'Díptic 15×15 (15×30) / 10×20 (10×40)',      'mult': 3,  'preu': 0.96, 'preu_esp': 1.35},
+        {'id': 'diptic_22x32',  'group': 'Papereria', 'label': 'Díptic 22,5×32 (full SRA3 doblegat)',       'mult': 1,  'preu': 3.63, 'preu_esp': 4.84},
+        {'id': 'acordeo',       'group': 'Papereria', 'label': 'Acordeó (15×40, 4 parts de 15×10)',         'mult': 2,  'preu': 1.57, 'preu_esp': 2.18},
+        {'id': 'acordeo_tapa',  'group': 'Papereria', 'label': 'Acordeó amb tapa (15×40, 4 parts de 15×10)','mult': 2,  'preu': 5.44, 'preu_esp': 6.05},
+        # Calendaris i varis (pàg. 16)
+        {'id': 'cal_triangle',   'group': 'Calendaris i varis', 'label': 'Calendari triangle de sobretaula',              'mult': 2,  'preu': 1.60, 'preu_esp': 2.20},
+        {'id': 'cal_butxaca',    'group': 'Calendaris i varis', 'label': 'Calendari butxaca 7×10',                        'mult': 16, 'preu': 0.50, 'preu_esp': 0.50},
+        {'id': 'cal_paret_12m',  'group': 'Calendaris i varis', 'label': 'Calendari paret 32×45 · 12 mesos + forat',      'mult': 1,  'preu': 2.20, 'preu_esp': 3.40},
+        {'id': 'cal_paret_22x32','group': 'Calendaris i varis', 'label': 'Calendari paret 22×32 · 6 fulls + portada',     'mult': 1,  'preu': 8.50, 'preu_esp': 16.00},
+        {'id': 'cal_paret_32x45','group': 'Calendaris i varis', 'label': 'Calendari paret 32×45 · 6 fulls + portada',     'mult': 1,  'preu': 15.00,'preu_esp': 22.00},
+        {'id': 'cal_faldo_petit','group': 'Calendaris i varis', 'label': 'Calendari faldó petit (12×7) + imant',          'mult': 1,  'preu': 1.80, 'preu_esp': None},
+        {'id': 'cal_faldo_gran', 'group': 'Calendaris i varis', 'label': 'Calendari faldó gran (33,5×23) + forat',        'mult': 1,  'preu': 3.20, 'preu_esp': 4.30},
+        {'id': 'banderoles',     'group': 'Calendaris i varis', 'label': 'Banderoles 10×13 amb corda',                    'mult': 8,  'preu': 0.70, 'preu_esp': 0.80},
+    ],
+}
+
+
 @app.route('/calculadora')
 @login_required
 def calculadora():
@@ -3904,6 +3947,7 @@ def calculadora():
                            digital_pricing=DIGITAL_PRICING,
                            orlas_pricing=ORLAS_PRICING,
                            regals_pricing=REGALS_PRICING,
+                           offset_pricing=OFFSET_PRICING,
                            commercial_margins=_load_user_commercial_margins(user),
                            user_has_email=user_has_email)
 
@@ -11144,6 +11188,7 @@ def ajustos():
         {'key': 'digital', 'label': 'Digitalització', 'description': 'Marge de la digitalització (cintes, DVD, Súper 8). Es cobra sense IVA.', 'value': _format_margin_for_view(margins['digital'])},
         {'key': 'orles', 'label': 'Orles', 'description': 'Marge de les orles escolars (impressió per trams + muntatge).', 'value': _format_margin_for_view(margins['orles'])},
         {'key': 'regals', 'label': 'Regals', 'description': 'Marge dels regals personalitzats (tasses i imants).', 'value': _format_margin_for_view(margins['regals'])},
+        {'key': 'offset', 'label': 'Offset / Papereria', 'description': 'Marge de la impressió digital en offset (targetes, invitacions, calendaris, díptics…).', 'value': _format_margin_for_view(margins['offset'])},
     ]
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
