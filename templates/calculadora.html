@@ -4870,6 +4870,27 @@ function afegirRegalsACistella(){
 
 _regalsInit();
 
+// Obre la calculadora directament en un producte segons ?mode= (o ?service=,
+// per compatibilitat amb els enllaços antics de la web).
+(function(){
+  try{
+    var qs = new URLSearchParams(window.location.search || '');
+    var mode = (qs.get('mode') || '').toLowerCase().trim();
+    if(!mode){
+      var svc = (qs.get('service') || '').toLowerCase().trim();
+      var map = {frames:'marc', marcs:'marc', canvas:'llenc', llenc:'llenc', llencos:'llenc',
+                 photo_print:'impressio', impressio:'impressio', impressions:'impressio', fine_art:'impressio',
+                 albums:'album', album:'album', orles:'orla', orla:'orla',
+                 regals:'regals', digital:'digital', digitalitzacio:'digital'};
+      mode = map[svc] || '';
+    }
+    var valid = ['marc','impressio','llenc','album','digital','orla','regals'];
+    if(mode && valid.indexOf(mode) >= 0 && typeof setBudgetMode === 'function'){
+      setBudgetMode(mode);
+    }
+  }catch(e){ /* silenci: mode per defecte */ }
+})();
+
 // Quins preus s'han de mostrar al pressupost: 'pvd' (només PVD), 'pvp' (només
 // PVP) o 'both' (PVP principal + cost PVD per a admin).
 //  · Amb client seleccionat → mana el seu tipus (taller=PVD, pvp=PVP).
