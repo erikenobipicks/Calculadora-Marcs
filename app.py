@@ -3496,7 +3496,17 @@ def inici():
         app.logger.exception('dashboard_counts_failed')
         counts = {'pressupostos': 0, 'comandes': 0, 'pendents_albara': 0,
                   'pendents_cobrament': 0, 'pendents_entrega': 0, 'entregats': 0, 'urgents': 0}
-    return render_template('inici.html', counts=counts)
+    # Novetats (what's new): es mostren en entrar (post-login), com a la calculadora.
+    novetats_pendents = []
+    try:
+        nrow = query('SELECT novetats_vistes FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        novetats_pendents = _novetats_pendents(_row_get(nrow, 'novetats_vistes', '') or '',
+                                                bool(session.get('is_admin')))
+    except Exception as e:
+        print(f'[novetats] inici lectura pendents skip: {e}')
+    return render_template('inici.html', counts=counts,
+                           novetats_pendents=novetats_pendents,
+                           novetats_ids=[n['id'] for n in novetats_pendents])
 
 
 # ── Sistema de novetats (what's new) ───────────────────────────────────────
@@ -3506,6 +3516,34 @@ def inici():
 # 'tots' | 'admin' (només Reus Revela) | 'usuaris' (només professionals).
 # 'punts_admin' són punts extra que només veuen els admins.
 NOVETATS = [
+    {
+        'id': 'calc-tots-productes',
+        'data': '17/07/2026',
+        'titol': 'Ara pots pressupostar tots els productes',
+        'audiencia': 'tots',
+        'intro': 'La calculadora ja no és només de marcs: amb el selector de dalt («Què vols pressupostar?») pots calcular tots els productes i ajuntar-los al mateix pressupost.',
+        'punts': [
+            '🖼️ Marcs i 🖨️ impressió fotogràfica, com sempre.',
+            '🎨 Llenços: mides de catàleg o a mida (preu coherent), amb bastidor o enrotllat.',
+            '📔 Àlbums: individual (mida, plecs, coberta i extres) i packs de boda i comunió.',
+            '🎓 Orles i 🎁 regals (tasses i imants).',
+            '💾 Digitalització de cintes: llista de cintes amb durada i reparació, amb total sense IVA per enviar directament.',
+        ],
+        'punts_admin': [
+            'Tot va a la mateixa cistella amb PVD/PVP segons el client, PDF, Pressupost/Albarà a Factura Directa i botó de copiar el text per WhatsApp.',
+        ],
+    },
+    {
+        'id': 'marges-per-producte',
+        'data': '17/07/2026',
+        'titol': 'Marge configurable per a cada producte',
+        'audiencia': 'tots',
+        'intro': 'A Ajustos ara pots definir un marge diferent per a cada producte, no només per als marcs.',
+        'punts': [
+            'Entra a Ajustos i posa el marge que vulguis a cada categoria: llenços, àlbums, digitalització, orles i regals.',
+            'Cada producte de la calculadora aplica el seu marge automàticament.',
+        ],
+    },
     {
         'id': 'pressupost-multimarc',
         'data': '15/06/2026',

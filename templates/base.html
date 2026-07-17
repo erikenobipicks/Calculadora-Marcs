@@ -53,7 +53,6 @@ nav.site-nav .nav-toggle{display:none;align-items:center;justify-content:center;
     <a href="/calculadora" {% if request.path == '/calculadora' %}class="active"{% endif %}>Calculadora</a>
     <a href="/historial" {% if request.path == '/historial' %}class="active"{% endif %}>Pressupostos</a>
     <a href="/cataleg" {% if request.path == '/cataleg' %}class="active"{% endif %}>Cat&agrave;leg</a>
-    <a href="https://reusrevela.cat/area-privada/lienzos" target="_blank" rel="noopener noreferrer">Llen&ccedil;os &#8599;</a>
     {% if not session.is_admin %}
     <a href="/ajustos" {% if request.path == '/ajustos' %}class="active"{% endif %}>Ajustos</a>
     <a href="/ajuda" {% if request.path == '/ajuda' %}class="active"{% endif %}>Ajuda</a>
