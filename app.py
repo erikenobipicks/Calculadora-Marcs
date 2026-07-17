@@ -2271,16 +2271,14 @@ def _notify_signup_email(*, action, status, name, email, phone, business_name,
     l'avís al mateix correu que té configurat per a SMTP."""
     try:
         cfg = {r['clau']: r['valor'] for r in (query('SELECT clau, valor FROM config') or [])}
-        gmail_user = (cfg.get('gmail_user') or '').strip()
-        gmail_pass = (cfg.get('gmail_pass') or '').strip()
-        if not gmail_user or not gmail_pass:
-            print(f"[signup_notify] skip: gmail_user/pass no configurat — alta {email} desada sense email")
+        # Destinatari: signup_notify_email → gmail_user → email del primer admin.
+        dest = (cfg.get('signup_notify_email') or cfg.get('gmail_user') or '').strip()
+        if not dest:
+            arow = query("SELECT email FROM usuaris WHERE is_admin=1 AND email IS NOT NULL AND email<>'' ORDER BY id LIMIT 1", one=True)
+            dest = (_row_get(arow, 'email', '') or '').strip()
+        if not dest:
+            print(f"[signup_notify] skip: cap destinatari (configura signup_notify_email) — alta {email} desada")
             return
-        dest = (cfg.get('signup_notify_email') or gmail_user).strip()
-
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
 
         action_label = 'Nova sol·licitud d\'alta' if action == 'created' else 'Actualització de perfil'
         status_label = {
@@ -2329,15 +2327,10 @@ def _notify_signup_email(*, action, status, name, email, phone, business_name,
   <p style="font-size:11px;color:#9E9B94;margin-top:24px">Aquest correu s'envia automàticament des de la calculadora quan algú envia el formulari d'alta professional a reusrevela.cat.</p>
 </div>
 """
-        m = MIMEMultipart('alternative')
-        m['Subject'] = f"[Alta professional] {name or email} — {status_label}"
-        m['From'] = gmail_user
-        m['To'] = dest
-        m.attach(MIMEText(html, 'html'))
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=8) as s:
-            s.login(gmail_user, gmail_pass)
-            s.sendmail(gmail_user, [dest], m.as_string())
-        print(f"[signup_notify] OK: enviat a {dest} per a {email} (action={action})")
+        subject_email = f"[Alta professional] {name or email} — {status_label}"
+        # Sender intel·ligent: Resend (HTTPS, funciona a Railway) o Gmail SMTP.
+        ok = _send_user_email_html(dest, subject_email, html, log_tag='signup_notify')
+        print(f"[signup_notify] {'OK' if ok else 'FAIL'}: dest={dest} email={email} action={action}")
     except Exception as e:
         # No bloquejar mai la resposta del signup: l'usuari s'ha desat,
         # només es perd la notificació puntual.
