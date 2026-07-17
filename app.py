@@ -1227,6 +1227,10 @@ def _normalize_commercial_margins(raw=None, frame_margin=None, print_margin=None
         'laminate_foam': general_margin,
         'fine_art': max(_safe_float(data.get('fine_art'), frame_value), 0.0),
         'albums': max(_safe_float(data.get('albums'), frame_value), 0.0),
+        # Productes de la calculadora amb marge propi configurable (per defecte 40%).
+        'digital': max(_safe_float(data.get('digital'), 40.0), 0.0),
+        'orles': max(_safe_float(data.get('orles'), 40.0), 0.0),
+        'regals': max(_safe_float(data.get('regals'), 40.0), 0.0),
     }
     return normalized
 
@@ -3801,7 +3805,7 @@ def calculadora():
     except:
         pass
     try:
-        user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email FROM usuaris WHERE id=?', [session['user_id']], one=True)
+        user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
     except Exception as e:
         # Si la columna 'email' encara no s'ha migrat, ho intentem aplicar i reintenta;
         # en cas extrem fem fallback sense email perquè la calculadora no caigui.
@@ -3811,9 +3815,9 @@ def calculadora():
             except Exception:
                 pass
             try:
-                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email FROM usuaris WHERE id=?', [session['user_id']], one=True)
+                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, email, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
             except Exception:
-                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist FROM usuaris WHERE id=?', [session['user_id']], one=True)
+                user = query('SELECT brand_color, marge_pro_pct, marge, marge_impressio_pro_pct, marge_impressio, mr_tram1_limit, mr_tram2_limit, mr_tram1_pct, mr_tram2_pct, mr_tram3_pct, mr_trams_vist, margins_json FROM usuaris WHERE id=?', [session['user_id']], one=True)
         else:
             raise
     user_has_email = bool((_row_get(user, 'email', '') or '').strip())
@@ -3862,6 +3866,7 @@ def calculadora():
                            digital_pricing=DIGITAL_PRICING,
                            orlas_pricing=ORLAS_PRICING,
                            regals_pricing=REGALS_PRICING,
+                           commercial_margins=_load_user_commercial_margins(user),
                            user_has_email=user_has_email)
 
 @app.route('/api/lookup')
@@ -11092,12 +11097,15 @@ def ajustos():
     margin_entries = [
         {'key': 'general', 'label': 'General', 'description': 'Marge base per a productes generals i acabats que no tenen marge propi.', 'value': _format_margin_for_view(margins['general'])},
         {'key': 'frames', 'label': 'Marcs', 'description': 'Marge principal de la calculadora de marcs.', 'value': _format_margin_for_view(margins['frames'])},
-        {'key': 'canvas', 'label': 'Llenços', 'description': 'S\'utilitza al privat per a llenços i fine art si no es defineix un altre marge.', 'value': _format_margin_for_view(margins['canvas'])},
+        {'key': 'canvas', 'label': 'Llenços', 'description': 'Marge dels llenços de la calculadora (mides de catàleg i a mida).', 'value': _format_margin_for_view(margins['canvas'])},
         {'key': 'prints', 'label': 'Impressió fotogràfica', 'description': 'S\'aplica a còpia fotogràfica i serveix també de base per a acabats d\'impressió.', 'value': _format_margin_for_view(margins['prints'])},
         {'key': 'foam', 'label': 'Foam', 'description': 'Permet separar el marge de foam del de la impressió si ho necessites.', 'value': _format_margin_for_view(margins['foam'])},
         {'key': 'laminate_foam', 'label': 'Laminat + foam', 'description': 'Per si voleu treballar aquesta combinació amb un marge propi.', 'value': _format_margin_for_view(margins['laminate_foam'])},
         {'key': 'fine_art', 'label': 'Fine art', 'description': 'Marge específic per a papers fine art i treballs més cuidats.', 'value': _format_margin_for_view(margins['fine_art'])},
-        {'key': 'albums', 'label': 'Àlbums', 'description': 'Preparat per quan l\'àrea privada també gestioni àlbums amb el mateix compte.', 'value': _format_margin_for_view(margins['albums'])},
+        {'key': 'albums', 'label': 'Àlbums', 'description': 'Marge dels àlbums i libretos (individual i packs de boda/comunió).', 'value': _format_margin_for_view(margins['albums'])},
+        {'key': 'digital', 'label': 'Digitalització', 'description': 'Marge de la digitalització (cintes, DVD, Súper 8). Es cobra sense IVA.', 'value': _format_margin_for_view(margins['digital'])},
+        {'key': 'orles', 'label': 'Orles', 'description': 'Marge de les orles escolars (impressió per trams + muntatge).', 'value': _format_margin_for_view(margins['orles'])},
+        {'key': 'regals', 'label': 'Regals', 'description': 'Marge dels regals personalitzats (tasses i imants).', 'value': _format_margin_for_view(margins['regals'])},
     ]
     nom_emp = u['nom_empresa'] if u and u['nom_empresa'] else ''
     brand_color = _normalize_hex_color(_row_get(u, 'brand_color', DEFAULT_BRAND_COLOR))
