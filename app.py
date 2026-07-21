@@ -10840,6 +10840,29 @@ def crear_pdf(c, mode=''):
         r_adr = query("SELECT valor FROM config WHERE clau='empresa_adreca'", one=True)
         adreca = (r_adr['valor'] if r_adr else '') or 'C/ Mare Molas, 26 · Reus'
 
+    # Marca segons el mode: pressupost a PVD (taller) → Reus Revela; PVP → marca
+    # actual. Es detecta pel mode o perquè la comanda és d'un client de taller.
+    is_pvd_doc = str(mode).strip().lower() in ('pvd', 'cost', 'taller')
+    if not is_pvd_doc:
+        _cext = _row_get(c, 'client_extern_id')
+        if _cext:
+            try:
+                _trow = query("SELECT tipus FROM clients_externs WHERE id=?", [_cext], one=True)
+                if _trow and (_row_get(_trow, 'tipus', '') or '').strip().lower() == 'taller':
+                    is_pvd_doc = True
+            except Exception:
+                pass
+    pvd_logo_override = ''
+    if is_pvd_doc:
+        _rbn = query("SELECT valor FROM config WHERE clau='pvd_brand_nom'", one=True)
+        nom_empresa = ((_rbn['valor'] if _rbn else '') or '').strip() or 'Reus Revela'
+        _rba = query("SELECT valor FROM config WHERE clau='pvd_brand_adreca'", one=True)
+        _rba_val = ((_rba['valor'] if _rba else '') or '').strip()
+        if _rba_val:
+            adreca = _rba_val
+        _rbl = query("SELECT valor FROM config WHERE clau='pvd_brand_logo_b64'", one=True)
+        pvd_logo_override = (_rbl['valor'] if _rbl else '') or ''
+
     GREEN = colors.HexColor(green_hex)
     lang = (c.get('lang') or 'ca').lower()
     t = PDF_T.get(lang, PDF_T['ca'])
@@ -10860,8 +10883,11 @@ def crear_pdf(c, mode=''):
 
     # â"€â"€ Logo (si existeix) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     try:
-        u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
-        logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
+        if is_pvd_doc and pvd_logo_override:
+            logo_data_url = pvd_logo_override
+        else:
+            u_logo = query('SELECT logo_b64 FROM usuaris WHERE id=?', [c.get('user_id',0)], one=True)
+            logo_data_url = _row_get(u_logo, 'logo_b64', '') or ''
         if logo_data_url and logo_data_url.startswith('data:'):
             import base64 as _b64
             data_url = logo_data_url
