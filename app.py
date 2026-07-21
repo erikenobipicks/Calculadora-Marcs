@@ -4909,6 +4909,54 @@ def guardar():
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
 
+@app.route('/api/desar-cistella', methods=['POST'])
+@login_required
+def api_desar_cistella():
+    """Desa la cistella multi-producte com una comanda a l'historial: una fila
+    per línia, totes sota el mateix sessio_id (queda agrupada com un pressupost).
+    Cada línia: {text, quantity, preu_net (PVP), cost_produccio (PVD)}."""
+    d = request.get_json(force=True) or {}
+    items = d.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'ok': False, 'error': 'La cistella és buida.'}), 400
+    client_nom = (d.get('client_nom') or '').strip()
+    client_tel = (d.get('client_tel') or '').strip()
+    client_extern_id = (d.get('client_extern_id') or '').strip() or None
+    observacions = (d.get('observacions') or '').strip()
+    lang = (d.get('lang') or 'ca').strip() or 'ca'
+    sessio_id = secrets.token_hex(8)
+    num_pressupost = generar_num_pressupost()
+    data_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+    n = 0
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            continue
+        text = (str(it.get('text') or 'Producte')).strip()[:300]
+        try:
+            qty = float(it.get('quantity') or 1) or 1
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            pvp = float(it.get('preu_net') or 0)
+        except (TypeError, ValueError):
+            pvp = 0.0
+        try:
+            pvd = float(it.get('cost_produccio') or 0)
+        except (TypeError, ValueError):
+            pvd = 0.0
+        execute(
+            '''INSERT INTO comandes
+               (user_id, data, client_nom, client_tel, marc_principal, quantitat,
+                preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
+                sessio_id, opcio_nom, num_pressupost, lang, client_extern_id, tipus_peca)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            [session['user_id'], data_str, client_nom, client_tel, text, qty,
+             pvp, round(pvp * 1.21, 2), pvd, 0, round(pvp * 1.21, 2),
+             observacions if i == 0 else '',
+             sessio_id, f'Línia {i + 1}', num_pressupost, lang, client_extern_id, 'producte'])
+        n += 1
+    return jsonify({'ok': True, 'sessio_id': sessio_id, 'num': num_pressupost, 'n': n})
+
 
 @app.route('/sessio/<sessio_id>/pagat', methods=['POST'])
 @login_required

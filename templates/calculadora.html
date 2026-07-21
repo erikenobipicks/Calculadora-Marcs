@@ -5223,6 +5223,23 @@ function cistellaComandaTallerWA(){
   if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
   window.open('https://wa.me/34613346180?text=' + encodeURIComponent(_cistellaComandaText()), '_blank');
 }
+// Desa la cistella com a comanda a l'historial (una línia per producte).
+function desarCistellaComanda(){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  var payload = _cistellaPayloadBase();
+  var btns = document.querySelectorAll('#cistella-actions button');
+  btns.forEach(function(b){ b.disabled = true; });
+  fetch('/api/desar-cistella', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+    .then(function(r){ return r.json(); }).then(function(d){
+      btns.forEach(function(b){ b.disabled = false; });
+      if(d.ok){
+        window._numPressupost = d.num || window._numPressupost;
+        showAlert('Comanda desada a l\'historial' + (d.num ? (' (' + d.num + ', ' + d.n + ' línies)') : '') + '.', 'ok');
+      } else {
+        showAlert('Error desant: ' + (d.error || 'desconegut'), 'err');
+      }
+    }).catch(function(){ btns.forEach(function(b){ b.disabled = false; }); showAlert('Error de connexió en desar la comanda.', 'err'); });
+}
 
 function obrirCistella(){ renderCistella(); var m=document.getElementById('cistella-modal'); if(m) m.style.display='flex'; }
 function tancarCistella(){ var m=document.getElementById('cistella-modal'); if(m) m.style.display='none'; }
@@ -5858,6 +5875,7 @@ recalcMides();
     <div id="cistella-actions" style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end">
       <button type="button" onclick="copiarCistella()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text del pressupost per enganxar-lo a WhatsApp">📋 Copiar text</button>
       <button type="button" onclick="cistellaPDF()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">📄 PDF</button>
+      <button type="button" onclick="desarCistellaComanda()" style="padding:8px 14px;border:1px solid var(--green,#1A6B45);border-radius:7px;background:var(--green-l,#eaf3ee);font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--green,#1A6B45)" title="Desar aquesta comanda a l'historial (queda registrada com a pressupost/comanda)">💾 Desar comanda</button>
       <button type="button" onclick="cistellaComandaTallerWA()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per WhatsApp, amb el detall i el PVD">🟢 Taller WhatsApp</button>
       <button type="button" onclick="cistellaComandaTaller()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per correu, amb el detall i el PVD">📧 Taller email</button>
       {% if session.is_admin %}
