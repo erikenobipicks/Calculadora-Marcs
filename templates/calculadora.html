@@ -662,7 +662,8 @@ body{
         <div id="client-modal" class="cmodal" style="display:none">
           <div class="cmodal-card">
             <div class="cmodal-title" id="cmodal-title">Nou client</div>
-            <label>Nom *</label><input type="text" id="cm-nom" autocomplete="off">
+            <label>Nom fiscal *</label><input type="text" id="cm-nom" autocomplete="off">
+            <label>Nom comercial / comerç</label><input type="text" id="cm-comercial" autocomplete="off" placeholder="Com el reconeixes (ex. Foto Estudi Marc)">
             <div class="cmodal-row">
               <div><label>Telèfon</label><input type="text" id="cm-tel" autocomplete="off"></div>
               <div><label>NIF / CIF</label><input type="text" id="cm-nif" autocomplete="off" style="text-transform:uppercase"></div>
@@ -2090,7 +2091,7 @@ function filterClients(){
   var list = CLIENTS_EXTERNS.filter(function(c){
     if(clientFilter !== 'tots' && (c.tipus||'pvp') !== clientFilter) return false;
     if(!q) return true;
-    var hay = ((c.nom||'')+' '+(c.nif||'')).toLowerCase();
+    var hay = ((c.nom_comercial||'')+' '+(c.nom||'')+' '+(c.nif||'')).toLowerCase();
     var tel = (c.telefon||'').replace(/\D/g,'');
     return hay.indexOf(q) >= 0 || (digits && tel.indexOf(digits) >= 0);
   }).slice(0, 40);
@@ -2099,9 +2100,16 @@ function filterClients(){
   } else {
     box.innerHTML = list.map(function(c){
       var isPvd = (c.tipus === 'taller');
-      var meta = [c.nif, c.telefon].filter(Boolean).map(_escClient).join(' · ');
+      // Nom principal = nom comercial (com el reconeixem); si en té, el nom
+      // fiscal passa a la línia de detall.
+      var principal = c.nom_comercial || c.nom;
+      var metaParts = [];
+      if(c.nom_comercial && c.nom && c.nom_comercial !== c.nom) metaParts.push(c.nom);
+      if(c.nif) metaParts.push(c.nif);
+      if(c.telefon) metaParts.push(c.telefon);
+      var meta = metaParts.map(_escClient).join(' · ');
       return '<div class="cr-item" onclick="selectClient('+c.id+')">'
-        + '<span><strong>'+_escClient(c.nom)+'</strong>'+(meta?'<div class="cr-meta">'+meta+'</div>':'')+'</span>'
+        + '<span><strong>'+_escClient(principal)+'</strong>'+(meta?'<div class="cr-meta">'+meta+'</div>':'')+'</span>'
         + '<span class="cr-badge '+(isPvd?'pvd':'pvp')+'">'+(isPvd?'PVD':'PVP')+'</span></div>';
     }).join('');
   }
@@ -2126,7 +2134,15 @@ function selectClient(id){
   // pot escriure a mà.
   if(telInp) telInp.value = c.telefon || '';
   var selBox = document.getElementById('client-selected');
-  if(selBox){ document.getElementById('client-selected-name').textContent = c.nom + (c.tipus==='taller' ? ' · PVD' : ' · PVP'); selBox.style.display=''; }
+  if(selBox){
+    // Mostrem el nom comercial (com el reconeixem) i, si difereix, el fiscal.
+    var _princ = c.nom_comercial || c.nom || '';
+    var _label = _princ;
+    if(c.nom_comercial && c.nom && c.nom_comercial !== c.nom) _label += ' · ' + c.nom;
+    _label += (c.tipus==='taller' ? ' · PVD' : ' · PVP');
+    document.getElementById('client-selected-name').textContent = _label;
+    selBox.style.display='';
+  }
   var srch = document.getElementById('client-search'); if(srch) srch.style.display='none';
   var filt = document.getElementById('client-filter'); if(filt) filt.style.display='none';
   document.getElementById('client-results').classList.remove('open');
@@ -2169,6 +2185,7 @@ function openClientModal(editId){
   // En crear, prefill amb el que s'estava escrivint / el nom manual.
   var srch = document.getElementById('client-search');
   document.getElementById('cm-nom').value = c ? (c.nom||'') : ((srch && srch.value) || (document.getElementById('client_nom')||{}).value || '');
+  document.getElementById('cm-comercial').value = c ? (c.nom_comercial||'') : '';
   document.getElementById('cm-tel').value = c ? (c.telefon||'') : ((document.getElementById('client_tel')||{}).value || '');
   document.getElementById('cm-nif').value = c ? (c.nif||'') : '';
   document.getElementById('cm-email').value = c ? (c.email||'') : '';
@@ -2187,8 +2204,10 @@ function saveClientModal(){
   var tipus='pvp'; var radios=document.getElementsByName('cm-tipus');
   for(var j=0;j<radios.length;j++) if(radios[j].checked) tipus=radios[j].value;
   var recarrec = !!(document.getElementById('cm-recarrec')||{}).checked;
+  var nomComercial=(document.getElementById('cm-comercial').value||'').trim();
   var body={
     nom:nom,
+    nom_comercial:nomComercial,
     telefon:(document.getElementById('cm-tel').value||'').trim(),
     nif:(document.getElementById('cm-nif').value||'').trim(),
     email:(document.getElementById('cm-email').value||'').trim(),
@@ -2202,7 +2221,7 @@ function saveClientModal(){
       btn.disabled=false;
       if(!d || !d.ok){ alert((d && d.error) || 'No s\'ha pogut desar el client.'); return; }
       var id = _editingClientId || d.id;
-      var obj = {id:id, nom:nom, nif:body.nif, tipus:tipus, telefon:body.telefon, email:body.email, recarrec_equiv:recarrec};
+      var obj = {id:id, nom:nom, nom_comercial:nomComercial, nif:body.nif, tipus:tipus, telefon:body.telefon, email:body.email, recarrec_equiv:recarrec};
       var found=false;
       for(var i=0;i<CLIENTS_EXTERNS.length;i++){ if(CLIENTS_EXTERNS[i].id===id){ CLIENTS_EXTERNS[i]=obj; found=true; break; } }
       if(!found) CLIENTS_EXTERNS.push(obj);
