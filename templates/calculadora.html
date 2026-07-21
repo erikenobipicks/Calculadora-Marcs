@@ -4324,11 +4324,16 @@ function afegirACistella(){
   var c = window._c;
   if(!c || !((c.preu_net||0)>0 || (c.cost_produccio||0)>0)){ showAlert('Calcula un marc abans d\'afegir-lo al pressupost.', 'err'); return; }
   var qty = parseFloat((document.getElementById('quantitat')||{}).value)||1;
+  // Referència de la motllura (principal, o premarc com a segona opció): permet
+  // que el PDF multi-marc mostri la imatge de mostra de cada marc.
+  var _mref = ((document.getElementById('marc_principal')||{}).value||'').trim()
+              || ((document.getElementById('pre_marc')||{}).value||'').trim();
   _cistella.push({
     text: _descripcioMarcActual(),
     quantity: qty,
     preu_net: c.preu_net||0,
-    cost_produccio: c.cost_produccio||0
+    cost_produccio: c.cost_produccio||0,
+    ref: _mref
   });
   renderCistella();
   if(_budgetMode === 'impressio'){

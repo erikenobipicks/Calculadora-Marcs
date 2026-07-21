@@ -11184,6 +11184,44 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
                             leading=size*1.4)
         return Paragraph(str(txt) if txt not in (None, '') else '—', st)
 
+    from reportlab.platypus import Image as RLImage
+
+    def _marc_thumb(ref):
+        """Retorna una miniatura (RLImage) de la foto de mostra d'una motllura,
+        o None si no en té una de local. Mateixa resolució que el PDF d'un marc."""
+        if not ref:
+            return None
+        try:
+            r = query('SELECT foto, ref2 FROM moldures WHERE LOWER(referencia)=LOWER(?)',
+                      [ref], one=True)
+            if not r:
+                return None
+            foto_url = _resolve_moldura_photo(ref, _row_get(r, 'foto', '') or '',
+                                              ref2=_row_get(r, 'ref2', '') or '')
+            if not foto_url.startswith('/static/'):
+                return None
+            rel = foto_url.lstrip('/')
+            full = _os.path.join(app.root_path, 'static', rel.replace('static/', ''))
+            if _os.path.exists(full):
+                return RLImage(full, width=22*mm, height=16*mm)
+        except Exception as _e:
+            print(f"[pdf-marcs] thumb error {ref}: {_e}")
+        return None
+
+    def _concept_cell(text, ref):
+        """Cel·la de concepte: si la motllura té foto de mostra, la posa a
+        l'esquerra del text; si no, només el text."""
+        thumb = _marc_thumb(ref)
+        if thumb is None:
+            return p(text, size=9)
+        inner = Table([[thumb, p(text, size=9)]], colWidths=[24*mm, W*0.52 - 24*mm])
+        inner.setStyle(TableStyle([
+            ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+            ('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(0,0),4),
+            ('TOPPADDING',(0,0),(-1,-1),0),('BOTTOMPADDING',(0,0),(-1,-1),0),
+        ]))
+        return inner
+
     story = []
 
     # ── Capçalera + dades empresa ─────────────────────────────────────────
@@ -11286,6 +11324,7 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
         if not isinstance(it, dict):
             continue
         text = (str(it.get('text') or 'Emmarcació')).strip()
+        ref = (str(it.get('ref') or '')).strip()
         try:
             qty = float(it.get('quantity') or 1) or 1
         except Exception:
@@ -11299,7 +11338,7 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
         subtotal += import_linia
         qty_txt = str(int(qty)) if float(qty).is_integer() else f'{qty:g}'
         rows.append([
-            p(text, size=9),
+            _concept_cell(text, ref),
             p(qty_txt, size=9, align='CENTER'),
             p(f'{unit:.2f} €', size=9, align='RIGHT'),
             p(f'{import_linia:.2f} €', size=9, align='RIGHT'),
