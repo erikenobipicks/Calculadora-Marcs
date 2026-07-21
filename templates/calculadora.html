@@ -2119,7 +2119,12 @@ function selectClient(id){
   hid.dataset.telefon = c.telefon || '';
   var nomInp = document.getElementById('client_nom'), telInp = document.getElementById('client_tel');
   if(nomInp){ nomInp.value = c.nom || ''; nomInp.readOnly = true; }
-  if(telInp && c.telefon) telInp.value = c.telefon;
+  // En seleccionar un client habitual (també de taller/PVD), la seva fitxa és
+  // l'origen autoritatiu del telèfon: l'hi posem sempre. Si la fitxa no en té,
+  // buidem el camp per no arrossegar el telèfon d'un client anterior (evita
+  // enviar el pressupost per WhatsApp al número equivocat). L'usuari sempre el
+  // pot escriure a mà.
+  if(telInp) telInp.value = c.telefon || '';
   var selBox = document.getElementById('client-selected');
   if(selBox){ document.getElementById('client-selected-name').textContent = c.nom + (c.tipus==='taller' ? ' · PVD' : ' · PVP'); selBox.style.display=''; }
   var srch = document.getElementById('client-search'); if(srch) srch.style.display='none';
