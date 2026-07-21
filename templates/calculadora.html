@@ -5219,6 +5219,10 @@ function cistellaComandaTaller(){
   var dest = 'reusrevela@gmail.com';
   window.location.href = 'mailto:' + encodeURIComponent(dest) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
 }
+function cistellaComandaTallerWA(){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  window.open('https://wa.me/34613346180?text=' + encodeURIComponent(_cistellaComandaText()), '_blank');
+}
 
 function obrirCistella(){ renderCistella(); var m=document.getElementById('cistella-modal'); if(m) m.style.display='flex'; }
 function tancarCistella(){ var m=document.getElementById('cistella-modal'); if(m) m.style.display='none'; }
@@ -5854,7 +5858,8 @@ recalcMides();
     <div id="cistella-actions" style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end">
       <button type="button" onclick="copiarCistella()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text del pressupost per enganxar-lo a WhatsApp">📋 Copiar text</button>
       <button type="button" onclick="cistellaPDF()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)">📄 PDF</button>
-      <button type="button" onclick="cistellaComandaTaller()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per correu, amb el detall i el PVD">📥 Comanda al taller</button>
+      <button type="button" onclick="cistellaComandaTallerWA()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per WhatsApp, amb el detall i el PVD">🟢 Taller WhatsApp</button>
+      <button type="button" onclick="cistellaComandaTaller()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per correu, amb el detall i el PVD">📧 Taller email</button>
       {% if session.is_admin %}
       <button type="button" onclick="cistellaFD('pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa; usa PVD si el client és de taller">Pressupost FD</button>
       <button type="button" onclick="cistellaFD('albara','pvp')" class="albara-btn albara-pvp">Albarà PVP</button>
