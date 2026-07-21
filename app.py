@@ -5247,6 +5247,7 @@ def admin_ensure_clients_externs():
         # IF NOT EXISTS, per tant idempotents.
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS tipus VARCHAR(20) DEFAULT 'pvp'",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS nom_comercial VARCHAR(255)",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
@@ -5490,6 +5491,7 @@ def admin_run_migrations():
         # fallaria si anés primer.
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS tipus VARCHAR(20) DEFAULT 'pvp'",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS telefon VARCHAR(50)",
+        "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS nom_comercial VARCHAR(255)",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
         "ALTER TABLE clients_externs ALTER COLUMN fd_contact_id DROP NOT NULL",
         "ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS usuari_id INTEGER",
@@ -9272,10 +9274,11 @@ def admin_fd_orles_create():
 def admin_clients_externs():
     """Llistat de clients habituals (taller + pvp)."""
     _ensure_recarrec_column()
+    _ensure_nom_comercial_column()
     filtre = (request.args.get('tipus') or '').strip().lower()
     if filtre in ('taller', 'pvp'):
         clients = query("""
-            SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
+            SELECT c.id, c.nom, c.nom_comercial, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
                    c.actiu, c.created_at, c.usuari_id, c.dropbox_url, c.recarrec_equiv,
                    u.username AS usuari_username, u.nom AS usuari_nom
             FROM clients_externs c
@@ -9285,7 +9288,7 @@ def admin_clients_externs():
     else:
         filtre = ''
         clients = query("""
-            SELECT c.id, c.nom, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
+            SELECT c.id, c.nom, c.nom_comercial, c.nif, c.fd_contact_id, c.tipus, c.telefon, c.email,
                    c.actiu, c.created_at, c.usuari_id, c.dropbox_url, c.recarrec_equiv,
                    u.username AS usuari_username, u.nom AS usuari_nom
             FROM clients_externs c
@@ -9352,6 +9355,7 @@ def admin_clients_externs_crear():
     nom = (payload.get('nom') or '').strip()
     if not nom:
         return jsonify({'ok': False, 'error': 'El nom és obligatori'}), 400
+    nom_comercial = (payload.get('nom_comercial') or '').strip() or None
     nif = (payload.get('nif') or '').strip() or None
     tipus = (payload.get('tipus') or 'pvp').strip().lower()
     if tipus not in ('taller', 'pvp'):
@@ -9369,10 +9373,11 @@ def admin_clients_externs_crear():
     dropbox_url = (payload.get('dropbox_url') or '').strip() or None
     recarrec = _parse_bool(payload.get('recarrec_equiv'))
     _ensure_recarrec_column()
+    _ensure_nom_comercial_column()
     new_id = execute(
-        "INSERT INTO clients_externs (nom, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec_equiv, actiu) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [nom, nif, fd_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec, True],
+        "INSERT INTO clients_externs (nom, nom_comercial, nif, fd_contact_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec_equiv, actiu) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [nom, nom_comercial, nif, fd_id, tipus, telefon, email, usuari_id, dropbox_url, recarrec, True],
     )
     print(f"[clients_externs] crear: id={new_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True, 'id': new_id})
@@ -9389,6 +9394,7 @@ def admin_clients_externs_editar(client_id):
     nom = (payload.get('nom') or '').strip()
     if not nom:
         return jsonify({'ok': False, 'error': 'El nom és obligatori'}), 400
+    nom_comercial = (payload.get('nom_comercial') or '').strip() or None
     nif = (payload.get('nif') or '').strip() or None
     tipus = (payload.get('tipus') or 'pvp').strip().lower()
     if tipus not in ('taller', 'pvp'):
@@ -9404,9 +9410,10 @@ def admin_clients_externs_editar(client_id):
     dropbox_url = (payload.get('dropbox_url') or '').strip() or None
     recarrec = _parse_bool(payload.get('recarrec_equiv'))
     _ensure_recarrec_column()
+    _ensure_nom_comercial_column()
     execute(
-        "UPDATE clients_externs SET nom=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=?, recarrec_equiv=? WHERE id=?",
-        [nom, nif, tipus, telefon, email, usuari_id, dropbox_url, recarrec, client_id],
+        "UPDATE clients_externs SET nom=?, nom_comercial=?, nif=?, tipus=?, telefon=?, email=?, usuari_id=?, dropbox_url=?, recarrec_equiv=? WHERE id=?",
+        [nom, nom_comercial, nif, tipus, telefon, email, usuari_id, dropbox_url, recarrec, client_id],
     )
     print(f"[clients_externs] editar: id={client_id} nom={nom} tipus={tipus} usuari_id={usuari_id}")
     return jsonify({'ok': True})
@@ -9431,15 +9438,16 @@ def api_clients_externs():
     Els NO-admin no gestionen clients tipus 'taller' (PVD), així que només se'ls
     retornen els clients PVP."""
     _ensure_recarrec_column()
+    _ensure_nom_comercial_column()
     where_extra = '' if session.get('is_admin') else " AND c.tipus <> 'taller'"
     sql_re = ("""
-        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+        SELECT c.id, c.nom, c.nom_comercial, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
                c.recarrec_equiv, u.nom_empresa AS empresa
         FROM clients_externs c
         LEFT JOIN usuaris u ON c.usuari_id = u.id
         WHERE c.actiu = TRUE""" + where_extra + " ORDER BY c.nom")
     sql_plain = ("""
-        SELECT c.id, c.nom, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
+        SELECT c.id, c.nom, c.nom_comercial, c.nif, c.tipus, c.telefon, c.email, c.usuari_id,
                u.nom_empresa AS empresa
         FROM clients_externs c
         LEFT JOIN usuaris u ON c.usuari_id = u.id
@@ -9457,6 +9465,7 @@ def api_clients_externs():
             {
                 'id': _row_get(r, 'id'),
                 'nom': _row_get(r, 'nom') or '',
+                'nom_comercial': _row_get(r, 'nom_comercial') or '',
                 'nif': _row_get(r, 'nif') or '',
                 'tipus': _row_get(r, 'tipus') or 'pvp',
                 'telefon': _row_get(r, 'telefon') or '',
@@ -9493,6 +9502,20 @@ def _parse_bool(v):
     if isinstance(v, bool):
         return v
     return str(v or '').strip().lower() in ('1', 'true', 'yes', 'on', 't')
+
+
+_nom_comercial_col_ready = False
+def _ensure_nom_comercial_column():
+    """Assegura que existeix clients_externs.nom_comercial (nom del comerç, per
+    reconèixer el client a les llistes internes). Idempotent i cached."""
+    global _nom_comercial_col_ready
+    if _nom_comercial_col_ready:
+        return
+    try:
+        execute("ALTER TABLE clients_externs ADD COLUMN IF NOT EXISTS nom_comercial VARCHAR(255)")
+        _nom_comercial_col_ready = True
+    except Exception as e:
+        print(f"[nom_comercial] ensure column skip: {e}")
 
 
 _recarrec_col_ready = False

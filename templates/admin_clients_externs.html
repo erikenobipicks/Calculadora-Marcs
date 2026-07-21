@@ -106,7 +106,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
         <tbody>
         {% for c in clients %}
         <tr id="row-{{ c.id }}">
-          <td><strong>{{ c.nom }}</strong></td>
+          <td><strong>{{ c.nom_comercial or c.nom }}</strong>{% if c.nom_comercial and c.nom_comercial != c.nom %}<div style="font-size:11px;color:var(--hint)">{{ c.nom }}</div>{% endif %}</td>
           <td>
             {% if c.tipus == 'taller' %}
               <span class="badge badge-taller">Taller</span>
@@ -127,7 +127,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           </td>
           <td>
             <div class="actions-cell">
-              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}', '{{ c.usuari_id or '' }}', '{{ c.dropbox_url or ''|e }}', {{ 'true' if c.recarrec_equiv else 'false' }})">Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}', '{{ c.usuari_id or '' }}', '{{ c.dropbox_url or ''|e }}', {{ 'true' if c.recarrec_equiv else 'false' }}, '{{ c.nom_comercial or ''|e }}')">Editar</button>
               <button class="btn btn-ghost btn-sm" data-id="{{ c.id }}" onclick="toggleClient(this)" style="{% if c.actiu %}color:var(--red){% else %}color:var(--green){% endif %}">
                 {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
               </button>
@@ -150,8 +150,11 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     <h3>Afegir client habitual</h3>
     <div class="muted">Crea un client manualment. Si el vols vincular amb FacturaDirecta, pots importar-lo amb el botó "Importar de FD".</div>
 
-    <label for="c-nom">Nom *</label>
+    <label for="c-nom">Nom fiscal *</label>
     <input type="text" id="c-nom" placeholder="Nom del client o empresa" autocomplete="off">
+
+    <label for="c-comercial">Nom comercial / comerç</label>
+    <input type="text" id="c-comercial" placeholder="Com el reconeixes (ex. Foto Estudi Marc)" autocomplete="off">
 
     <label for="c-nif">NIF / CIF</label>
     <input type="text" id="c-nif" placeholder="Opcional" style="text-transform:uppercase">
@@ -195,8 +198,11 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 
     <input type="hidden" id="e-id">
 
-    <label for="e-nom">Nom *</label>
+    <label for="e-nom">Nom fiscal *</label>
     <input type="text" id="e-nom" autocomplete="off">
+
+    <label for="e-comercial">Nom comercial / comerç</label>
+    <input type="text" id="e-comercial" autocomplete="off" placeholder="Com el reconeixes (ex. Foto Estudi Marc)">
 
     <label for="e-nif">NIF / CIF</label>
     <input type="text" id="e-nif" style="text-transform:uppercase">
@@ -281,7 +287,7 @@ function openCreateModal(){
 }
 function closeCreateModal(){
   document.getElementById('create-modal').classList.remove('is-open');
-  ['c-nom','c-nif','c-tel','c-email','c-dropbox'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['c-nom','c-comercial','c-nif','c-tel','c-email','c-dropbox'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('c-usuari').value = '';
   document.querySelector('input[name="c-tipus"][value="pvp"]').checked = true;
   var re = document.getElementById('c-recarrec'); if(re) re.checked = false;
@@ -294,6 +300,7 @@ function confirmCreate(){
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       nom: nom,
+      nom_comercial: document.getElementById('c-comercial').value.trim(),
       nif: document.getElementById('c-nif').value.trim().toUpperCase(),
       tipus: tipus,
       telefon: document.getElementById('c-tel').value.trim(),
@@ -309,9 +316,10 @@ function confirmCreate(){
 }
 
 /* --- Editar --- */
-function openEditModal(id, nom, nif, tipus, tel, email, usuariId, dropboxUrl, recarrec){
+function openEditModal(id, nom, nif, tipus, tel, email, usuariId, dropboxUrl, recarrec, nomComercial){
   document.getElementById('e-id').value = id;
   document.getElementById('e-nom').value = nom;
+  document.getElementById('e-comercial').value = nomComercial || '';
   document.getElementById('e-nif').value = nif;
   document.getElementById('e-tel').value = tel;
   document.getElementById('e-email').value = email;
@@ -334,6 +342,7 @@ function confirmEdit(){
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       nom: nom,
+      nom_comercial: document.getElementById('e-comercial').value.trim(),
       nif: document.getElementById('e-nif').value.trim().toUpperCase(),
       tipus: tipus,
       telefon: document.getElementById('e-tel').value.trim(),
