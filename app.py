@@ -10317,6 +10317,39 @@ def admin_impressio():
     impressio = query('SELECT referencia, descripcio, preu FROM impressio ORDER BY referencia') or []
     return render_template('admin_impressio.html', impressio=impressio)
 
+@app.route('/admin/seed-impressio-tarifa')
+@admin_required
+def admin_seed_impressio_tarifa():
+    """Aplica (o reaplica) la tarifa de gran format dels 3 papers de forma
+    instantània, sense passar per tota la migració pesada. Idempotent."""
+    try:
+        db = get_db()
+        n = _seed_impressio_tarifa_granformat(db, use_pg=USE_PG, force=True)
+    except Exception as e:
+        try: get_db().rollback()
+        except Exception: pass
+        return (f"<h2>❌ Error</h2><pre>{e}</pre>"
+                "<p><a href='/admin/impressio'>← Tornar</a></p>"), 500
+    files = query("SELECT referencia, descripcio, preu FROM impressio "
+                  "WHERE referencia LIKE 'BARYTA-%' OR referencia LIKE 'MATE-%' "
+                  "OR referencia IN ('40X50','50X70','60X80','60X90','70X100','80X120','100X150') "
+                  "ORDER BY referencia") or []
+    trams = get_config_value('imp_baryta_trams_actius', '?')
+    rows = ''.join(f"<tr><td>{_row_get(r,'referencia')}</td><td>{_row_get(r,'descripcio')}</td>"
+                   f"<td style='text-align:right'>{float(_row_get(r,'preu') or 0):.2f} €</td></tr>"
+                   for r in files)
+    return (
+        f"<h2>✅ Tarifa d'impressió aplicada ({n} anques)</h2>"
+        f"<p>Trams del baryta desactivats: <b>imp_baryta_trams_actius = {trams}</b> "
+        f"(ha de ser <b>0</b>).</p>"
+        "<table border='1' cellpadding='6' style='border-collapse:collapse;font-family:sans-serif'>"
+        "<tr><th>Ref</th><th>Descripció</th><th>PVD</th></tr>"
+        f"{rows}</table>"
+        "<p style='font-family:sans-serif'>Prova ara un 40x50 Hahnemühle: PVD 18,29 € → "
+        "PVP ~32,01 € + IVA.</p>"
+        "<p><a href='/admin/impressio'>← Gestió d'impressió</a> · <a href='/admin'>/admin</a></p>"
+    )
+
 @app.route('/admin/foto', methods=['POST'])
 @admin_required
 def admin_foto():
@@ -13064,14 +13097,16 @@ IMP_TARIFA_GRANFORMAT = {
 }
 
 
-def _seed_impressio_tarifa_granformat(db, use_pg=False):
+def _seed_impressio_tarifa_granformat(db, use_pg=False, force=False):
     """Sembra/actualitza les anques de gran format dels 3 papers a la taula
     `impressio` (upsert per referència). NO toca les mides petites històriques.
     També desactiva els trams del baryta perquè el paper cotó passi a calibrar
-    per anques com el Lustre. Idempotent via flag de versió."""
-    if get_config_value('imp_tarifa_gf_v1', '0') == '1':
-        return
+    per anques com el Lustre. Idempotent; amb force=True es reaplica (per si es
+    retoquen preus). Retorna el nombre de files upsertades."""
+    if not force and get_config_value('imp_tarifa_gf_v1', '0') == '1':
+        return 0
     print('Seeding impressió gran format (Lustre / Hahnemühle / Pòster Mate)...')
+    n = 0
     for paper, (prefix, desc_pref, files) in IMP_TARIFA_GRANFORMAT.items():
         for (w, h, preu) in files:
             ref = f'{prefix}{w}X{h}'
@@ -13081,13 +13116,15 @@ def _seed_impressio_tarifa_granformat(db, use_pg=False):
                 execute('UPDATE impressio SET descripcio=?, preu=? WHERE referencia=?', [desc, preu, ref])
             else:
                 execute('INSERT INTO impressio (referencia, descripcio, preu) VALUES (?,?,?)', [ref, desc, preu])
+            n += 1
     # El baryta (Hahnemühle) passa a calibració per anques: desactivem el seu
     # sistema de trams perquè _imp_closest usi les noves anques BARYTA-*.
     execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('imp_baryta_trams_actius', '0')")
     execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('imp_poster_mate_cost_cm2', '0.000447')")
     execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('imp_tarifa_gf_v1', '1')")
     db.commit()
-    print('Impressió gran format seeded.')
+    print(f'Impressió gran format seeded ({n} anques).')
+    return n
 
 
 def _run_v2_price_backfill(db):
