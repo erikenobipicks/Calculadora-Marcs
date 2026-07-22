@@ -3033,7 +3033,7 @@ def public_impressio_price():
     w = float(request.args.get('w', 0))
     h = float(request.args.get('h', 0))
     paper = (request.args.get('paper') or 'lustre').strip().lower()
-    if paper not in ('lustre', 'silk', 'baryta'):
+    if paper not in ('lustre', 'silk', 'baryta', 'poster_mate'):
         paper = 'lustre'
     if w <= 0 or h <= 0:
         return jsonify({'ok': False, 'error': 'w and h must be positive'}), 400
@@ -4223,7 +4223,7 @@ def admin_auditoria_costos():
     w = float(request.args.get('w', 60))
     h = float(request.args.get('h', 80))
     paper = (request.args.get('paper') or 'lustre').strip().lower()
-    if paper not in ('lustre', 'silk', 'baryta'):
+    if paper not in ('lustre', 'silk', 'baryta', 'poster_mate'):
         paper = 'lustre'
     moldura_ref = (request.args.get('moldura') or '').strip()
 
@@ -5669,6 +5669,7 @@ def admin_run_migrations():
         ("_fix_ref2_errors",        lambda: _fix_ref2_errors(db, use_pg=USE_PG)),
         ("_run_v2_price_backfill",  lambda: _run_v2_price_backfill(db)),
         ("_run_mr_trams_backfill",  lambda: _run_mr_trams_backfill(db)),
+        ("_seed_impressio_tarifa_granformat", lambda: _seed_impressio_tarifa_granformat(db, use_pg=USE_PG)),
     ]:
         try:
             fn()
@@ -11782,6 +11783,13 @@ def _find_min_contain(rows, w, h, prefix=None):
     # Fallback: if nothing contains it, take the largest available
     return max(rows, key=lambda r: (_parse_dims(r['referencia'])[0] or 0) * (_parse_dims(r['referencia'])[1] or 0), default=None)
 
+# Papers amb anques de gran format pròpies (refs prefixades a la taula
+# `impressio`). El Lustre —i el Silk, que en comparteix preu— usa els refs
+# SENSE prefix. La clau interna del paper cotó segueix sent 'baryta' (de cara
+# al client es diu Hahnemühle Photo Rag Baryta).
+IMP_PAPER_PREFIX = {'baryta': 'BARYTA', 'poster_mate': 'MATE'}
+
+
 def _imp_closest(fw, fh, paper='lustre'):
     """Tarifa d'impressió fotogràfica amb lògica híbrida + threshold:
       1. Min-contain sobre la taula 'impressio'.
@@ -11796,9 +11804,23 @@ def _imp_closest(fw, fh, paper='lustre'):
 
     Retorna {ref, preu, origen, area} o None si no hi ha cap fila ni
     càlcul possible. /api/closest enriqueix amb tram, marge, pvp."""
-    rows = [dict(r) for r in query('SELECT * FROM impressio')] or []
-    if not rows:
+    all_rows = [dict(r) for r in query('SELECT * FROM impressio')] or []
+    if not all_rows:
         return None
+    # Filtratge per paper: cada paper de gran format (baryta/poster_mate) té les
+    # seves anques prefixades; el Lustre/Silk usa les no-prefixades (que inclouen
+    # les anques petites històriques, intactes). Fallback al joc del Lustre si un
+    # paper encara no s'ha sembrat.
+    _known_pfx = tuple(v + '-' for v in IMP_PAPER_PREFIX.values())
+    _pfx = IMP_PAPER_PREFIX.get(paper)
+    if _pfx:
+        rows = [r for r in all_rows if (r.get('referencia') or '').upper().startswith(_pfx + '-')]
+        if not rows:
+            rows = [r for r in all_rows if not (r.get('referencia') or '').upper().startswith(_known_pfx)]
+    else:
+        rows = [r for r in all_rows if not (r.get('referencia') or '').upper().startswith(_known_pfx)]
+    if not rows:
+        rows = all_rows
 
     area_sol = max(1.0, float(fw) * float(fh))
     ratio_max = float(get_config_value('encolat_ratio_max', '1.40'))
@@ -11938,7 +11960,7 @@ def api_closest():
     # Paper d'impressió fotogràfica: 'lustre' (default) o 'baryta' (premium).
     # Si el client envia un altre valor, ho ignorem i caem a 'lustre'.
     paper = (request.args.get('paper') or 'lustre').strip().lower()
-    if paper not in ('lustre', 'silk', 'baryta'):
+    if paper not in ('lustre', 'silk', 'baryta', 'poster_mate'):
         paper = 'lustre'
     if w <= 0 or h <= 0:
         return jsonify({})
@@ -13006,6 +13028,53 @@ def _run_mr_trams_backfill(db):
                 ['migration_mr_trams_done', '1'])
     db.commit()
     print("mr_trams backfill complete.")
+
+
+# Tarifa d'impressió de GRAN FORMAT (≥40 cm costat curt, impresa a la Pro 4000).
+# PVD (cost/taller), sense IVA. Són les anques de calibració; el motor interpola
+# per àrea entre elles. NO inclou mides petites (van per una altra impressora amb
+# estructura de cost diferent i es queden com estan al motor).
+#   paper_key: (prefix_ref, prefix_descripció, [(w, h, preu_pvd), ...])
+IMP_TARIFA_GRANFORMAT = {
+    'lustre': ('', 'Lustre', [
+        (40, 50, 10.29), (50, 70, 15.88), (60, 80, 21.75), (60, 90, 24.00),
+        (70, 100, 32.00), (80, 120, 42.40), (100, 150, 66.21),
+    ]),
+    'baryta': ('BARYTA-', 'Hahnemühle', [
+        (40, 50, 18.29), (50, 70, 30.29), (60, 80, 42.75), (60, 90, 47.63),
+        (70, 100, 64.67), (80, 120, 87.20), (100, 150, 138.62),
+    ]),
+    'poster_mate': ('MATE-', 'Pòster Mate', [
+        (40, 50, 8.00), (50, 70, 11.76), (60, 80, 15.75), (60, 90, 17.25),
+        (70, 100, 22.67), (80, 120, 29.60), (100, 150, 45.52),
+    ]),
+}
+
+
+def _seed_impressio_tarifa_granformat(db, use_pg=False):
+    """Sembra/actualitza les anques de gran format dels 3 papers a la taula
+    `impressio` (upsert per referència). NO toca les mides petites històriques.
+    També desactiva els trams del baryta perquè el paper cotó passi a calibrar
+    per anques com el Lustre. Idempotent via flag de versió."""
+    if get_config_value('imp_tarifa_gf_v1', '0') == '1':
+        return
+    print('Seeding impressió gran format (Lustre / Hahnemühle / Pòster Mate)...')
+    for paper, (prefix, desc_pref, files) in IMP_TARIFA_GRANFORMAT.items():
+        for (w, h, preu) in files:
+            ref = f'{prefix}{w}X{h}'
+            desc = f'{desc_pref} {w}x{h}'
+            existing = query('SELECT 1 FROM impressio WHERE referencia=?', [ref], one=True)
+            if existing:
+                execute('UPDATE impressio SET descripcio=?, preu=? WHERE referencia=?', [desc, preu, ref])
+            else:
+                execute('INSERT INTO impressio (referencia, descripcio, preu) VALUES (?,?,?)', [ref, desc, preu])
+    # El baryta (Hahnemühle) passa a calibració per anques: desactivem el seu
+    # sistema de trams perquè _imp_closest usi les noves anques BARYTA-*.
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('imp_baryta_trams_actius', '0')")
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('imp_poster_mate_cost_cm2', '0.000447')")
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('imp_tarifa_gf_v1', '1')")
+    db.commit()
+    print('Impressió gran format seeded.')
 
 
 def _run_v2_price_backfill(db):
