@@ -1248,6 +1248,9 @@ body{
               <label style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;background:#fff" id="lbl-paper-baryta">
                 <input type="radio" name="impressio-paper" value="baryta" onchange="onPaperChange()" style="display:none"> Hahnemühle Photo Rag Baryta
               </label>
+              <label style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;background:#fff" id="lbl-paper-poster_mate">
+                <input type="radio" name="impressio-paper" value="poster_mate" onchange="onPaperChange()" style="display:none"> Pòster Mate
+              </label>
             </div>
           </div>
         </div>
@@ -4298,7 +4301,8 @@ function _descripcioMarcActual(){
     var pw = parseFloat((document.getElementById('amplada')||{}).value)||0;
     var ph = parseFloat((document.getElementById('alcada')||{}).value)||0;
     var paperRadio = document.querySelector('input[name="impressio-paper"]:checked');
-    var paper = paperRadio ? (paperRadio.value === 'baryta' ? 'Hahnemühle Baryta' : 'Paper Lustre') : '';
+    var _paperNoms = {baryta:'Hahnemühle Baryta', poster_mate:'Pòster Mate', lustre:'Paper Lustre'};
+    var paper = paperRadio ? (_paperNoms[paperRadio.value] || 'Paper Lustre') : '';
     return 'Còpia' + ((pw && ph) ? (' ' + _gNum(pw) + 'x' + _gNum(ph)) : '') + (paper ? (' · ' + paper) : '');
   }
   var ref = ((document.getElementById('marc_principal')||{}).value || '').trim();
