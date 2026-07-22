@@ -11921,6 +11921,19 @@ def _imp_closest(fw, fh, paper='lustre'):
                   if p is not None]
     preu_formula = max(candidates) if candidates else 0.0
 
+    # Blindatge de l'extrapolació cap avall: si la mida sol·licitada és més petita
+    # que TOTES les anques d'aquest paper (cas dels papers només de gran format,
+    # com Hahnemühle i Pòster Mate), no la venem més barata que la seva anca més
+    # petita. Evita preus irrisoris si algú tria aquest paper per a una còpia
+    # petita. El Lustre té anques petites → calib_low no és None → no l'afecta.
+    if calib_low is None and calib_high is not None:
+        try:
+            preu_floor = round(float(calib_high[2]), 2)
+            if preu_formula < preu_floor:
+                preu_formula = preu_floor
+        except (TypeError, ValueError):
+            pass
+
     # Si existeix una ref exacta al catàleg per aquesta mida, la usem
     # com a etiqueta (millor per a facturació); si no, generem imp-WxH.
     if fila:
