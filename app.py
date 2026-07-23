@@ -13624,6 +13624,33 @@ def admin_mailing_sync_clients():
     return jsonify(ok=True, added=added, updated=updated, total=total)
 
 
+@app.route('/admin/mailing/sync-usuaris', methods=['POST'])
+@admin_required
+def admin_mailing_sync_usuaris():
+    """Porta a la llista de mailing tots els usuaris de la plataforma
+    (professionals donats d'alta a la calculadora), no-admins, amb correu.
+    L'email surt de la columna email o, si és buida, del username si és un
+    correu. No duplica ni reactiva baixes (via _mailing_upsert_contact)."""
+    _ensure_mailing_schema()
+    rows = query("SELECT nom, email, username FROM usuaris WHERE COALESCE(is_admin,0)=0") or []
+    added = updated = 0
+    for r in rows:
+        email = (_row_get(r, 'email', '') or '').strip()
+        if not email:
+            uname = (_row_get(r, 'username', '') or '').strip()
+            if '@' in uname:
+                email = uname
+        if not email:
+            continue
+        res = _mailing_upsert_contact(_row_get(r, 'nom', ''), email, origen='usuaris')
+        if res == 'added':
+            added += 1
+        elif res == 'updated':
+            updated += 1
+    total = _row_get(query('SELECT COUNT(*) AS n FROM mailing_contacts', one=True), 'n', 0)
+    return jsonify(ok=True, added=added, updated=updated, total=total)
+
+
 @app.route('/admin/mailing/import', methods=['POST'])
 @admin_required
 def admin_mailing_import():

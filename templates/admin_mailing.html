@@ -100,6 +100,8 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)
         <h2>1 · Clients del taller</h2>
         <p class="help">Porta a la llista de mailing tots els clients amb correu que ja tens a la calculadora (clients externs / FacturaDirecta). No es duplica ni reactiva ningú que s'hagi donat de baixa.</p>
         <button class="btn btn-g btn-full" id="btn-sync" onclick="syncClients()">Sincronitzar des dels clients del taller</button>
+        <p class="help" style="margin-top:14px">O bé porta tots els <strong>usuaris de la plataforma</strong> (professionals donats d'alta a la calculadora). Igualment, no duplica ni reactiva baixes.</p>
+        <button class="btn btn-g btn-full" id="btn-sync-usuaris" onclick="syncUsuaris()">Sincronitzar des dels usuaris de la plataforma</button>
       </div>
       <div class="card">
         <h2>2 · Afegir mails extra</h2>
@@ -251,6 +253,13 @@ function jpost(url,body){return fetch(url,{method:'POST',headers:{'Content-Type'
 function syncClients(){var b=document.getElementById('btn-sync');b.disabled=true;b.textContent='Sincronitzant…';
   jpost('/admin/mailing/sync-clients').then(function(d){
     b.disabled=false;b.textContent='Sincronitzar des dels clients del taller';
+    if(!d.ok){toast(d.error||'Error');return;}
+    toast('Afegits '+d.added+' · actualitzats '+d.updated);refreshStats(d.total);bump('st-subs',d.added);loadContacts();
+  });
+}
+function syncUsuaris(){var b=document.getElementById('btn-sync-usuaris');b.disabled=true;b.textContent='Sincronitzant…';
+  jpost('/admin/mailing/sync-usuaris').then(function(d){
+    b.disabled=false;b.textContent='Sincronitzar des dels usuaris de la plataforma';
     if(!d.ok){toast(d.error||'Error');return;}
     toast('Afegits '+d.added+' · actualitzats '+d.updated);refreshStats(d.total);bump('st-subs',d.added);loadContacts();
   });
