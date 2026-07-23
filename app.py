@@ -8406,9 +8406,9 @@ def _fd_crear_albara(contact_id, linies, notes='', data_doc=None):
 def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
     """Crea un PRESSUPOST (estimate) a FacturaDirecta. Mateix patro que
     l'albara pero amb type/endpoint 'estimate'/'estimates'. L'API EXIGEIX que
-    docNumber estigui present (400 'must have required property docNumber' si
-    falta), pero la serie dins seu es opcional: si la deixem buida FD aplica la
-    serie per defecte del compte. Es pot forçar amb FD_ESTIMATE_SERIES."""
+    docNumber porti una 'series' vàlida (un {} buit el rebutja amb 400
+    "docNumber/series: must have required property 'series'"). La sèrie es
+    configura amb FD_ESTIMATE_SERIES (p. ex. W1)."""
     if not data_doc:
         data_doc = datetime.now().strftime('%Y-%m-%d')
     main = {
@@ -8421,17 +8421,7 @@ def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
     }
     if notes:
         main['notes'] = notes
-    res = _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
-    # Auto-correcció: si haviem forçat una serie que no existeix al compte, FD
-    # respon 400 queixant-se de docNumber/series. Reintentem un cop deixant que
-    # FD triï la serie per defecte (docNumber buit), sense haver de saber-ne el codi.
-    if (isinstance(res, dict) and res.get('_error') == 400
-            and (_FD_ESTIMATE_SERIES or '').strip()):
-        msg = (res.get('_msg') or '').lower()
-        if 'docnumber' in msg or 'series' in msg:
-            main['docNumber'] = {}
-            res = _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
-    return res
+    return _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
 
 
 def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
@@ -9560,11 +9550,12 @@ def _resolve_client_extern_fd_id(client_extern_id):
         return None, None
     fd_id = _row_get(row, 'fd_contact_id') or None
     nom = _row_get(row, 'nom') or None
-    # Un fd_contact_id vàlid de FD és un token compacte sense espais. Si conté
-    # espais (sovint s'hi ha desat el nom del client per error) o queda buit,
-    # el tractem com a absent perquè el caller resolgui el contacte de nou i
-    # el repari. Evita l'error FD 400 "Referencia con formato incorrecta".
-    if fd_id and (not str(fd_id).strip() or any(c.isspace() for c in str(fd_id))):
+    # Un id vàlid de contacte de FacturaDirecta té el format 'con_<uuid>'. Si el
+    # que hi ha desat no comença per 'con_' (nom del client desat per error, id
+    # d'un format antic, buit…), el tractem com a absent perquè el caller
+    # resolgui el contacte de nou i el repari. Evita l'error FD 400
+    # "Referencia con formato incorrecta en la ruta main.contact".
+    if fd_id and not str(fd_id).strip().startswith('con_'):
         print(f"[clients_externs] fd_contact_id invàlid ({fd_id!r}) per client {client_extern_id}; fallback + reparació")
         return None, nom
     return fd_id, nom
