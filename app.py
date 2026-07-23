@@ -9495,7 +9495,16 @@ def _resolve_client_extern_fd_id(client_extern_id):
     if not _row_get(row, 'actiu', False):
         print(f"[clients_externs] WARN: client_extern_id={client_extern_id} desactivat — fallback al flux antic")
         return None, None
-    return _row_get(row, 'fd_contact_id') or None, _row_get(row, 'nom') or None
+    fd_id = _row_get(row, 'fd_contact_id') or None
+    nom = _row_get(row, 'nom') or None
+    # Un fd_contact_id vàlid de FD és un token compacte sense espais. Si conté
+    # espais (sovint s'hi ha desat el nom del client per error) o queda buit,
+    # el tractem com a absent perquè el caller resolgui el contacte de nou i
+    # el repari. Evita l'error FD 400 "Referencia con formato incorrecta".
+    if fd_id and (not str(fd_id).strip() or any(c.isspace() for c in str(fd_id))):
+        print(f"[clients_externs] fd_contact_id invàlid ({fd_id!r}) per client {client_extern_id}; fallback + reparació")
+        return None, nom
+    return fd_id, nom
 
 
 def _parse_bool(v):
@@ -10027,8 +10036,14 @@ def _resolve_fd_contact_for_request(d):
     contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
     if contact_id:
         return contact_id, (fd_nom or nom_fd), None
+    nom_fd = nom_fd or (fd_nom or '')
     if not nom_fd:
         return None, '', (jsonify({'ok': False, 'error': 'Cal omplir el nom del client.'}), 400)
+    # Si el client habitual té NIF desat, el fem servir per trobar el contacte
+    # existent a FD (cerca exacta) i evitar crear-ne un de duplicat en reparar.
+    if not nif_client and client_extern_id:
+        _crow = query('SELECT nif FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+        nif_client = (_row_get(_crow, 'nif', '') or '').strip()
     contacte = _fd_cerca_contacte(nif=nif_client) if nif_client else None
     if not contacte:
         contacte = _fd_crear_contacte(nom_fd, nif=nif_client or None, telefon=client_tel or None)
@@ -10037,6 +10052,14 @@ def _resolve_fd_contact_for_request(d):
     cid = _fd_extract_contact_id(contacte)
     if not cid:
         return None, '', (jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500)
+    # Auto-reparació: si el client habitual tenia un fd_contact_id corrupte (o
+    # cap), el desem amb l'id vàlid que acabem de resoldre perquè no torni a
+    # fallar la propera vegada.
+    if client_extern_id:
+        try:
+            execute('UPDATE clients_externs SET fd_contact_id=? WHERE id=?', [cid, client_extern_id])
+        except Exception as _e:
+            print(f"[clients_externs] no s'ha pogut re-cachejar fd_contact_id per {client_extern_id}: {_e}")
     return cid, nom_fd, None
 
 
