@@ -10345,8 +10345,8 @@ def admin_seed_impressio_tarifa():
         "<table border='1' cellpadding='6' style='border-collapse:collapse;font-family:sans-serif'>"
         "<tr><th>Ref</th><th>Descripció</th><th>PVD</th></tr>"
         f"{rows}</table>"
-        "<p style='font-family:sans-serif'>Prova ara un 40x50 Hahnemühle: PVD 18,29 € → "
-        "PVP ~32,01 € + IVA.</p>"
+        "<p style='font-family:sans-serif'>Prova ara un 40x50 Hahnemühle: PVD 42,00 € → "
+        "PVP ~73,50 € + IVA (tram 75%).</p>"
         "<p><a href='/admin/impressio'>← Gestió d'impressió</a> · <a href='/admin'>/admin</a></p>"
     )
 
@@ -13087,8 +13087,21 @@ IMP_TARIFA_GRANFORMAT = {
         (70, 100, 32.00), (80, 120, 42.40), (100, 150, 66.21),
     ]),
     'baryta': ('BARYTA-', 'Hahnemühle', [
-        (40, 50, 18.29), (50, 70, 30.29), (60, 80, 42.75), (60, 90, 47.63),
-        (70, 100, 64.67), (80, 120, 87.20), (100, 150, 138.62),
+        # Tarifa oficial completa (PVD, sense IVA). Inclou mides petites, així
+        # que aquest paper té preu propi a totes les mides (no cal extrapolar).
+        (10, 15, 8.00), (13, 18, 12.00), (15, 20, 15.00), (18, 24, 18.00),
+        (20, 25, 19.00), (20, 30, 20.00), (24, 30, 23.00), (24, 36, 25.00),
+        (28, 35, 28.00), (30, 30, 26.00), (30, 40, 28.00), (30, 45, 30.00),
+        (30, 50, 32.00), (30, 60, 38.00),
+        (40, 50, 42.00), (40, 60, 45.00), (50, 50, 48.00), (50, 60, 52.00),
+        (50, 70, 58.00), (50, 80, 65.00), (60, 60, 65.00), (60, 70, 72.00),
+        (60, 80, 78.00), (60, 90, 85.00), (60, 100, 95.00), (70, 100, 115.00),
+        (80, 100, 135.00), (80, 110, 150.00), (80, 120, 165.00),
+        (80, 150, 195.00), (80, 180, 225.00), (80, 200, 250.00),
+        (90, 100, 160.00), (90, 110, 175.00), (90, 150, 215.00),
+        (90, 180, 250.00), (90, 200, 280.00), (100, 100, 185.00),
+        (100, 150, 260.00), (100, 180, 300.00), (100, 200, 330.00),
+        (110, 110, 230.00), (110, 130, 270.00), (110, 160, 320.00),
     ]),
     'poster_mate': ('MATE-', 'Pòster Mate', [
         (40, 50, 8.00), (50, 70, 11.76), (60, 80, 15.75), (60, 90, 17.25),
@@ -13108,6 +13121,11 @@ def _seed_impressio_tarifa_granformat(db, use_pg=False, force=False):
     print('Seeding impressió gran format (Lustre / Hahnemühle / Pòster Mate)...')
     n = 0
     for paper, (prefix, desc_pref, files) in IMP_TARIFA_GRANFORMAT.items():
+        # Papers propis (baryta/poster_mate): reemplaç net dels seus refs
+        # prefixats, així no queden mides antigues òrfenes si la llista canvia.
+        # El Lustre (sense prefix) NOMÉS s'upserta, per no tocar les mides petites.
+        if prefix:
+            execute("DELETE FROM impressio WHERE UPPER(referencia) LIKE ?", [prefix.upper() + '%'])
         for (w, h, preu) in files:
             ref = f'{prefix}{w}X{h}'
             desc = f'{desc_pref} {w}x{h}'
