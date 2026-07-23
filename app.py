@@ -10087,18 +10087,27 @@ def api_crear_doc_conjunt():
                     'numero': num_doc, 'contact': nom_fd, 'n_pressupostos': len(sessio_ids)})
 
 
-def _resolve_fd_contact_for_request(d):
+def _resolve_fd_contact_for_request(d, force_fresh=False):
     """Resol el contacte FD per a un client de la calculadora a partir del
     payload (client_extern_id enllaçat -> contacte cached; si no, cercar per
-    NIF o crear pel nom). Retorna (contact_id, nom_fd, error_response_or_None)."""
+    NIF o crear pel nom). Retorna (contact_id, nom_fd, error_response_or_None).
+
+    Amb force_fresh=True s'ignora el fd_contact_id cached (per reparar-lo quan
+    FD rebutja el contacte per format), es resol de nou i es re-cacheja."""
     client_extern_id = (d.get('client_extern_id') or '').strip() or None
     nif_client = (d.get('client_nif') or '').strip()
     client_tel = (d.get('client_tel') or '').strip()
     nom_fd = (d.get('client_nom') or '').strip()
 
-    contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
-    if contact_id:
-        return contact_id, (fd_nom or nom_fd), None
+    if not force_fresh:
+        contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
+        if contact_id:
+            return contact_id, (fd_nom or nom_fd), None
+    else:
+        fd_nom = None
+        if client_extern_id:
+            _r = query('SELECT nom FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+            fd_nom = (_row_get(_r, 'nom', '') or '') or None
     nom_fd = nom_fd or (fd_nom or '')
     if not nom_fd:
         return None, '', (jsonify({'ok': False, 'error': 'Cal omplir el nom del client.'}), 400)
@@ -10180,9 +10189,19 @@ def api_crear_doc_marcs():
     notes = ' | '.join(notes_parts)
 
     doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    # Auto-reparació: si FD rebutja el contacte (id cached corrupte, sigui quin
+    # sigui el format), resolem un contacte fresc pel NIF/nom, el re-cachegem i
+    # reintentem un cop.
+    if (isinstance(doc, dict) and doc.get('_error') == 400
+            and 'contact' in str(doc.get('_msg', '')).lower()):
+        fresh_id, fresh_nom, ferr = _resolve_fd_contact_for_request(d, force_fresh=True)
+        if ferr is None and fresh_id and str(fresh_id) != str(contact_id):
+            print(f"[crear_doc_marcs] reintent amb contacte fresc {fresh_id!r} (anterior {contact_id!r})")
+            contact_id, nom_fd = fresh_id, (fresh_nom or nom_fd)
+            doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
     if '_error' in (doc or {}):
         etiqueta = 'pressupost' if es_pressupost else 'albarà'
-        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")} (contacte={contact_id!r})'}), 500
     num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
     return jsonify({'ok': True, 'doc_type': 'pressupost' if es_pressupost else 'albara',
                     'numero': num_doc, 'contact': nom_fd, 'n_marcs': len(linies)})
