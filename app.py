@@ -8545,6 +8545,69 @@ def admin_fd_contacts_search():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/admin/fd/doc-test')
+@admin_required
+def admin_fd_doc_test():
+    """DIAGNÒSTIC: crea un contacte de prova a FD i intenta un pressupost amb
+    diversos formats de main.contact per descobrir quin accepta l'API (l'error
+    'Referencia con formato incorrecta en la ruta main.contact' vol dir que el
+    format que enviem és el que no toca). Dumpa request/response de tot.
+    Nota: pot deixar un contacte i algun pressupost de PROVA a FD; esborra'ls."""
+    import html as _html
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return "<pre>FD no configurat (variables d'entorn)</pre>"
+    out = []
+    def dump(title, obj):
+        try:
+            txt = json.dumps(obj, ensure_ascii=False, indent=2)
+        except Exception:
+            txt = repr(obj)
+        out.append(f"=== {title} ===\n{txt}\n")
+
+    # 1) Contacte de prova (per veure l'estructura real de la resposta de FD)
+    cmain = {'name': 'PROVA CLAUDE FD', 'country': 'ES', 'currency': 'EUR',
+             'accounts': {'client': '430000', 'clientCredit': '438000'}}
+    cres = _fd_post('contacts', {'content': {'type': 'contact', 'main': cmain}})
+    dump('CONTACTE creat — resposta completa de FD', cres)
+    cid = _fd_extract_contact_id(cres)
+    out.append(f"_fd_extract_contact_id() -> {cid!r}\n")
+    # També mostrem el 'code'/'reference' del contacte si n'hi ha
+    _cc = (cres.get('content') or {}) if isinstance(cres, dict) else {}
+    _cm = (_cc.get('main') or {}) if isinstance(_cc, dict) else {}
+    out.append("Camps candidats del contacte: " + json.dumps({
+        'top.id': cres.get('id') if isinstance(cres, dict) else None,
+        'top.reference': cres.get('reference') if isinstance(cres, dict) else None,
+        'top.code': cres.get('code') if isinstance(cres, dict) else None,
+        'content.id': _cc.get('id'), 'content.reference': _cc.get('reference'),
+        'main.code': _cm.get('code'), 'main.reference': _cm.get('reference'),
+    }, ensure_ascii=False) + "\n")
+
+    # 2) Provar diversos formats de main.contact en un pressupost
+    linia = [{'text': 'PROVA diagnòstic', 'quantity': 1, 'unitPrice': 1.0, 'tax': ['S_IVA_21']}]
+    candidats = [
+        ('contact = id (ACTUAL)', cid),
+        ("contact = {'id': id}", {'id': cid}),
+        ("contact = {'reference': id}", {'reference': cid}),
+        ("contact = {'contact': id}", {'contact': cid}),
+    ]
+    for etiqueta, val in candidats:
+        main = {'contact': val, 'currency': 'EUR', 'baseState': 'pending',
+                'docNumber': {}, 'date': datetime.now().strftime('%Y-%m-%d'),
+                'lines': linia}
+        res = _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+        err = isinstance(res, dict) and res.get('_error')
+        estat = f"ERROR {res.get('_error')}" if err else "OK ✅"
+        out.append(f"--- FORMAT: {etiqueta}  ->  {estat} ---")
+        if err:
+            out.append((res.get('_msg') or '')[:400] + "\n")
+        else:
+            out.append("Pressupost creat! (esborra'l a FD) num=" +
+                       str(res.get('number') or res.get('id') or '—') + "\n")
+    return ("<h3>Diagnòstic FD — format de main.contact</h3>"
+            "<pre style='font-size:12px;white-space:pre-wrap;line-height:1.4'>"
+            + _html.escape("\n".join(out)) + "</pre>")
+
+
 def _fd_get_bounded(path, max_bytes=1_000_000, timeout=6):
     """GET a FD llegint com a MÀXIM max_bytes (evita OOM → 502 amb 1 worker).
     Retorna un dict amb l'estat i el JSON parsejat (o el cap del cos si falla)."""
@@ -10024,18 +10087,27 @@ def api_crear_doc_conjunt():
                     'numero': num_doc, 'contact': nom_fd, 'n_pressupostos': len(sessio_ids)})
 
 
-def _resolve_fd_contact_for_request(d):
+def _resolve_fd_contact_for_request(d, force_fresh=False):
     """Resol el contacte FD per a un client de la calculadora a partir del
     payload (client_extern_id enllaçat -> contacte cached; si no, cercar per
-    NIF o crear pel nom). Retorna (contact_id, nom_fd, error_response_or_None)."""
+    NIF o crear pel nom). Retorna (contact_id, nom_fd, error_response_or_None).
+
+    Amb force_fresh=True s'ignora el fd_contact_id cached (per reparar-lo quan
+    FD rebutja el contacte per format), es resol de nou i es re-cacheja."""
     client_extern_id = (d.get('client_extern_id') or '').strip() or None
     nif_client = (d.get('client_nif') or '').strip()
     client_tel = (d.get('client_tel') or '').strip()
     nom_fd = (d.get('client_nom') or '').strip()
 
-    contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
-    if contact_id:
-        return contact_id, (fd_nom or nom_fd), None
+    if not force_fresh:
+        contact_id, fd_nom = _resolve_client_extern_fd_id(client_extern_id)
+        if contact_id:
+            return contact_id, (fd_nom or nom_fd), None
+    else:
+        fd_nom = None
+        if client_extern_id:
+            _r = query('SELECT nom FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+            fd_nom = (_row_get(_r, 'nom', '') or '') or None
     nom_fd = nom_fd or (fd_nom or '')
     if not nom_fd:
         return None, '', (jsonify({'ok': False, 'error': 'Cal omplir el nom del client.'}), 400)
@@ -10117,9 +10189,19 @@ def api_crear_doc_marcs():
     notes = ' | '.join(notes_parts)
 
     doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
+    # Auto-reparació: si FD rebutja el contacte (id cached corrupte, sigui quin
+    # sigui el format), resolem un contacte fresc pel NIF/nom, el re-cachegem i
+    # reintentem un cop.
+    if (isinstance(doc, dict) and doc.get('_error') == 400
+            and 'contact' in str(doc.get('_msg', '')).lower()):
+        fresh_id, fresh_nom, ferr = _resolve_fd_contact_for_request(d, force_fresh=True)
+        if ferr is None and fresh_id and str(fresh_id) != str(contact_id):
+            print(f"[crear_doc_marcs] reintent amb contacte fresc {fresh_id!r} (anterior {contact_id!r})")
+            contact_id, nom_fd = fresh_id, (fresh_nom or nom_fd)
+            doc = _fd_crear_document(doc_type, contact_id, linies, notes=notes)
     if '_error' in (doc or {}):
         etiqueta = 'pressupost' if es_pressupost else 'albarà'
-        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")}'}), 500
+        return jsonify({'ok': False, 'error': f'Error {etiqueta} FD {doc.get("_error")}: {doc.get("_msg","")} (contacte={contact_id!r})'}), 500
     num_doc = doc.get('number') or doc.get('documentNumber') or doc.get('id', '—')
     return jsonify({'ok': True, 'doc_type': 'pressupost' if es_pressupost else 'albara',
                     'numero': num_doc, 'contact': nom_fd, 'n_marcs': len(linies)})
