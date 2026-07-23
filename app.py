@@ -8454,6 +8454,7 @@ def _fd_linies_de_comandes(comandes, recarrec=False):
         encolat      = (_row_get(com, 'encolat', '') or '').strip()
         impressio    = (_row_get(com, 'impressio', '') or '').strip()
 
+        tipus_peca = (_row_get(com, 'tipus_peca', '') or '').strip().lower()
         parts_opc = []
         if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
         if vidre:                                parts_opc.append(vidre)
@@ -8461,9 +8462,24 @@ def _fd_linies_de_comandes(comandes, recarrec=False):
         if encolat and encolat != '-':           parts_opc.append(encolat)
         if revers_peu:                           parts_opc.append('Revers amb peu')
         if impressio and impressio != '-':       parts_opc.append(impressio)
-        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
-        if parts_opc:
-            desc_marc += f' · {", ".join(parts_opc)}'
+        # Fotografia impresa NOMÉS: sense motllura ni cap material, només còpia.
+        only_print = (not marc and (not pre_marc or pre_marc == '-')
+                      and (not passpartout or passpartout == 'cap') and not vidre
+                      and (not encolat or encolat == '-')
+                      and bool(impressio and impressio != '-'))
+        if tipus_peca == 'producte':
+            # Línia de producte desada de la cistella (llenç, àlbum, orla, regals,
+            # offset…): marc_principal ja porta la descripció completa del producte.
+            desc_marc = marc or 'Producte'
+        elif only_print:
+            _mida = _format_size_text(_row_get(com, 'amplada', 0), _row_get(com, 'alcada', 0))
+            desc_marc = 'Fotografia impresa' + (f' {_mida}' if _mida else '')
+            if impressio and impressio != '-':
+                desc_marc += f' · {impressio}'
+        else:
+            desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+            if parts_opc:
+                desc_marc += f' · {", ".join(parts_opc)}'
         if opcio_nom and opcio_nom != 'Opció A':
             desc_marc += f' ({opcio_nom})'
         if client_nom:

@@ -4306,20 +4306,34 @@ function _descripcioMarcActual(){
     return 'Còpia' + ((pw && ph) ? (' ' + _gNum(pw) + 'x' + _gNum(ph)) : '') + (paper ? (' · ' + paper) : '');
   }
   var ref = ((document.getElementById('marc_principal')||{}).value || '').trim();
+  var premarc = ((document.getElementById('pre_marc')||{}).value || '').trim();
+  var munt = _optLabel('muntatge');
+  var prot = _optLabel('proteccio');
+  var inte = _optLabel('interior');
+  var imp = document.getElementById('chk-impressio');
+  var impChecked = !!(imp && imp.checked);
+  var pw = parseFloat((document.getElementById('amplada')||{}).value)||0;
+  var ph = parseFloat((document.getElementById('alcada')||{}).value)||0;
+  // Fotografia impresa NOMÉS (sense motllura ni materials): no és un marc, així
+  // que la descripció ha de ser de còpia (a FD ja no sortirà com a "marc").
+  if(impChecked && !ref && !premarc && !munt && !prot && !inte){
+    var _paperNomsP = {baryta:'Hahnemühle Baryta', poster_mate:'Pòster Mate', lustre:'Paper Lustre'};
+    var _pr = document.querySelector('input[name="impressio-paper"]:checked');
+    var _paper = _pr ? (_paperNomsP[_pr.value] || 'Paper Lustre') : '';
+    return 'Fotografia impresa' + ((pw && ph) ? (' ' + _gNum(pw) + 'x' + _gNum(ph)) : '') + (_paper ? (' · ' + _paper) : '');
+  }
   var w = parseFloat((document.getElementById('marc-w')||{}).value)||0;
   var h = parseFloat((document.getElementById('marc-h')||{}).value)||0;
   var cap = 'Marc' + ((w && h) ? (' ' + _gNum(w) + 'x' + _gNum(h)) : '');
   if(ref) cap += ' - Ref ' + ref;
   var parts = [];
-  var munt = _optLabel('muntatge'); if(munt) parts.push(munt);
-  var prot = _optLabel('proteccio'); if(prot) parts.push(prot);
-  var inte = _optLabel('interior');
+  if(munt) parts.push(munt);
+  if(prot) parts.push(prot);
   if(inte){
     var cm = parseFloat((document.getElementById('cm-passpartu')||{}).value)||0;
     parts.push(cm>0 ? (inte + ' ' + _gNum(cm) + ' cm') : inte);
   }
-  var imp = document.getElementById('chk-impressio');
-  if(imp && imp.checked) parts.push('Fotografia Impresa');
+  if(impChecked) parts.push('Fotografia Impresa');
   return cap + (parts.length ? (' + ' + parts.join(' + ')) : '');
 }
 
