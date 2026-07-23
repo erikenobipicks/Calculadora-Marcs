@@ -8545,6 +8545,69 @@ def admin_fd_contacts_search():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/admin/fd/doc-test')
+@admin_required
+def admin_fd_doc_test():
+    """DIAGNÒSTIC: crea un contacte de prova a FD i intenta un pressupost amb
+    diversos formats de main.contact per descobrir quin accepta l'API (l'error
+    'Referencia con formato incorrecta en la ruta main.contact' vol dir que el
+    format que enviem és el que no toca). Dumpa request/response de tot.
+    Nota: pot deixar un contacte i algun pressupost de PROVA a FD; esborra'ls."""
+    import html as _html
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return "<pre>FD no configurat (variables d'entorn)</pre>"
+    out = []
+    def dump(title, obj):
+        try:
+            txt = json.dumps(obj, ensure_ascii=False, indent=2)
+        except Exception:
+            txt = repr(obj)
+        out.append(f"=== {title} ===\n{txt}\n")
+
+    # 1) Contacte de prova (per veure l'estructura real de la resposta de FD)
+    cmain = {'name': 'PROVA CLAUDE FD', 'country': 'ES', 'currency': 'EUR',
+             'accounts': {'client': '430000', 'clientCredit': '438000'}}
+    cres = _fd_post('contacts', {'content': {'type': 'contact', 'main': cmain}})
+    dump('CONTACTE creat — resposta completa de FD', cres)
+    cid = _fd_extract_contact_id(cres)
+    out.append(f"_fd_extract_contact_id() -> {cid!r}\n")
+    # També mostrem el 'code'/'reference' del contacte si n'hi ha
+    _cc = (cres.get('content') or {}) if isinstance(cres, dict) else {}
+    _cm = (_cc.get('main') or {}) if isinstance(_cc, dict) else {}
+    out.append("Camps candidats del contacte: " + json.dumps({
+        'top.id': cres.get('id') if isinstance(cres, dict) else None,
+        'top.reference': cres.get('reference') if isinstance(cres, dict) else None,
+        'top.code': cres.get('code') if isinstance(cres, dict) else None,
+        'content.id': _cc.get('id'), 'content.reference': _cc.get('reference'),
+        'main.code': _cm.get('code'), 'main.reference': _cm.get('reference'),
+    }, ensure_ascii=False) + "\n")
+
+    # 2) Provar diversos formats de main.contact en un pressupost
+    linia = [{'text': 'PROVA diagnòstic', 'quantity': 1, 'unitPrice': 1.0, 'tax': ['S_IVA_21']}]
+    candidats = [
+        ('contact = id (ACTUAL)', cid),
+        ("contact = {'id': id}", {'id': cid}),
+        ("contact = {'reference': id}", {'reference': cid}),
+        ("contact = {'contact': id}", {'contact': cid}),
+    ]
+    for etiqueta, val in candidats:
+        main = {'contact': val, 'currency': 'EUR', 'baseState': 'pending',
+                'docNumber': {}, 'date': datetime.now().strftime('%Y-%m-%d'),
+                'lines': linia}
+        res = _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+        err = isinstance(res, dict) and res.get('_error')
+        estat = f"ERROR {res.get('_error')}" if err else "OK ✅"
+        out.append(f"--- FORMAT: {etiqueta}  ->  {estat} ---")
+        if err:
+            out.append((res.get('_msg') or '')[:400] + "\n")
+        else:
+            out.append("Pressupost creat! (esborra'l a FD) num=" +
+                       str(res.get('number') or res.get('id') or '—') + "\n")
+    return ("<h3>Diagnòstic FD — format de main.contact</h3>"
+            "<pre style='font-size:12px;white-space:pre-wrap;line-height:1.4'>"
+            + _html.escape("\n".join(out)) + "</pre>")
+
+
 def _fd_get_bounded(path, max_bytes=1_000_000, timeout=6):
     """GET a FD llegint com a MÀXIM max_bytes (evita OOM → 502 amb 1 worker).
     Retorna un dict amb l'estat i el JSON parsejat (o el cap del cos si falla)."""
