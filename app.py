@@ -10514,13 +10514,14 @@ def crear_pdf_comparativa(comandes):
 
     doc = SimpleDocTemplate(buf, pagesize=PAGE,
                             rightMargin=margin, leftMargin=margin,
-                            topMargin=12*mm, bottomMargin=15*mm)
+                            topMargin=9*mm, bottomMargin=9*mm)
     DARK  = colors.HexColor("#1C1B18")
     ACC   = colors.HexColor("#1A6B45")
     LIG   = colors.HexColor("#F5F6FA")
     BRD   = colors.HexColor("#E5E2DB")
     GREEN = colors.HexColor("#1A6B45")
     RED   = colors.HexColor("#B84040")
+    AMBER = colors.HexColor("#C8873A")
     WHITE = colors.white
 
     def p(txt, bold=False, size=10, color=DARK, align='LEFT'):
@@ -10547,7 +10548,7 @@ def crear_pdf_comparativa(comandes):
     ]], colWidths=[W*0.65, W*0.35])
     header.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), DARK),
-        ('TOPPADDING',(0,0),(-1,-1), 10), ('BOTTOMPADDING',(0,0),(-1,-1), 10),
+        ('TOPPADDING',(0,0),(-1,-1), 7), ('BOTTOMPADDING',(0,0),(-1,-1), 7),
         ('LEFTPADDING',(0,0),(-1,-1), 12), ('RIGHTPADDING',(0,0),(-1,-1), 12),
         ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
     ]))
@@ -10559,20 +10560,20 @@ def crear_pdf_comparativa(comandes):
     ]], colWidths=[W*0.6, W*0.4])
     client_info.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), LIG),
-        ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
+        ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
         ('LEFTPADDING',(0,0),(-1,-1),12),('RIGHTPADDING',(0,0),(-1,-1),12),
         ('BOX',(0,0),(-1,-1),0.5,BRD),
     ]))
     story.append(client_info)
     from reportlab.platypus import Spacer as Sp
-    story.append(Sp(1,4*mm))
+    story.append(Sp(1,2*mm))
 
     # Column headers (with label column)
     hdr = [p('', bold=True, size=10, color=WHITE)] +           [p(c.get('opcio_nom','Opció'), bold=True, size=11, color=WHITE, align='CENTER') for c in comandes]
     hdr_row = Table([hdr], colWidths=[col_lbl]+[col_w]*n)
     hdr_row.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), DARK),
-        ('TOPPADDING',(0,0),(-1,-1),9),('BOTTOMPADDING',(0,0),(-1,-1),9),
+        ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
         ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
         ('BOX',(0,0),(-1,-1),0.5,BRD),
         ('INNERGRID',(0,1),(-1,-1),0.5,colors.HexColor("#3d4d5e")),
@@ -10596,7 +10597,7 @@ def crear_pdf_comparativa(comandes):
                 _full = _os_comp.path.join(app.root_path, 'static', _rel.replace('static/',''))
                 if _os_comp.path.exists(_full):
                     try:
-                        _img_c = RLImageComp(_full, width=min(col_w - 8*mm, 35*mm), height=22*mm)
+                        _img_c = RLImageComp(_full, width=min(col_w - 8*mm, 32*mm), height=18*mm)
                         _cell = _img_c
                         _has_foto_comp = True
                     except Exception:
@@ -10608,7 +10609,7 @@ def crear_pdf_comparativa(comandes):
             ('BACKGROUND',(0,0),(-1,-1), LIG),
             ('BOX',(0,0),(-1,-1),0.5,BRD),
             ('INNERGRID',(0,0),(-1,-1),0.3,BRD),
-            ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),
+            ('TOPPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),3),
             ('LEFTPADDING',(0,0),(-1,-1),4),('RIGHTPADDING',(0,0),(-1,-1),4),
             ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
             ('ALIGN',(1,0),(-1,0),'CENTER'),
@@ -10638,9 +10639,19 @@ def crear_pdf_comparativa(comandes):
         (t['pendent_short'],  'pendent',         True),
     ]
 
+    # Fila de descompte: només si alguna opció en té. El PVP net és abans de
+    # descompte, així que sense aquesta fila els números no quadren.
+    _desc_label = {'ca': 'Descompte', 'es': 'Descuento', 'en': 'Discount'}.get(lang, 'Descompte')
+    if any(float(c.get('descompte') or 0) > 0 for c in comandes):
+        _ins = next(i for i, f in enumerate(fields) if f[1] == 'preu_net') + 1
+        fields.insert(_ins, (_desc_label, 'descompte', True))
+
     rows = []
     for lbl, key, is_price in fields:
-        lbl_color = DARK if not is_price else colors.HexColor("#1A6B45") if key=='preu_final' else                     RED if key=='pendent' else colors.HexColor("#6B6860")
+        lbl_color = (DARK if not is_price else
+                     colors.HexColor("#1A6B45") if key=='preu_final' else
+                     RED if key=='pendent' else
+                     AMBER if key=='descompte' else colors.HexColor("#6B6860"))
         row = [p(lbl, bold=is_price, size=9, color=lbl_color)]
         for c in comandes:
             if key == 'marc_principal':
@@ -10661,34 +10672,45 @@ def crear_pdf_comparativa(comandes):
                 val = _display_revers_peu(c, t)
             elif key == 'impressio_label':
                 val = _display_impressio(c, t)
+            elif key == 'descompte':
+                dp = float(c.get('descompte') or 0)
+                if dp > 0:
+                    de = float(c.get('preu_net') or 0) * dp/100
+                    val = f"−{dp:g}% (−{de:.2f} €)"
+                else:
+                    val = '—'
             elif key == 'iva':
                 pn = float(c.get('preu_net',0) or 0)
-                val = f"{pn*0.21:.2f} €"
+                dp = float(c.get('descompte') or 0)
+                val = f"{pn*(1-dp/100)*0.21:.2f} €"
             elif is_price:
                 v = float(c.get(key,0) or 0)
                 val = f"{v:.2f} €"
             else:
                 val = val_clean(c, key)
             bold_cell = is_price and key in ('preu_final','pendent')
-            cell_color = GREEN if key=='preu_final' else RED if key=='pendent' else DARK
+            cell_color = (GREEN if key=='preu_final' else RED if key=='pendent'
+                          else AMBER if key=='descompte' else DARK)
             row.append(p(val, bold=bold_cell, size=9 if not bold_cell else 11,
                         color=cell_color, align='CENTER'))
         rows.append(row)
 
     col_widths = [col_lbl] + [col_w]*n
     detail_table = Table(rows, colWidths=col_widths)
-    price_start = len([f for f in fields if not f[2]])  # index where prices start
+    price_start = next((i for i, f in enumerate(fields) if f[2]), 0)  # primera fila de preu
+    idx_total = next((i for i, f in enumerate(fields) if f[1] == 'preu_final'), price_start)
+    idx_pend  = next((i for i, f in enumerate(fields) if f[1] == 'pendent'), len(fields)-1)
     detail_table.setStyle(TableStyle([
         ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, WHITE]),
         ('BOX',(0,0),(-1,-1),0.5,BRD),
         ('INNERGRID',(0,0),(-1,-1),0.3,BRD),
-        ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
+        ('TOPPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),3),
         ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
         ('BACKGROUND',(0,0),(0,-1),colors.HexColor("#F2F0EC")),
         ('FONTNAME',(0,0),(0,-1),'DejaVu-Bold'),
         ('LINEABOVE',(0,price_start),(-1,price_start),1.5,ACC),
-        ('BACKGROUND',(0,price_start+2),(-1,price_start+2),colors.HexColor("#E8F3EE")),
-        ('BACKGROUND',(0,price_start+4),(-1,price_start+4),colors.HexColor("#FAEAEA")),
+        ('BACKGROUND',(0,idx_total),(-1,idx_total),colors.HexColor("#E8F3EE")),
+        ('BACKGROUND',(0,idx_pend),(-1,idx_pend),colors.HexColor("#FAEAEA")),
     ]))
     story.append(detail_table)
 
