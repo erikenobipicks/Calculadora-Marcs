@@ -351,7 +351,9 @@ tr:hover td{background:#fbf8f3}
           </select>
           {% endif %}
           {% if multi %}
-          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank">Comparativa PDF</a>
+          <a href="/pdf-comanda-conjunta/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF de tota la comanda junta (totes les línies, amb descomptes i pendent)">📄 PDF comanda</a>
+          <button onclick="whatsappComandaConjunta('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar el resum de tota la comanda al client per WhatsApp">🟢 WhatsApp</button>
+          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF comparativa (opcions A/B/C per a la mateixa peça)">Comparativa PDF</a>
           {% endif %}
           {% for op in opcions %}{% if loop.first %}
           <button onclick="liquidarComanda({{ op.id }}, this)"
@@ -446,6 +448,20 @@ function filtrar() {
 // Auto-open first card
 var first = document.querySelector('.sessio-head');
 if (first) toggleSessio(first);
+
+function whatsappComandaConjunta(sessioId, btn) {
+  var prev = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  fetch('/api/comanda-conjunta-resum/' + encodeURIComponent(sessioId))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(btn){ btn.disabled = false; btn.textContent = prev; }
+      if(!d || !d.ok){ alert('No s\'ha pogut generar el resum de la comanda.'); return; }
+      var url = 'https://wa.me/' + (d.telefon || '') + '?text=' + encodeURIComponent(d.text || '');
+      window.open(url, '_blank');
+    })
+    .catch(function(){ if(btn){ btn.disabled = false; btn.textContent = prev; } alert('Error de connexió.'); });
+}
 
 function liquidarComanda(id, btn) {
   if(!confirm('Vols marcar el pagament total com a completat?')) return;

@@ -7425,6 +7425,140 @@ def pdf_comparativa(sessio_id):
     return send_file(pdf, mimetype='application/pdf',
                      download_name=f"comparativa_{nom}.pdf")
 
+def _comanda_linia_desc(com):
+    """Descripció d'una línia de comanda per al document/resum conjunt, conscient
+    del tipus (producte, fotografia impresa només, o marc)."""
+    marc        = (_row_get(com, 'marc_principal', '') or '').strip()
+    pre_marc    = (_row_get(com, 'pre_marc', '') or '').strip()
+    passpartout = (_row_get(com, 'passpartout', '') or '').strip()
+    vidre       = (_row_get(com, 'vidre', '') or '').strip()
+    encolat     = (_row_get(com, 'encolat', '') or '').strip()
+    impressio   = (_row_get(com, 'impressio', '') or '').strip()
+    revers_peu  = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    tipus_peca  = (_row_get(com, 'tipus_peca', '') or '').strip().lower()
+    only_print = (not marc and (not pre_marc or pre_marc == '-')
+                  and (not passpartout or passpartout == 'cap') and not vidre
+                  and (not encolat or encolat == '-') and bool(impressio and impressio != '-'))
+    if tipus_peca == 'producte':
+        return marc or 'Producte'
+    if only_print:
+        _mida = _format_size_text(_row_get(com, 'amplada', 0), _row_get(com, 'alcada', 0))
+        d = 'Fotografia impresa' + (f' {_mida}' if _mida else '')
+        if impressio and impressio != '-':
+            d += f' · {impressio}'
+        return d
+    parts = []
+    if passpartout and passpartout != 'cap': parts.append(passpartout)
+    if vidre:                                parts.append(vidre)
+    if pre_marc and pre_marc != '-':         parts.append(f'+ {pre_marc}')
+    if encolat and encolat != '-':           parts.append(encolat)
+    if revers_peu:                           parts.append('Revers amb peu')
+    if impressio and impressio != '-':       parts.append(impressio)
+    d = f'Marc {marc}' if marc else 'Emmarcació'
+    if parts:
+        d += ' · ' + ', '.join(parts)
+    return d
+
+
+def _comanda_conjunta_items(comandes):
+    """Construeix (items, entrega_total) per a crear_pdf_marcs a partir de totes
+    les línies d'una sessió de comanda."""
+    items = []
+    entrega_total = 0.0
+    for c in comandes:
+        c = dict(c)
+        items.append({
+            'text': _comanda_linia_desc(c),
+            'quantity': float(_row_get(c, 'quantitat', 1) or 1),
+            'preu_net': float(_row_get(c, 'preu_net', 0) or 0),
+            'cost_produccio': float(_row_get(c, 'cost_produccio', 0) or 0),
+            'ref': _row_get(c, 'marc_principal', '') or '',
+            'descompte': float(_row_get(c, 'descompte', 0) or 0),
+        })
+        entrega_total += float(_row_get(c, 'entrega', 0) or 0)
+    return items, round(entrega_total, 2)
+
+
+@app.route('/pdf-comanda-conjunta/<sessio_id>')
+@login_required
+def pdf_comanda_conjunta(sessio_id):
+    """PDF de TOTA la comanda (totes les línies d'una sessió) en un sol document,
+    amb descompte per línia i entrega a compte sumada → pendent."""
+    comandes = query('SELECT * FROM comandes WHERE sessio_id=? ORDER BY id', [sessio_id])
+    if not comandes:
+        return 'No trobat', 404
+    if not session.get('is_admin') and comandes[0]['user_id'] != session['user_id']:
+        return 'No autoritzat', 403
+    c0 = dict(comandes[0])
+    mode = (request.args.get('mode') or 'pvp').strip().lower()
+    if mode in ('cost', 'pvd') and session.get('is_admin'):
+        mode = 'cost'
+    else:
+        mode = 'pvp'
+    items, entrega_total = _comanda_conjunta_items(comandes)
+    client = {'nom': c0.get('client_nom') or '—', 'tel': c0.get('client_tel') or ''}
+    pdf = crear_pdf_marcs(items, client, mode=mode,
+                          num_pressupost=(c0.get('num_pressupost') or ''),
+                          user_id=c0.get('user_id', 0), entrega=entrega_total)
+    nom = (c0.get('client_nom') or 'comanda').replace(' ', '_')[:40]
+    return send_file(pdf, mimetype='application/pdf', download_name=f"comanda_{nom}.pdf")
+
+
+@app.route('/api/comanda-conjunta-resum/<sessio_id>')
+@login_required
+def api_comanda_conjunta_resum(sessio_id):
+    """Text-resum de tota la comanda (per enviar per WhatsApp) + telèfon del
+    client. Preus al client (PVP), amb descomptes i entrega a compte."""
+    comandes = query('SELECT * FROM comandes WHERE sessio_id=? ORDER BY id', [sessio_id])
+    if not comandes:
+        return jsonify({'ok': False, 'error': 'no_trobat'}), 404
+    if not session.get('is_admin') and comandes[0]['user_id'] != session['user_id']:
+        return jsonify({'ok': False, 'error': 'no_autoritzat'}), 403
+    c0 = dict(comandes[0])
+    items, entrega_total = _comanda_conjunta_items(comandes)
+    _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
+    empresa = (_r['valor'] if _r else '') or 'Reus Revela'
+    subtotal = 0.0
+    desc_total = 0.0
+    linies_txt = []
+    for it in items:
+        brut = float(it['preu_net'] or 0)
+        dp = max(0.0, min(100.0, float(it['descompte'] or 0)))
+        net = brut * (1 - dp / 100.0)
+        subtotal += brut
+        desc_total += brut - net
+        q = it['quantity']
+        q_txt = str(int(q)) if float(q).is_integer() else f'{q:g}'
+        extra = f' (-{dp:g}%)' if dp > 0 else ''
+        linies_txt.append(f"• {it['text']} · {q_txt} u · {net:.2f} €{extra}")
+    base = subtotal - desc_total
+    iva = base * 0.21
+    total = base + iva
+    pendent = total - entrega_total
+    L = [f"Pressupost {empresa}"]
+    if (c0.get('num_pressupost') or '').strip():
+        L[0] += f" · {c0.get('num_pressupost').strip()}"
+    if c0.get('client_nom'):
+        L.append(f"Client: {c0.get('client_nom')}")
+    L.append("")
+    L.extend(linies_txt)
+    L.append("")
+    L.append(f"Subtotal: {subtotal:.2f} €")
+    if desc_total > 0:
+        L.append(f"Descompte: -{desc_total:.2f} €")
+    L.append(f"IVA 21%: {iva:.2f} €")
+    L.append(f"TOTAL: {total:.2f} €")
+    if entrega_total > 0:
+        L.append(f"Entrega a compte: -{entrega_total:.2f} €")
+        L.append(f"Pendent: {pendent:.2f} €")
+    L.append("")
+    L.append(f"Gràcies! {empresa}")
+    telefon = re.sub(r'\D', '', (c0.get('client_tel') or ''))
+    if telefon and len(telefon) == 9:
+        telefon = '34' + telefon
+    return jsonify({'ok': True, 'text': '\n'.join(L), 'telefon': telefon})
+
+
 @app.route('/pdf/<int:comanda_id>')
 @login_required
 def generar_pdf(comanda_id):
