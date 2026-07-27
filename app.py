@@ -4924,11 +4924,23 @@ def api_desar_cistella():
     client_extern_id = (d.get('client_extern_id') or '').strip() or None
     observacions = (d.get('observacions') or '').strip()
     lang = (d.get('lang') or 'ca').strip() or 'ca'
+    try:
+        desc_global = max(0.0, min(100.0, float(d.get('descompte_global') or 0)))
+    except (TypeError, ValueError):
+        desc_global = 0.0
+    try:
+        entrega_total = max(0.0, float(d.get('entrega') or 0))
+    except (TypeError, ValueError):
+        entrega_total = 0.0
     sessio_id = secrets.token_hex(8)
     num_pressupost = generar_num_pressupost()
     data_str = datetime.now().strftime('%d/%m/%Y %H:%M')
-    n = 0
-    for i, it in enumerate(items):
+
+    # Pas 1: calcula cada línia. El descompte global es plega dins del descompte
+    # de cada línia (el model de comanda té un sol descompte per fila), així el
+    # PDF/resum conjunt de l'historial el mostra correctament.
+    lines = []
+    for it in items:
         if not isinstance(it, dict):
             continue
         text = (str(it.get('text') or 'Producte')).strip()[:300]
@@ -4944,14 +4956,41 @@ def api_desar_cistella():
             pvd = float(it.get('cost_produccio') or 0)
         except (TypeError, ValueError):
             pvd = 0.0
+        try:
+            line_dp = max(0.0, min(100.0, float(it.get('descompte') or 0)))
+        except (TypeError, ValueError):
+            line_dp = 0.0
+        eff_dp = round(100.0 * (1 - (1 - line_dp / 100.0) * (1 - desc_global / 100.0)), 2)
+        net = pvp * (1 - eff_dp / 100.0)
+        preu_final = round(net * 1.21, 2)
+        lines.append({'text': text, 'qty': qty, 'pvp': pvp, 'pvd': pvd,
+                      'desc': eff_dp, 'preu_final': preu_final})
+
+    # Pas 2: reparteix l'entrega a compte entre línies (proporcional al total de
+    # cada línia); l'última s'endú el residu per evitar desquadres d'arrodoniment.
+    sum_final = sum(l['preu_final'] for l in lines)
+    assignat = 0.0
+    for idx, l in enumerate(lines):
+        if entrega_total <= 0 or sum_final <= 0:
+            l['entrega'] = 0.0
+        elif idx == len(lines) - 1:
+            l['entrega'] = round(entrega_total - assignat, 2)
+        else:
+            e = round(entrega_total * l['preu_final'] / sum_final, 2)
+            l['entrega'] = e
+            assignat += e
+        l['pendent'] = round(l['preu_final'] - l['entrega'], 2)
+
+    n = 0
+    for i, l in enumerate(lines):
         execute(
             '''INSERT INTO comandes
                (user_id, data, client_nom, client_tel, marc_principal, quantitat,
-                preu_net, preu_final, cost_produccio, entrega, pendent, observacions,
+                preu_net, preu_final, cost_produccio, descompte, entrega, pendent, observacions,
                 sessio_id, opcio_nom, num_pressupost, lang, client_extern_id, tipus_peca)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-            [session['user_id'], data_str, client_nom, client_tel, text, qty,
-             pvp, round(pvp * 1.21, 2), pvd, 0, round(pvp * 1.21, 2),
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            [session['user_id'], data_str, client_nom, client_tel, l['text'], l['qty'],
+             l['pvp'], l['preu_final'], l['pvd'], l['desc'], l['entrega'], l['pendent'],
              observacions if i == 0 else '',
              sessio_id, f'Línia {i + 1}', num_pressupost, lang, client_extern_id, 'producte'])
         n += 1
