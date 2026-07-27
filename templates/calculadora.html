@@ -5145,6 +5145,51 @@ function _priceView(){
 // Retorna true si al pressupost només s'hi ha de veure el preu PVD.
 function cistellaClientIsPVD(){ return _priceView() === 'pvd'; }
 
+function setCistellaDesc(i, val){
+  var d = parseFloat(val)||0; if(d<0) d=0; if(d>100) d=100;
+  if(_cistella[i]) _cistella[i].descompte = d;
+  renderCistella();
+}
+// Totals de la comanda conjunta: descompte per línia + descompte global +
+// entrega a compte → pendent. Es calcula sobre el preu de la vista (PVP/PVD).
+function _cistellaComputeTotals(){
+  var view = _priceView(); var isPVD = view === 'pvd';
+  var subtotal=0, lineDisc=0;
+  _cistella.forEach(function(it){
+    var base = isPVD ? (it.cost_produccio||0) : (it.preu_net||0);
+    var dp = parseFloat(it.descompte)||0; if(dp<0) dp=0; if(dp>100) dp=100;
+    subtotal += base; lineDisc += base*(dp/100);
+  });
+  var afterLine = subtotal - lineDisc;
+  var gp = parseFloat((document.getElementById('cist-desc-global')||{}).value)||0; if(gp<0) gp=0; if(gp>100) gp=100;
+  var globalDisc = afterLine*(gp/100);
+  var baseImp = afterLine - globalDisc;
+  var iva = baseImp*0.21;
+  var total = baseImp + iva;
+  var entrega = parseFloat((document.getElementById('cist-entrega')||{}).value)||0; if(entrega<0) entrega=0;
+  var pendent = total - entrega;
+  return {isPVD:isPVD, view:view, subtotal:subtotal, lineDisc:lineDisc, afterLine:afterLine,
+          gp:gp, globalDisc:globalDisc, baseImp:baseImp, iva:iva, total:total, entrega:entrega, pendent:pendent};
+}
+function renderCistellaTotals(){
+  var el = document.getElementById('cistella-totals'); if(!el) return;
+  var T = _cistellaComputeTotals();
+  var lbl = T.isPVD ? 'PVD (taller)' : 'PVP (client)';
+  function row(l,v,o){o=o||{};return '<div style="display:flex;justify-content:space-between;align-items:baseline;'+(o.mt||'margin-top:.3rem')+'">'
+    +'<span style="font-size:'+(o.big?'13px':'12px')+';font-weight:'+(o.bold?'700':'600')+';color:'+(o.color||'var(--muted)')+'">'+l+'</span>'
+    +'<span style="font-size:'+(o.big?'17px':'13px')+';font-weight:'+(o.bold?'700':'600')+';color:'+(o.color||'var(--text)')+'">'+v+'</span></div>';}
+  var h = row('Subtotal '+lbl, T.subtotal.toFixed(2)+' €', {mt:'margin-top:0'});
+  if(T.lineDisc>0) h += row('Descomptes per línia', '- '+T.lineDisc.toFixed(2)+' €', {color:'#C8873A'});
+  if(T.gp>0) h += row('Descompte global '+_gNum(T.gp)+'%', '- '+T.globalDisc.toFixed(2)+' €', {color:'#C8873A'});
+  if(T.lineDisc>0 || T.gp>0) h += row('Base imposable', T.baseImp.toFixed(2)+' €');
+  h += row('IVA 21%', T.iva.toFixed(2)+' €');
+  h += row('TOTAL amb IVA', T.total.toFixed(2)+' €', {bold:true,big:true,color:'var(--green,#1A6B45)',mt:'margin-top:.5rem;padding-top:.4rem;border-top:1px solid var(--border)'});
+  if(T.entrega>0){
+    h += row('Entrega a compte', '- '+T.entrega.toFixed(2)+' €');
+    h += row('PENDENT', T.pendent.toFixed(2)+' €', {bold:true,color:'#B84040'});
+  }
+  el.innerHTML = h;
+}
 function renderCistella(){
   var n = _cistella.length;
   var view = _priceView();
@@ -5160,41 +5205,28 @@ function renderCistella(){
     } else {
       cont.innerHTML = _cistella.map(function(it,i){
         var pvp=(it.preu_net||0), pvd=(it.cost_produccio||0);
+        var dpct = parseFloat(it.descompte)||0;
+        var baseShown = isPVD ? pvd : pvp;
         var meta;
         if(isPVD){
-          // Vista PVD: només preu PVD.
           meta = it.quantity+' u · PVD '+pvd.toFixed(2)+' €';
         } else {
           meta = it.quantity+' u · PVP '+pvp.toFixed(2)+' €';
-          // El cost PVD només s'afegeix en vista "both" (Tots), no si es filtra PVP.
           if(IS_ADMIN && view === 'both') meta += ' · cost '+pvd.toFixed(2)+' €';
         }
-        return '<div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--border)">'+
+        if(dpct>0) meta += ' · net '+(baseShown*(1-dpct/100)).toFixed(2)+' €';
+        return '<div style="display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border)">'+
           '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;line-height:1.3">'+escapeHtml(it.text)+'</div>'+
           '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+meta+'</div></div>'+
-          '<button type="button" onclick="eliminarDeCistella('+i+')" title="Treure" style="background:none;border:none;color:#B84040;cursor:pointer;font-size:20px;line-height:1;padding:0 4px">×</button>'+
+          '<div style="display:flex;align-items:center;gap:2px;font-size:11px;color:var(--muted)" title="Descompte d\'aquesta línia (%)">'+
+            '<input type="number" min="0" max="100" step="0.5" value="'+(dpct||'')+'" placeholder="0" onchange="setCistellaDesc('+i+',this.value)" style="width:44px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;font-size:12px;text-align:right">%'+
+          '</div>'+
+          '<button type="button" onclick="eliminarDeCistella('+i+')" title="Treure" style="background:none;border:none;color:#B84040;cursor:pointer;font-size:20px;line-height:1;padding:0 2px">×</button>'+
         '</div>';
       }).join('');
     }
   }
-  var totPvp=_cistella.reduce(function(s,it){return s+(it.preu_net||0);},0);
-  var totPvd=_cistella.reduce(function(s,it){return s+(it.cost_produccio||0);},0);
-  var labelEl=document.getElementById('cistella-tot-label');
-  var elPvp=document.getElementById('cistella-tot-pvp');
-  var elPvd=document.getElementById('cistella-tot-pvd');
-  var secRow=document.getElementById('cistella-tot-secondary');
-  if(isPVD){
-    // Vista PVD: el total principal és el PVD i s'amaga la fila de cost extra.
-    if(labelEl) labelEl.textContent = 'Total PVD (taller)';
-    if(elPvp) elPvp.textContent = totPvd.toFixed(2)+' € + IVA';
-    if(secRow) secRow.style.display = 'none';
-  } else {
-    if(labelEl) labelEl.textContent = 'Total PVP (client)';
-    if(elPvp) elPvp.textContent = totPvp.toFixed(2)+' € + IVA';
-    // La fila de cost PVD només es mostra en vista "both" (Tots).
-    if(secRow) secRow.style.display = (view === 'both') ? '' : 'none';
-    if(elPvd) elPvd.textContent = totPvd.toFixed(2)+' €';
-  }
+  renderCistellaTotals();
 }
 
 // Construeix el text del pressupost per copiar (WhatsApp, etc.).
@@ -5298,7 +5330,9 @@ function _cistellaPayloadBase(){
     client_tel: (document.getElementById('client_tel')||{}).value||'',
     client_extern_id: (document.getElementById('client_extern_id')||{}).value||'',
     num_pressupost: window._numPressupost||'',
-    observacions: (document.getElementById('observacions')||{}).value||''
+    observacions: (document.getElementById('observacions')||{}).value||'',
+    descompte_global: parseFloat((document.getElementById('cist-desc-global')||{}).value)||0,
+    entrega: parseFloat((document.getElementById('cist-entrega')||{}).value)||0
   };
 }
 
@@ -5908,16 +5942,17 @@ recalcMides();
     </div>
     <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
       <div id="cistella-items"></div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:1rem;padding-top:.8rem;border-top:2px solid var(--border)">
-        <span id="cistella-tot-label" style="font-size:13px;font-weight:600;color:var(--muted)">Total PVP (client)</span>
-        <strong id="cistella-tot-pvp" style="font-size:18px;color:var(--green,#1A6B45)">0.00 € + IVA</strong>
+      <div style="margin-top:1rem;padding-top:.8rem;border-top:2px solid var(--border);display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:110px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px">Descompte global (%)</label>
+          <input type="number" id="cist-desc-global" min="0" max="100" step="0.5" value="0" oninput="renderCistellaTotals()" style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:6px;font-size:13px">
+        </div>
+        <div style="flex:1;min-width:110px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px">Entrega a compte (€)</label>
+          <input type="number" id="cist-entrega" min="0" step="0.01" value="0" oninput="renderCistellaTotals()" style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:6px;font-size:13px">
+        </div>
       </div>
-      {% if session.is_admin %}
-      <div id="cistella-tot-secondary" style="display:flex;justify-content:space-between;align-items:baseline;margin-top:.35rem">
-        <span style="font-size:12px;color:var(--muted)">Total cost producció (taller)</span>
-        <span id="cistella-tot-pvd" style="font-size:13px;color:var(--muted)">0.00 €</span>
-      </div>
-      {% endif %}
+      <div id="cistella-totals" style="margin-top:.7rem"></div>
     </div>
     <div id="cistella-actions" style="padding:.9rem 1.4rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end">
       <button type="button" onclick="copiarCistella()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text del pressupost per enganxar-lo a WhatsApp">📋 Copiar text</button>

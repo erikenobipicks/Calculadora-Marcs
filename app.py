@@ -11331,7 +11331,8 @@ def crear_pdf(c, mode=''):
     return buf
 
 
-def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='', user_id=0):
+def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='', user_id=0,
+                    descompte_global=0, entrega=0):
     """PDF d'un pressupost amb DIVERSOS marcs (cistella multi-marc) per a un
     mateix client. `items` = [{text, quantity, preu_net, cost_produccio}].
     `mode` = 'pvp' (preu de venda) o 'pvd' (preu taller/cost)."""
@@ -11376,13 +11377,16 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
             print(f"[pdf-marcs] thumb error {ref}: {_e}")
         return None
 
+    # Amplada de la columna de concepte (compartida per la taula i la miniatura).
+    col_concept = W * 0.44
+
     def _concept_cell(text, ref):
         """Cel·la de concepte: si la motllura té foto de mostra, la posa a
         l'esquerra del text; si no, només el text."""
         thumb = _marc_thumb(ref)
         if thumb is None:
             return p(text, size=9)
-        inner = Table([[thumb, p(text, size=9)]], colWidths=[24*mm, W*0.52 - 24*mm])
+        inner = Table([[thumb, p(text, size=9)]], colWidths=[24*mm, col_concept - 24*mm])
         inner.setStyle(TableStyle([
             ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
             ('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(0,0),4),
@@ -11482,12 +11486,16 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
 
     # ── Taula de marcs ────────────────────────────────────────────────────
     es_pvd = (mode == 'pvd' or mode == 'cost')
+    AMBER = colors.HexColor("#C8873A")
+    RED   = colors.HexColor("#B84040")
     head = [p('Concepte', bold=True, size=9, color=WHITE),
             p('Unitats', bold=True, size=9, color=WHITE, align='CENTER'),
             p('Preu/u', bold=True, size=9, color=WHITE, align='RIGHT'),
+            p('Dte', bold=True, size=9, color=WHITE, align='CENTER'),
             p('Import', bold=True, size=9, color=WHITE, align='RIGHT')]
     rows = [head]
-    subtotal = 0.0
+    subtotal = 0.0        # brut (abans de descomptes)
+    descompte_linies = 0.0
     for it in (items or []):
         if not isinstance(it, dict):
             continue
@@ -11501,17 +11509,27 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
             base = float(it.get('cost_produccio') or 0) if es_pvd else float(it.get('preu_net') or 0)
         except Exception:
             base = 0.0
+        try:
+            dp = float(it.get('descompte') or 0)
+        except Exception:
+            dp = 0.0
+        dp = max(0.0, min(100.0, dp))
         unit = round(base / qty, 2) if qty > 0 else round(base, 2)
-        import_linia = round(unit * qty, 2)
-        subtotal += import_linia
+        brut_linia = round(unit * qty, 2)
+        desc_linia = round(brut_linia * dp / 100.0, 2)
+        import_linia = round(brut_linia - desc_linia, 2)
+        subtotal += brut_linia
+        descompte_linies += desc_linia
         qty_txt = str(int(qty)) if float(qty).is_integer() else f'{qty:g}'
         rows.append([
             _concept_cell(text, ref),
             p(qty_txt, size=9, align='CENTER'),
             p(f'{unit:.2f} €', size=9, align='RIGHT'),
+            p(f'{dp:g}%' if dp > 0 else '—', size=9, align='CENTER',
+              color=AMBER if dp > 0 else colors.HexColor("#9E9B94")),
             p(f'{import_linia:.2f} €', size=9, align='RIGHT'),
         ])
-    tmarcs = Table(rows, colWidths=[W*0.52, W*0.14, W*0.16, W*0.18])
+    tmarcs = Table(rows, colWidths=[col_concept, W*0.12, W*0.15, W*0.11, W*0.18])
     tmarcs.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,0), DARK),
         ('ROWBACKGROUNDS',(0,1),(-1,-1),[WHITE, LIG]),
@@ -11523,26 +11541,58 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
     story.append(tmarcs)
     story.append(Spacer(1, 5*mm))
 
-    # ── Totals ────────────────────────────────────────────────────────────
-    iva = round(subtotal * 0.21, 2)
-    total = round(subtotal + iva, 2)
-    tot_rows = [
-        [p('Subtotal (sense IVA)', bold=True, size=9, color=colors.HexColor("#6B6860")),
-         p(f'{subtotal:.2f} €', size=10, align='RIGHT')],
-        [p('IVA 21%', bold=True, size=9, color=colors.HexColor("#6B6860")),
-         p(f'{iva:.2f} €', size=10, align='RIGHT')],
-        [p('TOTAL amb IVA', bold=True, size=11, color=GREEN),
-         p(f'{total:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
-    ]
+    # ── Totals (amb descomptes i entrega a compte) ────────────────────────
+    try:
+        dg = max(0.0, min(100.0, float(descompte_global or 0)))
+    except Exception:
+        dg = 0.0
+    try:
+        entrega_val = max(0.0, float(entrega or 0))
+    except Exception:
+        entrega_val = 0.0
+    after_linies = round(subtotal - descompte_linies, 2)
+    descompte_glob_eur = round(after_linies * dg / 100.0, 2)
+    base_imp = round(after_linies - descompte_glob_eur, 2)
+    iva = round(base_imp * 0.21, 2)
+    total = round(base_imp + iva, 2)
+    pendent = round(total - entrega_val, 2)
+
+    MUT = colors.HexColor("#6B6860")
+    tot_rows = [[p('Subtotal (sense IVA)', bold=True, size=9, color=MUT),
+                 p(f'{subtotal:.2f} €', size=10, align='RIGHT')]]
+    if descompte_linies > 0:
+        tot_rows.append([p('Descomptes per línia', bold=True, size=9, color=AMBER),
+                         p(f'- {descompte_linies:.2f} €', size=10, color=AMBER, align='RIGHT')])
+    if dg > 0:
+        tot_rows.append([p(f'Descompte global {dg:g}%', bold=True, size=9, color=AMBER),
+                         p(f'- {descompte_glob_eur:.2f} €', size=10, color=AMBER, align='RIGHT')])
+    if descompte_linies > 0 or dg > 0:
+        tot_rows.append([p('Base imposable', bold=True, size=9, color=MUT),
+                         p(f'{base_imp:.2f} €', size=10, align='RIGHT')])
+    tot_rows.append([p('IVA 21%', bold=True, size=9, color=MUT),
+                     p(f'{iva:.2f} €', size=10, align='RIGHT')])
+    total_row_idx = len(tot_rows)
+    tot_rows.append([p('TOTAL amb IVA', bold=True, size=11, color=GREEN),
+                     p(f'{total:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')])
+    pend_row_idx = None
+    if entrega_val > 0:
+        tot_rows.append([p('Entrega a compte', bold=True, size=9, color=MUT),
+                         p(f'- {entrega_val:.2f} €', size=10, align='RIGHT')])
+        pend_row_idx = len(tot_rows)
+        tot_rows.append([p('PENDENT DE PAGAR', bold=True, size=11, color=RED),
+                         p(f'{pendent:.2f} €', bold=True, size=13, color=RED, align='RIGHT')])
     ttot = Table(tot_rows, colWidths=[W*0.62, W*0.38])
-    ttot.setStyle(TableStyle([
-        ('BACKGROUND',(0,2),(-1,2), colors.HexColor("#E8F3EE")),
-        ('ROWBACKGROUNDS',(0,0),(-1,1),[LIG, WHITE]),
+    _tstyle = [
+        ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, WHITE]),
         ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
         ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
         ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
-        ('LINEABOVE',(0,2),(-1,2),1.5,GREEN),
-    ]))
+        ('BACKGROUND',(0,total_row_idx),(-1,total_row_idx), colors.HexColor("#E8F3EE")),
+        ('LINEABOVE',(0,total_row_idx),(-1,total_row_idx),1.5,GREEN),
+    ]
+    if pend_row_idx is not None:
+        _tstyle.append(('BACKGROUND',(0,pend_row_idx),(-1,pend_row_idx), colors.HexColor("#FAEAEA")))
+    ttot.setStyle(TableStyle(_tstyle))
     story.append(ttot)
 
     if (observacions or '').strip():
@@ -11582,10 +11632,19 @@ def api_pdf_marcs():
     if mode != 'pvp' and not session.get('is_admin'):
         mode = 'pvp'
     try:
+        _dg = float(d.get('descompte_global') or 0)
+    except (TypeError, ValueError):
+        _dg = 0.0
+    try:
+        _ent = float(d.get('entrega') or 0)
+    except (TypeError, ValueError):
+        _ent = 0.0
+    try:
         pdf = crear_pdf_marcs(items, client, mode=mode,
                               num_pressupost=(d.get('num_pressupost') or '').strip(),
                               observacions=(d.get('observacions') or '').strip(),
-                              user_id=session.get('user_id', 0))
+                              user_id=session.get('user_id', 0),
+                              descompte_global=_dg, entrega=_ent)
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Error generant PDF: {e}'}), 500
     nom_fitxer = (client['nom'] or 'pressupost').replace(' ', '_')[:40]
