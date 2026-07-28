@@ -66,7 +66,8 @@ tr:hover td{background:#FAFAF8}
 .btn-acc{background:#E8F3EE;color:#1A6B45;border:1px solid #B8DCC9}.btn-acc:hover{background:#C8E6D9}
 .btn-del{background:#FAEAEA;color:#B84040;border:1px solid #E8B4B4}.btn-del:hover{background:#F5D0D0}
 .acceptat td{background:#F0FAF5!important}
-.sessio-actions{padding:.75rem 1.1rem;display:flex;gap:.5rem;background:var(--bg);border-top:1px solid var(--border)}
+.sessio-actions{padding:.75rem 1.1rem;display:flex;gap:.5rem;align-items:center;background:var(--bg);border-top:1px solid var(--border)}
+.act-sep{width:1px;min-height:22px;background:var(--border);margin:0 .15rem;display:inline-block;align-self:center}
 .empty{text-align:center;padding:3rem;color:var(--hint);font-size:14px}
 .admin-filter{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:1.25rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:var(--r)}
 .filter-btn{padding:5px 14px;border-radius:20px;font-size:13px;font-weight:500;text-decoration:none;color:var(--muted);background:var(--bg);border:1px solid var(--border);transition:all .15s}
@@ -193,9 +194,11 @@ tr:hover td{background:#fbf8f3}
     <a href="/historial?estat=urgents" class="filter-btn {% if filtre_estat=='urgents' %}active{% endif %}" style="{% if filtre_estat=='urgents' %}background:var(--red);border-color:var(--red){% else %}border-color:var(--red);color:var(--red){% endif %}">Urgents</a>
     <a href="/historial?estat=entregats" class="filter-btn {% if filtre_estat=='entregats' %}active{% endif %}">Entregats</a>
     <span style="color:var(--hint);font-size:11px;margin:0 .25rem">|</span>
-    {% for k, l in estats %}
-    <a href="/historial?estat={{ k }}" class="filter-btn {% if filtre_estat==k %}active{% endif %}">{{ l }}</a>
-    {% endfor %}
+    <select onchange="if(this.value) location.href='/historial?estat='+this.value; else location.href='/historial';"
+            style="padding:5px 10px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid {% if filtre_estat in estat_labels %}var(--green){% else %}var(--border){% endif %};background:{% if filtre_estat in estat_labels %}var(--green){% else %}var(--bg){% endif %};color:{% if filtre_estat in estat_labels %}#fff{% else %}var(--muted){% endif %};cursor:pointer;font-family:'DM Sans',sans-serif">
+      <option value="">Estat detallat…</option>
+      {% for k, l in estats %}<option value="{{ k }}" {% if filtre_estat==k %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
   </div>
 
   {% if session.is_admin %}
@@ -205,9 +208,15 @@ tr:hover td{background:#fbf8f3}
     <a href="/historial?albara=pendent" class="filter-btn {% if filtre_albara %}active{% endif %}" style="{% if n_pendents_albara %}border-color:var(--amber);color:var(--amber){% endif %}">
       Pendents albarà{% if n_pendents_albara %} <strong style="background:var(--amber);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px">{{ n_pendents_albara }}</strong>{% endif %}
     </a>
-    {% for u in usuaris_list %}
-    <a href="/historial?user_id={{ u.id }}" class="filter-btn {% if filtre_uid == u.id and not filtre_all and not filtre_albara and not filtre_client %}active{% endif %}">{{ u.nom or u.username }}</a>
-    {% endfor %}
+    {% if usuaris_list %}
+    <span style="color:var(--hint);font-size:11px;margin:0 .3rem">|</span>
+    {% set _prof_actiu = filtre_uid and filtre_uid != session.user_id and not filtre_all and not filtre_albara and not filtre_client %}
+    <select onchange="if(this.value) location.href='/historial?user_id='+this.value; else location.href='/historial';"
+            style="padding:5px 10px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid {% if _prof_actiu %}var(--green){% else %}var(--border){% endif %};background:{% if _prof_actiu %}var(--green){% else %}var(--bg){% endif %};color:{% if _prof_actiu %}#fff{% else %}var(--muted){% endif %};cursor:pointer;font-family:'DM Sans',sans-serif">
+      <option value="">Professional…</option>
+      {% for u in usuaris_list %}<option value="{{ u.id }}" {% if _prof_actiu and filtre_uid == u.id %}selected{% endif %}>{{ u.nom or u.username }}</option>{% endfor %}
+    </select>
+    {% endif %}
     {% if clients_habituals %}
     <span style="color:var(--hint);font-size:11px;margin:0 .3rem">|</span>
     <select onchange="if(this.value) location.href='/historial?client='+this.value; else location.href='/historial';" style="padding:4px 10px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid {% if filtre_client %}var(--green){% else %}var(--border){% endif %};background:{% if filtre_client %}var(--green){% else %}var(--bg){% endif %};color:{% if filtre_client %}#fff{% else %}var(--muted){% endif %};cursor:pointer;font-family:'DM Sans',sans-serif">
@@ -358,17 +367,33 @@ tr:hover td{background:#fbf8f3}
           </tbody>
         </table>
         <div class="sessio-actions" id="actions-{{ sessio_id }}">
+          {# ── Estat i lliurament ── #}
           {% if session.is_admin %}
           <select onchange="canviEstat('{{ sessio_id }}', this.value, this)" title="Canviar estat de la comanda"
                   style="padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif">
             {% for k, l in estats %}<option value="{{ k }}" {% if c0.estat == k %}selected{% endif %}>{{ l }}</option>{% endfor %}
           </select>
           {% endif %}
+          <button onclick="marcarEntregat('{{ sessio_id }}', this)"
+            class="btn-sm {% if c0.entregat %}btn-entregat-on{% else %}btn-entregat{% endif %}">
+            {% if c0.entregat %}📦 Entregat{% else %}Marcar entregat{% endif %}
+          </button>
+
           {% if multi %}
+          <span class="act-sep"></span>
+          {# ── Documents (comanda conjunta) ── #}
           <a href="/pdf-comanda-conjunta/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF de tota la comanda junta (totes les línies, amb descomptes i pendent)">📄 PDF comanda</a>
           <button onclick="whatsappComandaConjunta('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar el resum de tota la comanda al client per WhatsApp">🟢 WhatsApp</button>
-          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF comparativa (opcions A/B/C per a la mateixa peça)">Comparativa PDF</a>
+          <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF comparativa (opcions A/B/C per a la mateixa peça)">Comparativa</a>
           {% endif %}
+
+          <span class="act-sep"></span>
+          {# ── Avís al client ── #}
+          <button onclick="avisarClient('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar un correu al client dient que la comanda està a punt per recollir (i marcar-la com a avisada)">📣 Avisar</button>
+          <button onclick="recordarPendent('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar un correu al client recordant-li l'import pendent">💶 Recordar pendent</button>
+
+          <span class="act-sep"></span>
+          {# ── Cobrament ── #}
           <button onclick="liquidarSessio('{{ sessio_id }}', this)"
             class="btn-sm btn-liq" title="Liquidar tot el saldo pendent de la comanda (totes les línies)">
             Liquidar pendent
@@ -377,22 +402,19 @@ tr:hover td{background:#fbf8f3}
             class="btn-sm {% if c0.pagat %}btn-pagat-on{% else %}btn-pagat{% endif %}">
             {% if c0.pagat %}✓ Pagat{% else %}Marcar pagat{% endif %}
           </button>
-          <button onclick="marcarEntregat('{{ sessio_id }}', this)"
-            class="btn-sm {% if c0.entregat %}btn-entregat-on{% else %}btn-entregat{% endif %}">
-            {% if c0.entregat %}📦 Entregat{% else %}Marcar entregat{% endif %}
-          </button>
-          <button onclick="avisarClient('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar un correu al client dient que la comanda està a punt per recollir (i marcar-la com a avisada)">📣 Avisar client</button>
-          <button onclick="recordarPendent('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar un correu al client recordant-li l'import pendent">💶 Recordar pendent</button>
+
           {% if session.is_admin %}
+          <span class="act-sep"></span>
+          {# ── FacturaDirecta ── #}
           <button onclick="crearAlbaraComanda('{{ sessio_id }}', this)"
             class="btn-sm btn-albara"
             {% if c0.fd_albara %}title="Albarà ja creat: {{ c0.fd_albara }}"{% endif %}>
-            {% if c0.fd_albara %}✓ Albarà {{ c0.fd_albara }}{% else %}Crear albarà FD{% endif %}
+            {% if c0.fd_albara %}✓ Albarà {{ c0.fd_albara }}{% else %}Albarà FD{% endif %}
           </button>
           <button onclick="crearFacturaComanda('{{ sessio_id }}', this)"
             class="btn-sm btn-albara"
             title="{% if c0.fd_factura %}Factura ja creada: {{ c0.fd_factura }}{% else %}Crear una factura a FacturaDirecta per tota la comanda (a preu client){% endif %}">
-            {% if c0.fd_factura %}✓ Factura {{ c0.fd_factura }}{% else %}Crear factura FD{% endif %}
+            {% if c0.fd_factura %}✓ Factura {{ c0.fd_factura }}{% else %}Factura FD{% endif %}
           </button>
           {% endif %}
         </div>
