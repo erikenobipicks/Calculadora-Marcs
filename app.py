@@ -7826,6 +7826,19 @@ def _comanda_linia_desc(com):
     return d
 
 
+def _comanda_es_taller(c0):
+    """True si el client de la comanda és un client habitual de tipus 'taller'
+    (PVD), per decidir si el document ha de sortir a preu PVD."""
+    cext = _row_get(c0, 'client_extern_id')
+    if not cext:
+        return False
+    try:
+        r = query("SELECT tipus FROM clients_externs WHERE id=?", [cext], one=True)
+    except Exception:
+        return False
+    return bool(r) and (_row_get(r, 'tipus', '') or '').strip().lower() == 'taller'
+
+
 def _comanda_conjunta_items(comandes):
     """Construeix (items, entrega_total) per a crear_pdf_marcs a partir de totes
     les línies d'una sessió de comanda."""
@@ -7856,11 +7869,14 @@ def pdf_comanda_conjunta(sessio_id):
     if not session.get('is_admin') and comandes[0]['user_id'] != session['user_id']:
         return 'No autoritzat', 403
     c0 = dict(comandes[0])
-    mode = (request.args.get('mode') or 'pvp').strip().lower()
-    if mode in ('cost', 'pvd') and session.get('is_admin'):
+    _mode_arg = (request.args.get('mode') or '').strip().lower()
+    if _mode_arg in ('cost', 'pvd') and session.get('is_admin'):
         mode = 'cost'
-    else:
+    elif _mode_arg == 'pvp':
         mode = 'pvp'
+    else:
+        # Sense mode explícit: si el client és de taller (PVD), mostrem PVD.
+        mode = 'cost' if _comanda_es_taller(c0) else 'pvp'
     items, entrega_total = _comanda_conjunta_items(comandes)
     client = {'nom': c0.get('client_nom') or '—', 'tel': c0.get('client_tel') or ''}
     pdf = crear_pdf_marcs(items, client, mode=mode,
@@ -11507,6 +11523,8 @@ PDF_T = {
         'preu_net_pvp': 'Preu net PVP (sense IVA)',
         'descompte_sobre_pvp': 'Descompte {pct}% sobre PVP',
         'total_pvp_iva': 'TOTAL PVP amb IVA',
+        'preu_net_pvd': 'Preu net PVD taller (sense IVA)',
+        'total_pvd_iva': 'TOTAL PVD taller amb IVA',
         'pendent_cobrar': 'PENDENT de cobrar',
     },
     'es': {
@@ -11559,6 +11577,8 @@ PDF_T = {
         'preu_net_pvp': 'Precio neto PVP (sin IVA)',
         'descompte_sobre_pvp': 'Descuento {pct}% sobre PVP',
         'total_pvp_iva': 'TOTAL PVP con IVA',
+        'preu_net_pvd': 'Precio neto PVD taller (sin IVA)',
+        'total_pvd_iva': 'TOTAL PVD taller con IVA',
         'pendent_cobrar': 'PENDIENTE de cobro',
     },
     'en': {
@@ -11611,6 +11631,8 @@ PDF_T = {
         'preu_net_pvp': 'Net retail price (excl. VAT)',
         'descompte_sobre_pvp': 'Discount {pct}% on retail price',
         'total_pvp_iva': 'TOTAL retail incl. VAT',
+        'preu_net_pvd': 'Net workshop price (excl. VAT)',
+        'total_pvd_iva': 'TOTAL workshop incl. VAT',
         'pendent_cobrar': 'OUTSTANDING amount',
     }
 }
@@ -11847,15 +11869,26 @@ def crear_pdf(c, mode=''):
     story.append(Spacer(1, 5*mm))
 
     # ── Resum econòmic ────────────────────────────────────────────────────
-    desc_pct = float(c.get('descompte') or 0)
-    pnet  = float(c.get('preu_net')   or 0)
-    pfin  = float(c.get('preu_final') or 0)
-    piva  = pnet * 1.21
+    # Client de taller (PVD) → mostrem NOMÉS el preu de taller (cost_produccio),
+    # no el PVP. Sense descompte comercial (el PVD ja és el preu del taller).
     pent  = float(c.get('entrega')    or 0)
-    ppend = float(c.get('pendent')    or 0)
+    if is_pvd_doc:
+        desc_pct = 0.0
+        pnet  = float(c.get('cost_produccio') or 0)
+        pfin  = round(pnet * 1.21, 2)
+        ppend = round(pfin - pent, 2)
+        lbl_net   = t.get('preu_net_pvd', t['preu_net_pvp'])
+        lbl_total = t.get('total_pvd_iva', t['total_pvp_iva'])
+    else:
+        desc_pct = float(c.get('descompte') or 0)
+        pnet  = float(c.get('preu_net')   or 0)
+        pfin  = float(c.get('preu_final') or 0)
+        ppend = float(c.get('pendent')    or 0)
+        lbl_net   = t['preu_net_pvp']
+        lbl_total = t['total_pvp_iva']
 
     t3_data = [
-        [p(t['preu_net_pvp'], bold=True, size=9, color=colors.HexColor("#6B6860")),
+        [p(lbl_net, bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{pnet:.2f} €', size=10, align='RIGHT')],
     ]
     if desc_pct > 0:
@@ -11867,7 +11900,7 @@ def crear_pdf(c, mode=''):
     t3_data += [
         [p(t['iva'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{(pnet*(1-desc_pct/100))*0.21:.2f} €', size=10, align='RIGHT')],
-        [p(t['total_pvp_iva'], bold=True, size=11, color=GREEN),
+        [p(lbl_total, bold=True, size=11, color=GREEN),
          p(f'{pfin:.2f} €', bold=True, size=14, color=GREEN, align='RIGHT')],
         [p(t['entrega'], bold=True, size=9, color=colors.HexColor("#6B6860")),
          p(f'{pent:.2f} €', size=10, align='RIGHT')],
