@@ -4351,7 +4351,17 @@ function afegirACistella(){
     quantity: qty,
     preu_net: c.preu_net||0,
     cost_produccio: c.cost_produccio||0,
-    ref: _mref
+    ref: _mref,
+    // Detall estructurat perquè l'historial mostri mides i materials (i no 0×0):
+    amplada: parseFloat((document.getElementById('amplada')||{}).value)||0,
+    alcada: parseFloat((document.getElementById('alcada')||{}).value)||0,
+    final_amplada: parseFloat((document.getElementById('marc-w')||{}).value)||0,
+    final_alcada: parseFloat((document.getElementById('marc-h')||{}).value)||0,
+    encolat: (document.getElementById('ref-muntatge')||{}).value||'',
+    vidre: (document.getElementById('ref-proteccio')||{}).value||'',
+    passpartout: (document.getElementById('ref-interior')||{}).value||'',
+    passpartu_ref: (document.getElementById('ref-passpartu-color')||{}).value||'',
+    impressio: (document.getElementById('ref-impressio-val')||{}).value||''
   });
   renderCistella();
   if(_budgetMode === 'impressio'){
