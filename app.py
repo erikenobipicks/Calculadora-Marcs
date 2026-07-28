@@ -7648,6 +7648,7 @@ def historial():
         grp[0]['entregat'] = all(op.get('entregat') for op in grp)
         grp[0]['estat']    = _derive_estat(grp[0])
         grp[0]['urgent']   = _comanda_es_urgent(grp[0])
+        grp[0]['es_taller'] = _comanda_es_taller(grp[0])
     # Filtre d'estat (F2), aplicat en Python sobre els grups perquè no cal
     # tocar les branques SQL ni perdre el filtre per albarà/client/usuari.
     filtre_estat = request.args.get('estat', '').strip().lower()
@@ -7870,7 +7871,12 @@ def pdf_comanda_conjunta(sessio_id):
         return 'No autoritzat', 403
     c0 = dict(comandes[0])
     _mode_arg = (request.args.get('mode') or '').strip().lower()
-    if _mode_arg in ('cost', 'pvd') and session.get('is_admin'):
+    sugg_pvp = False
+    if _mode_arg == 'dual' and session.get('is_admin'):
+        # PVD (preu taller) + PVP suggerit de venda al client final.
+        mode = 'cost'
+        sugg_pvp = True
+    elif _mode_arg in ('cost', 'pvd') and session.get('is_admin'):
         mode = 'cost'
     elif _mode_arg == 'pvp':
         mode = 'pvp'
@@ -7881,7 +7887,8 @@ def pdf_comanda_conjunta(sessio_id):
     client = {'nom': c0.get('client_nom') or '—', 'tel': c0.get('client_tel') or ''}
     pdf = crear_pdf_marcs(items, client, mode=mode,
                           num_pressupost=(c0.get('num_pressupost') or ''),
-                          user_id=c0.get('user_id', 0), entrega=entrega_total)
+                          user_id=c0.get('user_id', 0), entrega=entrega_total,
+                          sugg_pvp=sugg_pvp)
     nom = (c0.get('client_nom') or 'comanda').replace(' ', '_')[:40]
     return send_file(pdf, mimetype='application/pdf', download_name=f"comanda_{nom}.pdf")
 
@@ -11994,7 +12001,7 @@ def crear_pdf(c, mode=''):
 
 
 def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='', user_id=0,
-                    descompte_global=0, entrega=0):
+                    descompte_global=0, entrega=0, sugg_pvp=False):
     """PDF d'un pressupost amb DIVERSOS marcs (cistella multi-marc) per a un
     mateix client. `items` = [{text, quantity, preu_net, cost_produccio}].
     `mode` = 'pvp' (preu de venda) o 'pvd' (preu taller/cost)."""
@@ -12256,6 +12263,49 @@ def crear_pdf_marcs(items, client, mode='pvp', num_pressupost='', observacions='
         _tstyle.append(('BACKGROUND',(0,pend_row_idx),(-1,pend_row_idx), colors.HexColor("#FAEAEA")))
     ttot.setStyle(TableStyle(_tstyle))
     story.append(ttot)
+
+    # ── PVP suggerit de venda al client final (només docs PVD de taller) ──
+    # A partir del preu_net (PVP) de cada línia, que ja porta el nostre marge
+    # d'admin (Reus Revela). És un preu de referència per al professional.
+    if sugg_pvp and es_pvd:
+        pvp_net_total = 0.0
+        for _it in (items or []):
+            if isinstance(_it, dict):
+                try:
+                    pvp_net_total += float(_it.get('preu_net') or 0)
+                except (TypeError, ValueError):
+                    pass
+        if pvp_net_total > 0:
+            pvp_iva_amt = round(pvp_net_total * 0.21, 2)
+            pvp_total_amt = round(pvp_net_total * 1.21, 2)
+            story.append(Spacer(1, 5*mm))
+            _sh = Table([[p('Preu de venda suggerit al teu client final', bold=True, size=11, color=WHITE)]],
+                        colWidths=[W])
+            _sh.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1), AMBER),
+                ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
+                ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10)]))
+            story.append(_sh)
+            _sr = [
+                [p('PVP suggerit (sense IVA)', bold=True, size=9, color=MUT),
+                 p(f'{pvp_net_total:.2f} €', size=10, align='RIGHT')],
+                [p('IVA 21%', bold=True, size=9, color=MUT),
+                 p(f'{pvp_iva_amt:.2f} €', size=10, align='RIGHT')],
+                [p('PVP suggerit amb IVA', bold=True, size=11, color=AMBER),
+                 p(f'{pvp_total_amt:.2f} €', bold=True, size=14, color=AMBER, align='RIGHT')],
+            ]
+            _st = Table(_sr, colWidths=[W*0.62, W*0.38])
+            _st.setStyle(TableStyle([
+                ('ROWBACKGROUNDS',(0,0),(-1,-1),[LIG, WHITE]),
+                ('BOX',(0,0),(-1,-1),0.5,BRD),('INNERGRID',(0,0),(-1,-1),0.3,BRD),
+                ('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6),
+                ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+                ('BACKGROUND',(0,2),(-1,2), colors.HexColor("#FBF1E4")),
+                ('LINEABOVE',(0,2),(-1,2),1.5,AMBER),
+            ]))
+            story.append(_st)
+            story.append(Spacer(1, 1.5*mm))
+            story.append(p('Preu de referència calculat amb el marge de Reus Revela. Tu decideixes el preu final al teu client.',
+                           size=7.5, color=colors.HexColor("#9E9B94")))
 
     if (observacions or '').strip():
         story.append(Spacer(1, 5*mm))
