@@ -4856,6 +4856,33 @@ def desar_marge():
     _sync_private_commercial_settings(margins['frames'], margins['prints'], margins=margins)
     return jsonify({'ok': True, 'margins': margins})
 
+def _autoregister_client_pvp(nom, tel):
+    """Registra (o retorna l'existent) un client habitual PVP a partir del nom i
+    telèfon d'una comanda, perquè els clients regulars s'acumulin i es puguin
+    reutilitzar. Deduplica pel telèfon (normalitzat) i, si no, pel nom exacte.
+    Retorna l'id del client_extern, o None si no hi ha prou dades / hi ha error."""
+    nom = (nom or '').strip()
+    if not nom:
+        return None
+    tel = (tel or '').strip()
+    tel_digits = ''.join(ch for ch in tel if ch.isdigit())
+    try:
+        if tel_digits:
+            for r in (query("SELECT id, telefon FROM clients_externs "
+                            "WHERE telefon IS NOT NULL AND telefon<>''") or []):
+                rt = ''.join(ch for ch in str(_row_get(r, 'telefon', '') or '') if ch.isdigit())
+                if rt and rt == tel_digits:
+                    return _row_get(r, 'id')
+        r = query("SELECT id FROM clients_externs WHERE LOWER(nom)=LOWER(?) LIMIT 1", [nom], one=True)
+        if r:
+            return _row_get(r, 'id')
+        return execute("INSERT INTO clients_externs (nom, telefon, tipus, actiu) "
+                       "VALUES (?, ?, 'pvp', TRUE)", [nom, tel or None])
+    except Exception as e:
+        print(f"[autoregister_client] skip ({nom!r}): {e}")
+        return None
+
+
 # â"€â"€ Routes: Guardar comanda i historial â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 @app.route('/guardar', methods=['POST'])
 @login_required
@@ -4888,6 +4915,10 @@ def guardar():
         client_extern_id = int(d.get('client_extern_id') or 0) or None
     except (TypeError, ValueError):
         client_extern_id = None
+    # Auto-registre del client habitual PVP: si l'admin desa una comanda per a un
+    # client no enllaçat, el guardem (deduplicat) perquè s'acumuli i es reutilitzi.
+    if client_extern_id is None and session.get('is_admin'):
+        client_extern_id = _autoregister_client_pvp(d.get('client_nom', ''), d.get('client_tel', ''))
 
     vals_comuns = [
         d.get('client_nom',''), d.get('client_tel',''),
@@ -4963,6 +4994,9 @@ def api_desar_cistella():
     client_nom = (d.get('client_nom') or '').strip()
     client_tel = (d.get('client_tel') or '').strip()
     client_extern_id = (d.get('client_extern_id') or '').strip() or None
+    # Auto-registre del client habitual PVP (mateix criteri que el desat individual).
+    if client_extern_id is None and session.get('is_admin'):
+        client_extern_id = _autoregister_client_pvp(client_nom, client_tel) or None
     observacions = (d.get('observacions') or '').strip()
     lang = (d.get('lang') or 'ca').strip() or 'ca'
     try:
