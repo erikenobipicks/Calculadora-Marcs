@@ -5030,6 +5030,109 @@ def liquidar_sessio(sessio_id):
     execute('UPDATE comandes SET entrega=preu_final, pendent=0, pagat=1 WHERE sessio_id=?', [sessio_id])
     return jsonify({'ok': True})
 
+
+def _comanda_client_email(c0):
+    """Email del client d'una comanda (via el client habitual enllaçat). Buit si
+    la comanda no té client_extern_id o el client no en té."""
+    cext = _row_get(c0, 'client_extern_id')
+    if not cext:
+        return ''
+    try:
+        r = query('SELECT email FROM clients_externs WHERE id=?', [cext], one=True)
+    except Exception:
+        return ''
+    return (_row_get(r, 'email', '') or '').strip()
+
+
+def _email_transaccional_html(cos_html):
+    """Embolcalla el cos amb capçalera de marca i peu (email transaccional, sense
+    baixa: no és màrqueting)."""
+    nom = (get_config_value('empresa_nom', '') or 'Reus Revela').strip()
+    adr = (get_config_value('empresa_adreca', '') or '').strip()
+    tel = (get_config_value('empresa_tel', '') or '').strip()
+    peu = ' · '.join([x for x in [nom, adr, tel] if x])
+    return (
+        '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;'
+        'color:#1C1B18;border:1px solid #E5E2DB">'
+        f'<div style="background:#1A6B45;color:#fff;padding:14px 18px;font-size:18px;font-weight:700">{_html_escape(nom)}</div>'
+        f'<div style="padding:20px 18px;font-size:15px;line-height:1.6">{cos_html}</div>'
+        f'<div style="padding:12px 18px;border-top:1px solid #eee;color:#8d877d;font-size:12px">{_html_escape(peu)}</div>'
+        '</div>'
+    )
+
+
+def _html_escape(s):
+    import html as _h
+    return _h.escape(str(s or ''))
+
+
+@app.route('/sessio/<sessio_id>/avisar', methods=['POST'])
+@login_required
+def avisar_client_comanda(sessio_id):
+    """Avisa el client que la comanda està a punt: envia un correu (si el client
+    habitual té email) i marca l'estat com a 'avisat'."""
+    if not _get_comanda_by_sessio_for_session(sessio_id):
+        return jsonify({'ok': False, 'error': 'no_autoritzat'}), 403
+    rows = query('SELECT * FROM comandes WHERE sessio_id=? ORDER BY id', [sessio_id]) or []
+    if not rows:
+        return jsonify({'ok': False, 'error': 'no_trobat'}), 404
+    c0 = dict(rows[0])
+    email = _comanda_client_email(c0)
+    if not email:
+        return jsonify({'ok': False, 'error': 'no_email'})
+    nom_empresa = (get_config_value('empresa_nom', '') or 'Reus Revela').strip()
+    adr = (get_config_value('empresa_adreca', '') or '').strip()
+    nom_client = (c0.get('client_nom') or '').strip() or 'client'
+    num = (c0.get('num_pressupost') or '').strip()
+    cos = (f'<p>Hola {_html_escape(nom_client)},</p>'
+           f'<p>La teva comanda{(" <b>" + _html_escape(num) + "</b>") if num else ""} ja està '
+           '<b>a punt per recollir</b>. 🎉</p>')
+    if adr:
+        cos += f'<p>Ens trobaràs a: {_html_escape(adr)}</p>'
+    cos += f'<p>Gràcies!<br>{_html_escape(nom_empresa)}</p>'
+    sent = _send_user_email_html(email, f'La teva comanda ja està a punt · {nom_empresa}',
+                                 _email_transaccional_html(cos), log_tag='avis_comanda')
+    if not sent:
+        return jsonify({'ok': False, 'error': 'email_fail'})
+    execute("UPDATE comandes SET estat='avisat' WHERE sessio_id=?", [sessio_id])
+    return jsonify({'ok': True, 'email': email})
+
+
+@app.route('/sessio/<sessio_id>/recordar-pendent', methods=['POST'])
+@login_required
+def recordar_pendent_comanda(sessio_id):
+    """Envia al client un recordatori de l'import pendent de la comanda."""
+    if not _get_comanda_by_sessio_for_session(sessio_id):
+        return jsonify({'ok': False, 'error': 'no_autoritzat'}), 403
+    rows = query('SELECT * FROM comandes WHERE sessio_id=? ORDER BY id', [sessio_id]) or []
+    if not rows:
+        return jsonify({'ok': False, 'error': 'no_trobat'}), 404
+    c0 = dict(rows[0])
+    pendent = 0.0
+    for r in rows:
+        try:
+            pendent += float(_row_get(r, 'pendent', 0) or 0)
+        except (TypeError, ValueError):
+            pass
+    pendent = round(pendent, 2)
+    if pendent <= 0.01:
+        return jsonify({'ok': False, 'error': 'sense_pendent'})
+    email = _comanda_client_email(c0)
+    if not email:
+        return jsonify({'ok': False, 'error': 'no_email'})
+    nom_empresa = (get_config_value('empresa_nom', '') or 'Reus Revela').strip()
+    nom_client = (c0.get('client_nom') or '').strip() or 'client'
+    num = (c0.get('num_pressupost') or '').strip()
+    cos = (f'<p>Hola {_html_escape(nom_client)},</p>'
+           f'<p>Et recordem que la comanda{(" <b>" + _html_escape(num) + "</b>") if num else ""} '
+           f'té un import <b>pendent de {pendent:.2f} €</b>.</p>'
+           f'<p>Gràcies!<br>{_html_escape(nom_empresa)}</p>')
+    sent = _send_user_email_html(email, f'Recordatori de pagament pendent · {nom_empresa}',
+                                 _email_transaccional_html(cos), log_tag='recordatori_pendent')
+    if not sent:
+        return jsonify({'ok': False, 'error': 'email_fail'})
+    return jsonify({'ok': True, 'email': email, 'pendent': pendent})
+
 @app.route('/sessio/<sessio_id>/entregat', methods=['POST'])
 @login_required
 def marcar_entregat(sessio_id):

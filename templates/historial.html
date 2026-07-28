@@ -367,6 +367,8 @@ tr:hover td{background:#fbf8f3}
             class="btn-sm {% if c0.entregat %}btn-entregat-on{% else %}btn-entregat{% endif %}">
             {% if c0.entregat %}📦 Entregat{% else %}Marcar entregat{% endif %}
           </button>
+          <button onclick="avisarClient('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar un correu al client dient que la comanda està a punt per recollir (i marcar-la com a avisada)">📣 Avisar client</button>
+          <button onclick="recordarPendent('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar un correu al client recordant-li l'import pendent">💶 Recordar pendent</button>
           {% if session.is_admin %}
           <button onclick="crearAlbaraComanda('{{ sessio_id }}', this)"
             class="btn-sm btn-albara"
@@ -410,6 +412,32 @@ function waHist(btn){
     return;
   }
   window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(txt), '_blank');
+}
+function _avisMsg(err){
+  if(err === 'no_email') return 'Aquest client no té correu a la seva fitxa. Fes servir el botó de WhatsApp, o afegeix-li l\'email al client habitual.';
+  if(err === 'sense_pendent') return 'Aquesta comanda no té cap import pendent.';
+  if(err === 'email_fail') return 'No s\'ha pogut enviar el correu (revisa la configuració d\'email a Ajustos).';
+  return 'No s\'ha pogut completar l\'acció.';
+}
+function avisarClient(sessioId, btn){
+  if(!confirm('Enviar un correu al client dient que la comanda està a punt per recollir?')) return;
+  var prev = btn.textContent; btn.disabled = true; btn.textContent = '…';
+  fetch('/sessio/' + encodeURIComponent(sessioId) + '/avisar', {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      btn.disabled = false; btn.textContent = prev;
+      if(d.ok){ alert('Correu d\'avís enviat a ' + d.email + '. La comanda queda marcada com a «Avisat client».'); location.reload(); }
+      else { alert(_avisMsg(d.error)); }
+    }).catch(function(){ btn.disabled = false; btn.textContent = prev; alert('Error de connexió.'); });
+}
+function recordarPendent(sessioId, btn){
+  if(!confirm('Enviar un correu al client recordant-li l\'import pendent?')) return;
+  var prev = btn.textContent; btn.disabled = true; btn.textContent = '…';
+  fetch('/sessio/' + encodeURIComponent(sessioId) + '/recordar-pendent', {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      btn.disabled = false; btn.textContent = prev;
+      if(d.ok){ alert('Recordatori de ' + d.pendent.toFixed(2) + ' € enviat a ' + d.email + '.'); }
+      else { alert(_avisMsg(d.error)); }
+    }).catch(function(){ btn.disabled = false; btn.textContent = prev; alert('Error de connexió.'); });
 }
 function liquidarSessio(sessioId, btn){
   if(!confirm('Liquidar TOT el pendent d\'aquesta comanda (marcar-la pagada del tot)?')) return;
