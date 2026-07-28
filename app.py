@@ -7503,6 +7503,7 @@ def _wa_client_text(op, emp_nom, emp_adr, emp_tel):
 @app.route('/historial')
 @login_required
 def historial():
+    _ensure_fd_factura_column()
     filtre_uid_raw = request.args.get('user_id', '').strip()
     filtre_uid = int(filtre_uid_raw) if filtre_uid_raw.isdigit() else None
     filtre_all  = filtre_uid_raw == 'all'
@@ -8714,6 +8715,7 @@ _FD_BASE    = 'https://app.facturadirecta.com/api'
 #    així no cal saber-ne el codi. Es pot forçar amb FD_ESTIMATE_SERIES.
 _FD_ALBARA_SERIES   = os.environ.get('FD_ALBARA_SERIES', 'AL')
 _FD_ESTIMATE_SERIES = os.environ.get('FD_ESTIMATE_SERIES', '')
+_FD_INVOICE_SERIES  = os.environ.get('FD_INVOICE_SERIES', '')
 
 # IVA i recàrrec d'equivalència. A FacturaDirecta el recàrrec d'equivalència és
 # una taxa que s'afegeix a la línia JUNT amb l'IVA (per a clients revenedors en
@@ -8851,6 +8853,26 @@ def _fd_crear_estimate(contact_id, linies, notes='', data_doc=None):
     if notes:
         main['notes'] = notes
     return _fd_post('estimates', {'content': {'type': 'estimate', 'main': main}})
+
+
+def _fd_crear_factura(contact_id, linies, notes='', data_doc=None):
+    """Crea una FACTURA a FacturaDirecta (document fiscal). Mateix patró que
+    l'albarà/pressupost, amb type/endpoint 'invoice'/'invoices'. La sèrie es pren
+    de FD_INVOICE_SERIES; si és buida, FD aplica la seva sèrie de factures per
+    defecte (si el compte n'exigeix una d'explícita, cal configurar-la)."""
+    if not data_doc:
+        data_doc = datetime.now().strftime('%Y-%m-%d')
+    main = {
+        'contact':   contact_id,
+        'currency':  'EUR',
+        'baseState': 'pending',
+        'docNumber': _fd_docnumber(_FD_INVOICE_SERIES),
+        'date':      data_doc,
+        'lines':     linies,
+    }
+    if notes:
+        main['notes'] = notes
+    return _fd_post('invoices', {'content': {'type': 'invoice', 'main': main}})
 
 
 def _fd_crear_document(doc_type, contact_id, linies, notes='', data_doc=None):
@@ -10453,6 +10475,107 @@ def api_albara_de_comanda():
     execute("UPDATE comandes SET fd_albara=? WHERE sessio_id=?", [str(num_albara), sessio_id])
 
     return jsonify({'ok': True, 'albara': num_albara, 'contact': nom_fd})
+
+
+_fd_factura_col_ready = False
+def _ensure_fd_factura_column():
+    """Assegura comandes.fd_factura (número de factura FD desat). Idempotent."""
+    global _fd_factura_col_ready
+    if _fd_factura_col_ready:
+        return
+    try:
+        execute("ALTER TABLE comandes ADD COLUMN IF NOT EXISTS fd_factura TEXT DEFAULT ''")
+        _fd_factura_col_ready = True
+    except Exception as e:
+        print(f"[fd_factura] ensure column skip: {e}")
+
+
+def _fd_linies_pvp_de_comandes(comandes, recarrec=False):
+    """Línies FD a PVP (preu client, amb el descompte de cada línia ja aplicat)
+    per a una FACTURA. Una línia per fila de comanda."""
+    linies = []
+    notes_parts = []
+    for com in comandes:
+        text = _comanda_linia_desc(com)
+        try:
+            qty = float(_row_get(com, 'quantitat', 1) or 1) or 1
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            preu_net = float(_row_get(com, 'preu_net', 0) or 0)
+        except (TypeError, ValueError):
+            preu_net = 0.0
+        try:
+            dp = max(0.0, min(100.0, float(_row_get(com, 'descompte', 0) or 0)))
+        except (TypeError, ValueError):
+            dp = 0.0
+        net = preu_net * (1 - dp / 100.0)
+        unit = round(net / qty, 2) if qty > 0 else round(net, 2)
+        linies.append({'text': str(text)[:300], 'quantity': float(qty),
+                       'unitPrice': unit, 'tax': _fd_line_tax(recarrec)})
+        num_pres = (_row_get(com, 'num_pressupost', '') or '').strip()
+        if num_pres and f'Pressupost: {num_pres}' not in notes_parts:
+            notes_parts.append(f'Pressupost: {num_pres}')
+    return linies, notes_parts
+
+
+@app.route('/api/factura-de-comanda', methods=['POST'])
+@admin_required
+def api_factura_de_comanda():
+    """Crea una FACTURA a FacturaDirecta a partir de tota una comanda (sessió),
+    a preu client (PVP). Factura al CLIENT (client habitual enllaçat o pel nom)."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat (variables d\'entorn)'}), 503
+    d = request.get_json(force=True) or {}
+    sessio_id = (d.get('sessio_id') or '').strip()
+    if not sessio_id:
+        return jsonify({'ok': False, 'error': 'Falta sessio_id'}), 400
+    _ensure_fd_factura_column()
+    comandes = query('SELECT * FROM comandes WHERE sessio_id=? ORDER BY id', [sessio_id])
+    if not comandes:
+        return jsonify({'ok': False, 'error': 'Sessió no trobada'}), 404
+    c0 = dict(comandes[0])
+
+    # Contacte = el CLIENT (no el professional): client habitual enllaçat o, si
+    # no, es cerca/crea pel nom (i NIF del client habitual si en té).
+    client_extern_id = _row_get(c0, 'client_extern_id')
+    contact_id, nom_fd = _resolve_client_extern_fd_id(client_extern_id)
+    if not contact_id:
+        nom_client = (c0.get('client_nom') or '').strip()
+        if not nom_client:
+            return jsonify({'ok': False, 'error': 'Cal el nom del client per facturar.'}), 400
+        nif = ''
+        if client_extern_id:
+            _cr = query('SELECT nif FROM clients_externs WHERE id=?', [client_extern_id], one=True)
+            nif = (_row_get(_cr, 'nif', '') or '').strip()
+        contacte = _fd_cerca_contacte(nif=nif) if nif else None
+        if not contacte:
+            contacte = _fd_crear_contacte(nom_client, nif=nif or None,
+                                          telefon=(c0.get('client_tel') or '') or None)
+        if '_error' in (contacte or {}):
+            return jsonify({'ok': False, 'error': f'Error contacte FD {contacte.get("_error")}: {contacte.get("_msg","")}'}), 500
+        contact_id = _fd_extract_contact_id(contacte)
+        nom_fd = nom_client
+        if not contact_id:
+            return jsonify({'ok': False, 'error': 'Contacte FD sense ID.'}), 500
+        if client_extern_id:
+            try:
+                execute('UPDATE clients_externs SET fd_contact_id=? WHERE id=?', [contact_id, client_extern_id])
+            except Exception:
+                pass
+
+    linies, notes_parts = _fd_linies_pvp_de_comandes(
+        comandes, recarrec=_client_extern_recarrec(client_extern_id))
+    if not linies:
+        return jsonify({'ok': False, 'error': 'No s\'han pogut construir les línies de la factura.'}), 400
+    notes = ' | '.join(notes_parts)
+
+    factura = _fd_crear_factura(contact_id, linies, notes=notes)
+    if '_error' in (factura or {}):
+        return jsonify({'ok': False, 'error': f'Error factura FD {factura.get("_error")}: {factura.get("_msg","")} (contacte={contact_id!r})'}), 500
+    num = factura.get('number') or factura.get('documentNumber') or factura.get('id', '—')
+    execute("UPDATE comandes SET fd_factura=? WHERE sessio_id=?", [str(num), sessio_id])
+    return jsonify({'ok': True, 'factura': num, 'contact': nom_fd})
 
 
 @app.route('/api/crear-doc-conjunt', methods=['POST'])

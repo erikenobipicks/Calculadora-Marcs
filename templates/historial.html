@@ -389,6 +389,11 @@ tr:hover td{background:#fbf8f3}
             {% if c0.fd_albara %}title="Albarà ja creat: {{ c0.fd_albara }}"{% endif %}>
             {% if c0.fd_albara %}✓ Albarà {{ c0.fd_albara }}{% else %}Crear albarà FD{% endif %}
           </button>
+          <button onclick="crearFacturaComanda('{{ sessio_id }}', this)"
+            class="btn-sm btn-albara"
+            title="{% if c0.fd_factura %}Factura ja creada: {{ c0.fd_factura }}{% else %}Crear una factura a FacturaDirecta per tota la comanda (a preu client){% endif %}">
+            {% if c0.fd_factura %}✓ Factura {{ c0.fd_factura }}{% else %}Crear factura FD{% endif %}
+          </button>
           {% endif %}
         </div>
       </div>
@@ -591,6 +596,28 @@ function crearAlbaraComanda(sessioId, btn) {
     btn.disabled = false;
     btn.textContent = 'Crear albarà FD';
   });
+}
+
+function crearFacturaComanda(sessioId, btn) {
+  var jaTe = btn.textContent.trim().startsWith('✓');
+  if(jaTe && !confirm('Aquesta comanda ja té una factura (' + btn.textContent.trim() + '). Vols crear-ne una altra?')) return;
+  if(!confirm('Crear una FACTURA a FacturaDirecta per tota aquesta comanda, a preu client (PVP)?\n\nÉs un document fiscal.')) return;
+  var prev = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Creant...';
+  fetch('/api/factura-de-comanda', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({sessio_id: sessioId})
+  }).then(r=>r.json()).then(function(d){
+    btn.disabled = false;
+    if(d.ok){
+      btn.style.background='#D1FAE5';btn.style.color='#065F46';btn.style.border='1px solid #6EE7B7';
+      btn.textContent = '✓ Factura ' + (d.factura||'creada');
+      alert('Factura ' + (d.factura||'') + ' creada a FacturaDirecta per ' + (d.contact||'el client') + '.');
+    } else {
+      btn.textContent = prev;
+      alert('Error: ' + (d.error||'Error desconegut'));
+    }
+  }).catch(function(e){ btn.disabled=false; btn.textContent = prev; alert('Error de connexió: ' + e); });
 }
 
 function crearAlbaraIndividual(comandaId, modePreu, btn) {
