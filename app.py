@@ -10397,19 +10397,25 @@ def api_crear_albara():
     mida_marc = _fmt_cm(final_w, final_h)
     mida_foto = _fmt_cm(peca_w, peca_h)
 
-    # Línies de l'albarà
-    desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
-    parts = []
-    if mida_marc:
-        parts.append(f'Mida {mida_marc}')
-    if mida_foto and mida_foto != mida_marc:
-        parts.append(f'foto {mida_foto}')
-    if opcions_text:
-        parts.append(opcions_text)
-    if revers_peu:
-        parts.append('Revers amb peu')
-    if parts:
-        desc_marc += f' · {", ".join(parts)}'
+    # Línies de l'albarà. Si el frontend envia el concepte ja distingit
+    # (Marc / Fotografia impresa / còpia…), el fem servir tal qual: així una
+    # impressió o un producte no surt com a "Emmarcació".
+    concepte = (d.get('concepte') or '').strip()
+    if concepte:
+        desc_marc = concepte
+    else:
+        desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
+        parts = []
+        if mida_marc:
+            parts.append(f'Mida {mida_marc}')
+        if mida_foto and mida_foto != mida_marc:
+            parts.append(f'foto {mida_foto}')
+        if opcions_text:
+            parts.append(opcions_text)
+        if revers_peu:
+            parts.append('Revers amb peu')
+        if parts:
+            desc_marc += f' · {", ".join(parts)}'
 
     # mode_preu: 'pvp' uses preu_net (PVP sense IVA), 'cost' uses cost_produccio
     base_total = preu_net if mode_preu == 'pvp' else cost_prod
@@ -10780,7 +10786,7 @@ def _linies_de_cistella(items, mode_preu, recarrec=False):
     for it in (items or []):
         if not isinstance(it, dict):
             continue
-        text = (str(it.get('text') or 'Emmarcació')).strip()[:300]
+        text = (str(it.get('text') or 'Concepte')).strip()[:300]
         try:
             qty = float(it.get('quantity') or 1) or 1
         except (TypeError, ValueError):
@@ -10923,16 +10929,9 @@ def api_albara_individual():
     client_nom  = (_row_get(com, 'client_nom', '') or '').strip()
     opcio_nom   = (_row_get(com, 'opcio_nom', '') or '').strip()
 
-    parts_opc = []
-    if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
-    if vidre:                                parts_opc.append(vidre)
-    if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
-    if encolat and encolat != '-':           parts_opc.append(encolat)
-    if revers_peu:                           parts_opc.append('Revers amb peu')
-    if impressio and impressio != '-':       parts_opc.append(impressio)
-    desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
-    if parts_opc:
-        desc_marc += f' · {", ".join(parts_opc)}'
+    # Descripció conscient del tipus (Marc / Fotografia impresa / producte),
+    # perquè una impressió o un llenç no surti com a "Emmarcació".
+    desc_marc = _comanda_linia_desc(com)
     if opcio_nom and opcio_nom != 'Opció A':
         desc_marc += f' ({opcio_nom})'
     if client_nom and not owner_is_admin:
