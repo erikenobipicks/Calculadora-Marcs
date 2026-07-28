@@ -172,6 +172,20 @@ tr:hover td{background:#fbf8f3}
     </div>
   </div>
 
+  <form method="get" action="/historial" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:.8rem">
+    <span style="color:var(--hint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-right:.2rem">Dates</span>
+    <input type="date" name="desde" value="{{ filtre_desde }}" title="Des de" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text)">
+    <span style="color:var(--hint)">–</span>
+    <input type="date" name="fins" value="{{ filtre_fins }}" title="Fins a" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text)">
+    {% if filtre_estat %}<input type="hidden" name="estat" value="{{ filtre_estat }}">{% endif %}
+    {% if filtre_all %}<input type="hidden" name="user_id" value="all">{% elif filtre_uid %}<input type="hidden" name="user_id" value="{{ filtre_uid }}">{% endif %}
+    {% if filtre_albara %}<input type="hidden" name="albara" value="pendent">{% endif %}
+    {% if filtre_client %}<input type="hidden" name="client" value="{{ filtre_client }}">{% endif %}
+    <button type="submit" class="filter-btn">Filtrar</button>
+    {% if filtre_desde or filtre_fins %}<a href="/historial{% if filtre_estat %}?estat={{ filtre_estat }}{% endif %}" class="filter-btn">Treure dates</a>{% endif %}
+    <a href="/historial/export.csv?{{ request.query_string.decode() }}" class="filter-btn" title="Exportar a CSV (obre amb Excel) les comandes filtrades">⬇️ Exportar CSV</a>
+  </form>
+
   <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:1rem">
     <span style="color:var(--hint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-right:.2rem">Estat</span>
     <a href="/historial" class="filter-btn {% if not filtre_estat %}active{% endif %}">Tots</a>

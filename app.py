@@ -3531,6 +3531,30 @@ def _parse_comanda_date(value):
         return None
 
 
+def _parse_date_input(value):
+    """Data d'un <input type=date> ('YYYY-MM-DD') → date, o None."""
+    s = str(value or '').strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _comanda_in_range(row, desde=None, fins=None):
+    """True si la data de la comanda cau dins [desde, fins] (extrems inclosos).
+    Les comandes sense data llegible NO es filtren fora."""
+    d = _parse_comanda_date(_row_get(row, 'data'))
+    if d is None:
+        return True
+    if desde and d < desde:
+        return False
+    if fins and d > fins:
+        return False
+    return True
+
+
 def _dashboard_counts(urgent_days=21):
     """Comptadors del tauler derivats de l'estat EXISTENT de `comandes`
     (marcador [ACCEPTAT] a observacions, flags pagat/entregat, fd_albara).
@@ -7521,6 +7545,12 @@ def historial():
         comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
                            JOIN usuaris u ON c.user_id=u.id
                            WHERE c.user_id=? ORDER BY c.id DESC''', [session['user_id']])
+    # Filtre per rang de dates (sobre el camp `data`, text dd/mm/YYYY).
+    comandes = comandes or []
+    _desde = _parse_date_input(request.args.get('desde'))
+    _fins = _parse_date_input(request.args.get('fins'))
+    if _desde or _fins:
+        comandes = [c for c in comandes if _comanda_in_range(c, _desde, _fins)]
     # Dades d'empresa (per a la firma del missatge de WhatsApp al client).
     _emp = query('SELECT nom_empresa, empresa_adreca, empresa_tel FROM usuaris WHERE id=?',
                  [session['user_id']], one=True)
@@ -7597,7 +7627,85 @@ def historial():
                            n_pendents_albara=n_pendents_albara if session.get('is_admin') else 0,
                            estats=COMANDA_ESTATS, estat_labels=COMANDA_ESTAT_LABELS,
                            filtre_estat=filtre_estat,
+                           filtre_desde=(request.args.get('desde') or ''),
+                           filtre_fins=(request.args.get('fins') or ''),
                            web_return_url=_current_web_return_url())
+
+
+@app.route('/historial/export.csv')
+@login_required
+def historial_export_csv():
+    """Exporta a CSV les comandes segons els filtres actuals (àmbit, client,
+    albarà pendent, rang de dates). Una fila per línia de comanda."""
+    import csv as _csv
+    import io as _io
+    is_admin = session.get('is_admin')
+    filtre_uid_raw = request.args.get('user_id', '').strip()
+    filtre_uid = int(filtre_uid_raw) if filtre_uid_raw.isdigit() else None
+    filtre_all = filtre_uid_raw == 'all'
+    filtre_albara = request.args.get('albara') == 'pendent'
+    filtre_client_raw = request.args.get('client', '').strip()
+    filtre_client = int(filtre_client_raw) if filtre_client_raw.isdigit() else None
+    if is_admin and filtre_client:
+        comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                            JOIN usuaris u ON c.user_id=u.id
+                            WHERE c.client_extern_id=? ORDER BY c.id DESC''', [filtre_client])
+    elif is_admin and filtre_albara:
+        comandes = query(f'''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                            JOIN usuaris u ON c.user_id=u.id
+                            WHERE {_sql_comanda_acceptada('c')}
+                              AND (c.fd_albara IS NULL OR c.fd_albara='')
+                            ORDER BY c.id DESC''')
+    elif is_admin and filtre_all:
+        comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                            JOIN usuaris u ON c.user_id=u.id ORDER BY c.id DESC''')
+    elif is_admin and filtre_uid:
+        comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                            JOIN usuaris u ON c.user_id=u.id WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
+    else:
+        comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+                            JOIN usuaris u ON c.user_id=u.id WHERE c.user_id=? ORDER BY c.id DESC''',
+                         [session['user_id']])
+    comandes = comandes or []
+    _desde = _parse_date_input(request.args.get('desde'))
+    _fins = _parse_date_input(request.args.get('fins'))
+    if _desde or _fins:
+        comandes = [c for c in comandes if _comanda_in_range(c, _desde, _fins)]
+    # Mateix filtre d'estat que la vista (sobre l'estat efectiu de cada fila).
+    filtre_estat = request.args.get('estat', '').strip().lower()
+    if filtre_estat == 'pendents':
+        comandes = [c for c in comandes if _derive_estat(c) not in COMANDA_ESTATS_TANCATS]
+    elif filtre_estat == 'entregats':
+        comandes = [c for c in comandes if _derive_estat(c) == 'entregat']
+    elif filtre_estat == 'urgents':
+        comandes = [c for c in comandes if _comanda_es_urgent(c)]
+    elif filtre_estat in COMANDA_ESTAT_KEYS:
+        comandes = [c for c in comandes if _derive_estat(c) == filtre_estat]
+
+    buf = _io.StringIO()
+    buf.write('﻿')  # BOM perquè Excel obri bé els accents (UTF-8)
+    w = _csv.writer(buf, delimiter=';')
+    w.writerow(['Data', 'Núm', 'Client', 'Telèfon', 'Concepte', 'Unitats',
+                'Total (amb IVA)', 'Entrega a compte', 'Pendent', 'Pagat', 'Estat'])
+    for c in comandes:
+        estat = _derive_estat(c)
+        w.writerow([
+            _row_get(c, 'data', '') or '',
+            _row_get(c, 'num_pressupost', '') or '',
+            _row_get(c, 'client_nom', '') or '',
+            _row_get(c, 'client_tel', '') or '',
+            (_row_get(c, 'marc_principal', '') or '').strip(),
+            _row_get(c, 'quantitat', 1) or 1,
+            f"{float(_row_get(c, 'preu_final', 0) or 0):.2f}",
+            f"{float(_row_get(c, 'entrega', 0) or 0):.2f}",
+            f"{float(_row_get(c, 'pendent', 0) or 0):.2f}",
+            'Sí' if _row_get(c, 'pagat', 0) else 'No',
+            COMANDA_ESTAT_LABELS.get(estat, estat),
+        ])
+    from flask import Response as _Response
+    return _Response(buf.getvalue(), mimetype='text/csv; charset=utf-8',
+                     headers={'Content-Disposition': 'attachment; filename="comandes.csv"'})
+
 
 @app.route('/pdf-comparativa/<sessio_id>')
 @login_required
