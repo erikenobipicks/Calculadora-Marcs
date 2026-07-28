@@ -386,6 +386,9 @@ tr:hover td{background:#fbf8f3}
           <button onclick="whatsappComandaConjunta('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar el resum de tota la comanda al client per WhatsApp">🟢 WhatsApp</button>
           <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF comparativa (opcions A/B/C per a la mateixa peça)">Comparativa</a>
           {% endif %}
+          {% if session.is_admin and c0.es_taller %}
+          <a href="/pdf-comanda-conjunta/{{ sessio_id }}?mode=dual" class="btn-sm btn-cmp" target="_blank" title="PDF per al client de taller: preu PVD + PVP suggerit de venda al seu client final (marge Reus Revela)">📄 PDF PVD+PVP</a>
+          {% endif %}
 
           <span class="act-sep"></span>
           {# ── Avís al client ── #}
