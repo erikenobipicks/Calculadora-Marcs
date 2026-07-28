@@ -5004,8 +5004,24 @@ def api_desar_cistella():
         eff_dp = round(100.0 * (1 - (1 - line_dp / 100.0) * (1 - desc_global / 100.0)), 2)
         net = pvp * (1 - eff_dp / 100.0)
         preu_final = round(net * 1.21, 2)
+
+        # Detall estructurat (si el frontend l'envia, p. ex. marcs): perquè
+        # l'historial mostri mides/materials i no 0×0 ni columnes buides.
+        def _fnum(k):
+            try:
+                return float(it.get(k) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        def _fstr(k):
+            v = it.get(k)
+            return str(v).strip() if v not in (None, '') else ''
         lines.append({'text': text, 'qty': qty, 'pvp': pvp, 'pvd': pvd,
-                      'desc': eff_dp, 'preu_final': preu_final})
+                      'desc': eff_dp, 'preu_final': preu_final,
+                      'amplada': _fnum('amplada'), 'alcada': _fnum('alcada'),
+                      'final_amplada': _fnum('final_amplada'), 'final_alcada': _fnum('final_alcada'),
+                      'encolat': _fstr('encolat'), 'vidre': _fstr('vidre'),
+                      'passpartout': _fstr('passpartout'), 'passpartu_ref': _fstr('passpartu_ref'),
+                      'impressio': _fstr('impressio')})
 
     # Pas 2: reparteix l'entrega a compte entre línies (proporcional al total de
     # cada línia); l'última s'endú el residu per evitar desquadres d'arrodoniment.
@@ -5028,12 +5044,16 @@ def api_desar_cistella():
             '''INSERT INTO comandes
                (user_id, data, client_nom, client_tel, marc_principal, quantitat,
                 preu_net, preu_final, cost_produccio, descompte, entrega, pendent, observacions,
-                sessio_id, opcio_nom, num_pressupost, lang, client_extern_id, tipus_peca)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                sessio_id, opcio_nom, num_pressupost, lang, client_extern_id, tipus_peca,
+                amplada, alcada, final_amplada, final_alcada, encolat, vidre, passpartout,
+                passpartu_ref, impressio)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             [session['user_id'], data_str, client_nom, client_tel, l['text'], l['qty'],
              l['pvp'], l['preu_final'], l['pvd'], l['desc'], l['entrega'], l['pendent'],
              observacions if i == 0 else '',
-             sessio_id, f'Línia {i + 1}', num_pressupost, lang, client_extern_id, 'producte'])
+             sessio_id, f'Línia {i + 1}', num_pressupost, lang, client_extern_id, 'producte',
+             l['amplada'], l['alcada'], l['final_amplada'], l['final_alcada'],
+             l['encolat'], l['vidre'], l['passpartout'], l['passpartu_ref'], l['impressio']])
         n += 1
     return jsonify({'ok': True, 'sessio_id': sessio_id, 'num': num_pressupost, 'n': n})
 
