@@ -319,7 +319,7 @@ tr:hover td{background:#fbf8f3}
             <td>
               <a href="/pdf/{{ op.id }}" class="btn-sm btn-pdf" target="_blank">PDF</a>
               <button type="button" onclick="waHist(this)" data-tel="{{ op.wa_tel }}" data-text="{{ op.wa_text }}" class="btn-sm btn-wa-hist" title="Enviar per WhatsApp al client">WhatsApp</button>
-              <button type="button" onclick="aCompteComanda({{ op.id }}, {{ '%.2f'|format(op.preu_final) }}, this)" class="btn-sm btn-acompte" title="Marcar import rebut a compte (senyal)">A compte</button>
+              <button type="button" onclick="aCompteComanda({{ op.id }}, {{ '%.2f'|format(op.preu_final) }}, {{ '%.2f'|format(op.entrega or 0) }}, {{ '%.2f'|format(op.pendent if op.pendent is not none else op.preu_final) }}, this)" class="btn-sm btn-acompte" title="Registrar un import rebut a compte (s'acumula)">A compte</button>
               {% if session.is_admin and op.client_extern_id %}
               <a href="/pdf/{{ op.id }}?mode=dual" class="btn-sm btn-albara" target="_blank" title="PDF amb preu taller + PVP suggerit">PDF Taller</a>
               {% endif %}
@@ -355,12 +355,10 @@ tr:hover td{background:#fbf8f3}
           <button onclick="whatsappComandaConjunta('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar el resum de tota la comanda al client per WhatsApp">🟢 WhatsApp</button>
           <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF comparativa (opcions A/B/C per a la mateixa peça)">Comparativa PDF</a>
           {% endif %}
-          {% for op in opcions %}{% if loop.first %}
-          <button onclick="liquidarComanda({{ op.id }}, this)"
-            class="btn-sm btn-liq" title="Liquidar saldo pendent">
+          <button onclick="liquidarSessio('{{ sessio_id }}', this)"
+            class="btn-sm btn-liq" title="Liquidar tot el saldo pendent de la comanda (totes les línies)">
             Liquidar pendent
           </button>
-          {% endif %}{% endfor %}
           <button onclick="marcarPagat('{{ sessio_id }}', this)"
             class="btn-sm {% if c0.pagat %}btn-pagat-on{% else %}btn-pagat{% endif %}">
             {% if c0.pagat %}✓ Pagat{% else %}Marcar pagat{% endif %}
@@ -413,8 +411,18 @@ function waHist(btn){
   }
   window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(txt), '_blank');
 }
-function aCompteComanda(id, total, btn){
-  var v = prompt('Import rebut a compte (senyal), en €:\nTotal del pressupost: ' + total + ' €', '');
+function liquidarSessio(sessioId, btn){
+  if(!confirm('Liquidar TOT el pendent d\'aquesta comanda (marcar-la pagada del tot)?')) return;
+  btn.disabled = true;
+  fetch('/sessio/' + encodeURIComponent(sessioId) + '/liquidar', {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(d.ok){ location.reload(); }
+      else { btn.disabled = false; alert('No s\'ha pogut liquidar.'); }
+    }).catch(function(){ btn.disabled = false; alert('Error de connexió.'); });
+}
+function aCompteComanda(id, total, jaCobrat, pendent, btn){
+  var v = prompt('Import que reps ARA a compte (s\'afegeix al que ja s\'hagi cobrat), en €:\n'
+    + 'Total: ' + total + ' €\nJa cobrat: ' + jaCobrat + ' €\nPendent actual: ' + pendent + ' €', '');
   if(v === null) return;
   var entrega = parseFloat(String(v).replace(',', '.'));
   if(isNaN(entrega) || entrega < 0){ alert('Import no vàlid.'); return; }
@@ -576,15 +584,9 @@ function marcarPagat(sessioId, btn) {
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({pagat: nouEstat})
   }).then(r=>r.json()).then(function(d){
-    if(d.ok){
-      if(nouEstat){
-        btn.classList.replace('btn-pagat','btn-pagat-on');
-        btn.textContent='✓ Pagat';
-      } else {
-        btn.classList.replace('btn-pagat-on','btn-pagat');
-        btn.textContent='Marcar pagat';
-      }
-    }
+    // Recarrega perquè els pendents (línia, comanda i client) reflecteixin el
+    // canvi: marcar pagat posa el pendent a 0; desmarcar el restaura.
+    if(d.ok){ location.reload(); }
   });
 }
 
