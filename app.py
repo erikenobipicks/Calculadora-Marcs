@@ -5003,8 +5003,31 @@ def marcar_pagat(sessio_id):
     c = _get_comanda_by_sessio_for_session(sessio_id)
     if not c:
         return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
-    pagat = (request.json or {}).get('pagat', 1)
-    execute('UPDATE comandes SET pagat=? WHERE sessio_id=?', [pagat, sessio_id])
+    pagat = 1 if int((request.json or {}).get('pagat', 1) or 0) else 0
+    # Mantenir pagat i pendent coherents (evita "Pagat" amb pendent > 0):
+    #  · pagat=1 → pendent=0 (NO toquem l'entrega, que és el que s'ha cobrat).
+    #  · pagat=0 → pendent = total − entrega (restaura segons el que hi ha a compte).
+    rows = query('SELECT id, preu_final, entrega FROM comandes WHERE sessio_id=?', [sessio_id]) or []
+    for r in rows:
+        rid = _row_get(r, 'id')
+        if pagat:
+            execute('UPDATE comandes SET pagat=1, pendent=0 WHERE id=?', [rid])
+        else:
+            pf = float(_row_get(r, 'preu_final', 0) or 0)
+            ent = float(_row_get(r, 'entrega', 0) or 0)
+            execute('UPDATE comandes SET pagat=0, pendent=? WHERE id=?', [round(pf - ent, 2), rid])
+    return jsonify({'ok': True, 'pagat': bool(pagat)})
+
+
+@app.route('/sessio/<sessio_id>/liquidar', methods=['POST'])
+@login_required
+def liquidar_sessio(sessio_id):
+    """Liquida el pendent de TOTA la comanda (totes les línies de la sessió):
+    entrega = total, pendent = 0, pagat = 1."""
+    c = _get_comanda_by_sessio_for_session(sessio_id)
+    if not c:
+        return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
+    execute('UPDATE comandes SET entrega=preu_final, pendent=0, pagat=1 WHERE sessio_id=?', [sessio_id])
     return jsonify({'ok': True})
 
 @app.route('/sessio/<sessio_id>/entregat', methods=['POST'])
@@ -5052,20 +5075,20 @@ def liquidar_comanda(cid):
 @app.route('/comanda/<int:cid>/a-compte', methods=['POST'])
 @login_required
 def a_compte_comanda(cid):
-    """Marca un import rebut A COMPTE (senyal) per a una opció: desa l'entrega
-    parcial i recalcula el pendent (= total − entrega). Si cobreix el total,
-    marca com a pagat. El botó de WhatsApp de l'historial ja reflecteix
-    l'entrega i el pendent (així es confirma la senyal al client)."""
-    c = _get_comanda_for_session(cid, fields='id, user_id, preu_final')
+    """Registra un import rebut A COMPTE (senyal). L'import s'ACUMULA sobre el
+    que ja s'hagués rebut (no el substitueix) i es recalcula el pendent
+    (= total − entrega acumulada). Si cobreix el total, marca com a pagat."""
+    c = _get_comanda_for_session(cid, fields='id, user_id, preu_final, entrega')
     if not c:
         return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
     data = request.get_json(silent=True) or {}
     try:
-        entrega = float(data.get('entrega') or 0)
+        import_nou = float(data.get('entrega') or 0)
     except (TypeError, ValueError):
-        entrega = 0.0
+        import_nou = 0.0
     total = float(_row_get(c, 'preu_final', 0) or 0)
-    entrega = round(max(0.0, min(entrega, total)), 2)
+    previa = float(_row_get(c, 'entrega', 0) or 0)
+    entrega = round(max(0.0, min(previa + import_nou, total)), 2)
     pendent = round(total - entrega, 2)
     pagat = 1 if pendent <= 0.01 else 0
     execute('UPDATE comandes SET entrega=?, pendent=?, pagat=? WHERE id=?',
@@ -7395,8 +7418,10 @@ def historial():
     sessio_list = list(sessions.values())
     # Add pagat/entregat flag + estat (F2) to first item of each session
     for grp in sessio_list:
-        grp[0]['pagat']    = any(op.get('pagat')    for op in grp)
-        grp[0]['entregat'] = any(op.get('entregat') for op in grp)
+        # "Pagat" del grup només si TOTES les línies estan pagades (abans era
+        # any(), i una sola línia pagada marcava tot el grup com a pagat).
+        grp[0]['pagat']    = all(op.get('pagat')    for op in grp)
+        grp[0]['entregat'] = all(op.get('entregat') for op in grp)
         grp[0]['estat']    = _derive_estat(grp[0])
         grp[0]['urgent']   = _comanda_es_urgent(grp[0])
     # Filtre d'estat (F2), aplicat en Python sobre els grups perquè no cal
