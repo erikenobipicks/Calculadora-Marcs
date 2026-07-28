@@ -243,8 +243,8 @@ def inject_brand_theme():
 @app.context_processor
 def inject_pendents_albara():
     if session.get('is_admin'):
-        row = query('''SELECT COUNT(*) as n FROM comandes
-                       WHERE observacions LIKE '%[ACCEPTAT]%'
+        row = query(f'''SELECT COUNT(DISTINCT sessio_id) as n FROM comandes
+                       WHERE {_sql_comanda_acceptada()}
                          AND (fd_albara IS NULL OR fd_albara='')''', one=True)
         return {'nav_pendents_albara': row['n'] if row else 0}
     return {'nav_pendents_albara': 0}
@@ -754,6 +754,23 @@ def _derive_estat(row):
     if '[ACCEPTAT]' in str(_row_get(row, 'observacions', '') or ''):
         return 'produccio'
     return 'nou'
+
+
+# Estats en què una comanda ja és una COMANDA acceptada (no un simple
+# pressupost 'nou'/'revisar' ni un 'cancelat'). Substitueix el marcador antic
+# [ACCEPTAT] com a única font de veritat.
+COMANDA_ESTATS_ACCEPTADES = {'produccio', 'material', 'preparat', 'avisat', 'entregat'}
+# Condició SQL equivalent, tolerant amb files antigues sense `estat` backfillat
+# (cau al marcador [ACCEPTAT]). `prefix` per a consultes amb àlies (p. ex. 'c').
+def _sql_comanda_acceptada(prefix=''):
+    p = (prefix + '.') if prefix else ''
+    return (f"({p}estat IN ('produccio','material','preparat','avisat','entregat') "
+            f"OR (COALESCE({p}estat,'')='' AND {p}observacions LIKE '%[ACCEPTAT]%'))")
+
+
+def _comanda_acceptada(row):
+    """True si la comanda ja és una comanda acceptada (segons l'estat efectiu)."""
+    return _derive_estat(row) in COMANDA_ESTATS_ACCEPTADES
 
 
 def _comanda_es_urgent(row, dies=21):
@@ -3534,7 +3551,7 @@ def _dashboard_counts(urgent_days=21):
         if g is None:
             g = {'accept': False, 'pagat': False, 'entregat': False, 'albara': False, 'date': None}
             groups[sid] = g
-        if '[ACCEPTAT]' in str(_row_get(r, 'observacions', '') or ''):
+        if _comanda_acceptada(r):
             g['accept'] = True
         if _row_get(r, 'pagat', 0):
             g['pagat'] = True
@@ -4115,8 +4132,8 @@ def refs():
 def api_pendents_albara():
     if not session.get('is_admin'):
         return jsonify({'n': 0})
-    row = query('''SELECT COUNT(*) as n FROM comandes
-                   WHERE observacions LIKE '%[ACCEPTAT]%'
+    row = query(f'''SELECT COUNT(DISTINCT sessio_id) as n FROM comandes
+                   WHERE {_sql_comanda_acceptada()}
                      AND (fd_albara IS NULL OR fd_albara='')''', one=True)
     return jsonify({'n': row['n'] if row else 0})
 
@@ -5226,10 +5243,13 @@ def acceptar_comanda(cid):
     c = _get_comanda_for_session(cid, fields='id, user_id')
     if not c:
         return jsonify({'ok': False, 'error': 'No autoritzat'}), 403
-    estat = (request.json or {}).get('estat', 'acceptat')
-    execute('UPDATE comandes SET observacions = CASE WHEN observacions IS NULL OR observacions=\'\' THEN ? ELSE observacions || \' | \' || ? END WHERE id=?',
-            [f'[{estat.upper()}]', f'[{estat.upper()}]', cid])
-    return jsonify({'ok': True})
+    # Unificat amb el sistema d'estats: acceptar → 'produccio', desacceptar →
+    # 'nou' (abans afegia el marcador [ACCEPTAT] a observacions, que anava per
+    # separat de l'estat i feia que el dashboard/pendents albarà discrepessin).
+    estat_param = str((request.json or {}).get('estat', 'acceptat')).strip().lower()
+    nou_estat = 'produccio' if estat_param == 'acceptat' else 'nou'
+    execute('UPDATE comandes SET estat=? WHERE id=?', [nou_estat, cid])
+    return jsonify({'ok': True, 'estat': nou_estat})
 
 
 # ── Enviar fotografia al laboratori d'impressió ─────────────────────────
@@ -7471,9 +7491,9 @@ def historial():
                                JOIN usuaris u ON c.user_id=u.id
                                WHERE c.client_extern_id=? ORDER BY c.id DESC''', [filtre_client])
         elif filtre_albara:
-            comandes = query('''SELECT c.*, u.nom as usuari_nom FROM comandes c
+            comandes = query(f'''SELECT c.*, u.nom as usuari_nom FROM comandes c
                                JOIN usuaris u ON c.user_id=u.id
-                               WHERE c.observacions LIKE '%[ACCEPTAT]%'
+                               WHERE {_sql_comanda_acceptada('c')}
                                  AND (c.fd_albara IS NULL OR c.fd_albara='')
                                ORDER BY c.id DESC''')
         elif filtre_all:
@@ -7491,8 +7511,8 @@ def historial():
                                WHERE c.user_id=? ORDER BY c.id DESC''', [filtre_uid])
         usuaris_list = query('SELECT id, nom, username FROM usuaris WHERE is_admin=0 ORDER BY nom')
         clients_habituals = query('SELECT id, nom, tipus FROM clients_externs WHERE actiu=TRUE ORDER BY nom') or []
-        n_pendents_albara = query('''SELECT COUNT(*) as n FROM comandes
-                                    WHERE observacions LIKE '%[ACCEPTAT]%'
+        n_pendents_albara = query(f'''SELECT COUNT(DISTINCT sessio_id) as n FROM comandes
+                                    WHERE {_sql_comanda_acceptada()}
                                       AND (fd_albara IS NULL OR fd_albara='')''', one=True)
         n_pendents_albara = n_pendents_albara['n'] if n_pendents_albara else 0
     else:
