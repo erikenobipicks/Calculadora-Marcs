@@ -812,11 +812,20 @@ body{
         <!-- Pack boda -->
         <div id="alb-boda" style="display:none">
           <div class="f"><label>Pack de boda</label><select id="alb-boda-pack" onchange="recalcAlbum()"></select></div>
+          <div class="f2" style="margin-top:.6rem">
+            <div class="f"><label>Plecs extra</label><input type="number" id="alb-boda-plecs" min="0" value="0" inputmode="numeric" oninput="recalcAlbum()"></div>
+            <div class="f"><label>Rèpliques extra</label><input type="number" id="alb-boda-repliques" min="0" value="0" inputmode="numeric" oninput="recalcAlbum()"></div>
+          </div>
+          <div class="f" style="margin-top:.6rem"><label>UVIs extra</label><input type="number" id="alb-boda-uvis" min="0" value="0" inputmode="numeric" oninput="recalcAlbum()"></div>
         </div>
 
         <!-- Pack comunió -->
         <div id="alb-comunio" style="display:none">
           <div class="f"><label>Pack de comunió</label><select id="alb-com-pack" onchange="recalcAlbum()"></select></div>
+          <div class="f2" style="margin-top:.6rem">
+            <div class="f"><label>Fulls extra</label><input type="number" id="alb-com-plecs" min="0" value="0" inputmode="numeric" oninput="recalcAlbum()"></div>
+            <div class="f"><label>UVIs extra</label><input type="number" id="alb-com-uvis" min="0" value="0" inputmode="numeric" oninput="recalcAlbum()"></div>
+          </div>
         </div>
 
         <div class="f" style="margin-top:.6rem" id="alb-qty-wrap"><label>Quantitat</label><input type="number" id="alb-qty" min="1" value="1" inputmode="numeric" oninput="recalcAlbum()"></div>
@@ -4637,10 +4646,21 @@ function _albumInit(){
   var ex = document.getElementById('alb-extras');
   if(ex && !ex.children.length){
     ALBUM_PRICING.extras.forEach(function(e){
-      var lbl=document.createElement('label'); lbl.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer';
-      var cb=document.createElement('input'); cb.type='checkbox'; cb.value=e.id; cb.className='alb-extra'; cb.onchange=recalcAlbum;
-      lbl.appendChild(cb); lbl.appendChild(document.createTextNode(' '+e.label+' (+'+e.price.toFixed(2)+' €)'));
-      ex.appendChild(lbl);
+      if(e.qty){
+        // Extra amb quantitat (p. ex. UVI): input numèric (0 = cap).
+        var row=document.createElement('label'); row.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px';
+        var inp=document.createElement('input'); inp.type='number'; inp.min='0'; inp.value='0'; inp.step='1';
+        inp.className='alb-extra-qty'; inp.setAttribute('data-id', e.id);
+        inp.style.cssText='width:58px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-family:inherit';
+        inp.oninput=recalcAlbum;
+        row.appendChild(inp); row.appendChild(document.createTextNode(' '+e.label+' (+'+e.price.toFixed(2)+' € c/u)'));
+        ex.appendChild(row);
+      } else {
+        var lbl=document.createElement('label'); lbl.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer';
+        var cb=document.createElement('input'); cb.type='checkbox'; cb.value=e.id; cb.className='alb-extra'; cb.onchange=recalcAlbum;
+        lbl.appendChild(cb); lbl.appendChild(document.createTextNode(' '+e.label+' (+'+e.price.toFixed(2)+' €)'));
+        ex.appendChild(lbl);
+      }
     });
   }
   var sBoda = document.getElementById('alb-boda-pack');
@@ -4675,13 +4695,27 @@ function setAlbumType(t){
 function _albumSelected(){
   var margin = _prodMargin('albums', ALBUM_PRICING.margin_percent);
   var qty = Math.max(1, parseInt((document.getElementById('alb-qty')||{}).value, 10) || 1);
+  var uviPrice = ((ALBUM_PRICING.extras||[]).filter(function(e){return e.id==='uvi';})[0]||{}).price || 6;
+  function _n(id){ return Math.max(0, parseInt((document.getElementById(id)||{}).value, 10) || 0); }
   var pvdUnit = 0, desc = '';
   if(_albumSub === 'boda' || _albumSub === 'comunio'){
-    var list = _albumSub==='boda' ? ALBUM_PRICING.wedding_packs : ALBUM_PRICING.communion_packs;
-    var pid = (document.getElementById(_albumSub==='boda' ? 'alb-boda-pack' : 'alb-com-pack')||{}).value;
+    var isBoda = _albumSub==='boda';
+    var list = isBoda ? ALBUM_PRICING.wedding_packs : ALBUM_PRICING.communion_packs;
+    var pid = (document.getElementById(isBoda ? 'alb-boda-pack' : 'alb-com-pack')||{}).value;
     var pack = list.filter(function(p){return p.id===pid;})[0] || list[0];
     pvdUnit = pack.price;
-    desc = (_albumSub==='boda' ? 'Pack boda: ' : 'Pack comunió: ') + pack.label;
+    desc = (isBoda ? 'Pack boda: ' : 'Pack comunió: ') + pack.label;
+    var bits = [];
+    var plecs = _n(isBoda ? 'alb-boda-plecs' : 'alb-com-plecs');
+    if(plecs>0 && pack.sheet_price){ pvdUnit += plecs*pack.sheet_price; bits.push('+ '+plecs+' plecs extra'); }
+    if(isBoda){
+      var reps = _n('alb-boda-repliques');
+      if(reps>0 && pack.replica_price){ pvdUnit += reps*pack.replica_price; bits.push('+ '+reps+' rèplica'+(reps>1?'s':'')+(pack.replica_label?(' '+pack.replica_label):'')); }
+    }
+    var uvisP = _n(isBoda ? 'alb-boda-uvis' : 'alb-com-uvis');
+    if(uvisP>0){ pvdUnit += uvisP*uviPrice; bits.push('+ '+uvisP+'× UVI'); }
+    if(bits.length) desc += ' ' + bits.join(' ');
+    pvdUnit = Math.round(pvdUnit*100)/100;
   } else {
     var sid = (document.getElementById('alb-mida')||{}).value;
     var size = ALBUM_PRICING.sizes.filter(function(s){return s.id===sid;})[0] || ALBUM_PRICING.sizes[0];
@@ -4693,6 +4727,12 @@ function _albumSelected(){
     document.querySelectorAll('.alb-extra:checked').forEach(function(cb){
       var e = ALBUM_PRICING.extras.filter(function(x){return x.id===cb.value;})[0];
       if(e){ extrasTot += e.price; extraLabels.push(e.label); }
+    });
+    document.querySelectorAll('.alb-extra-qty').forEach(function(inp){
+      var n = Math.max(0, parseInt(inp.value, 10) || 0);
+      if(n<=0) return;
+      var e = ALBUM_PRICING.extras.filter(function(x){return x.id===inp.getAttribute('data-id');})[0];
+      if(e){ extrasTot += e.price*n; extraLabels.push(n+'× '+e.label); }
     });
     pvdUnit = Math.round((cover + size.sheet_price*sheets + (mat.supplement||0) + extrasTot) * 100) / 100;
     desc = (_albumType==='album' ? 'Àlbum ' : 'Libreto ') + size.label + ' · ' + sheets + ' plecs · ' + mat.label;
@@ -4726,6 +4766,11 @@ function afegirAlbumACistella(){
   renderCistella();
   var q = document.getElementById('alb-qty'); if(q) q.value = '1';
   var nm = document.getElementById('alb-nom'); if(nm) nm.value = '';
+  // Reinicia extres de packs i UVIs per no arrossegar-los al següent àlbum.
+  ['alb-boda-plecs','alb-boda-repliques','alb-boda-uvis','alb-com-plecs','alb-com-uvis'].forEach(function(id){
+    var e = document.getElementById(id); if(e) e.value = '0';
+  });
+  document.querySelectorAll('.alb-extra-qty').forEach(function(inp){ inp.value = '0'; });
   recalcAlbum();
   showAlert('Àlbum afegit (' + _cistella.length + ' al pressupost).', 'ok');
 }
