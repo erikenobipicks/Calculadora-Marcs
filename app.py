@@ -7792,35 +7792,43 @@ def pdf_comparativa(sessio_id):
     return send_file(pdf, mimetype='application/pdf',
                      download_name=f"comparativa_{nom}.pdf")
 
+def _marc_comp(v):
+    """Normalitza un component de marc (passpartout, vidre, pre_marc, encolat,
+    impressió, motllura…). Retorna '' quan el valor és buit o un marcador de
+    «cap» ('-', 'cap', 'no'), i el text net altrament. Així un pressupost sense
+    marc no arrossega guions ('· -, -') ni surt com a «Emmarcació»."""
+    v = str(v or '').strip()
+    return '' if v.lower() in ('', '-', 'cap', 'no') else v
+
+
 def _comanda_linia_desc(com):
     """Descripció d'una línia de comanda per al document/resum conjunt, conscient
     del tipus (producte, fotografia impresa només, o marc)."""
-    marc        = (_row_get(com, 'marc_principal', '') or '').strip()
-    pre_marc    = (_row_get(com, 'pre_marc', '') or '').strip()
-    passpartout = (_row_get(com, 'passpartout', '') or '').strip()
-    vidre       = (_row_get(com, 'vidre', '') or '').strip()
-    encolat     = (_row_get(com, 'encolat', '') or '').strip()
-    impressio   = (_row_get(com, 'impressio', '') or '').strip()
+    marc        = _marc_comp(_row_get(com, 'marc_principal', ''))
+    pre_marc    = _marc_comp(_row_get(com, 'pre_marc', ''))
+    passpartout = _marc_comp(_row_get(com, 'passpartout', ''))
+    vidre       = _marc_comp(_row_get(com, 'vidre', ''))
+    encolat     = _marc_comp(_row_get(com, 'encolat', ''))
+    impressio   = _marc_comp(_row_get(com, 'impressio', ''))
     revers_peu  = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
     tipus_peca  = (_row_get(com, 'tipus_peca', '') or '').strip().lower()
-    only_print = (not marc and (not pre_marc or pre_marc == '-')
-                  and (not passpartout or passpartout == 'cap') and not vidre
-                  and (not encolat or encolat == '-') and bool(impressio and impressio != '-'))
+    only_print = (not marc and not pre_marc and not passpartout and not vidre
+                  and not encolat and bool(impressio))
     if tipus_peca == 'producte':
         return marc or 'Producte'
     if only_print:
         _mida = _format_size_text(_row_get(com, 'amplada', 0), _row_get(com, 'alcada', 0))
         d = 'Fotografia impresa' + (f' {_mida}' if _mida else '')
-        if impressio and impressio != '-':
+        if impressio:
             d += f' · {impressio}'
         return d
     parts = []
-    if passpartout and passpartout != 'cap': parts.append(passpartout)
-    if vidre:                                parts.append(vidre)
-    if pre_marc and pre_marc != '-':         parts.append(f'+ {pre_marc}')
-    if encolat and encolat != '-':           parts.append(encolat)
-    if revers_peu:                           parts.append('Revers amb peu')
-    if impressio and impressio != '-':       parts.append(impressio)
+    if passpartout: parts.append(passpartout)
+    if vidre:       parts.append(vidre)
+    if pre_marc:    parts.append(f'+ {pre_marc}')
+    if encolat:     parts.append(encolat)
+    if revers_peu:  parts.append('Revers amb peu')
+    if impressio:   parts.append(impressio)
     d = f'Marc {marc}' if marc else 'Emmarcació'
     if parts:
         d += ' · ' + ', '.join(parts)
@@ -8983,10 +8991,10 @@ def _fd_linies_de_comandes(comandes, recarrec=False):
     linies = []
     notes_parts = []
     for com in comandes:
-        marc         = (_row_get(com, 'marc_principal', '') or '').strip()
-        pre_marc     = (_row_get(com, 'pre_marc', '') or '').strip()
-        passpartout  = (_row_get(com, 'passpartout', '') or '').strip()
-        vidre        = (_row_get(com, 'vidre', '') or '').strip()
+        marc         = _marc_comp(_row_get(com, 'marc_principal', ''))
+        pre_marc     = _marc_comp(_row_get(com, 'pre_marc', ''))
+        passpartout  = _marc_comp(_row_get(com, 'passpartout', ''))
+        vidre        = _marc_comp(_row_get(com, 'vidre', ''))
         opcio_nom    = (_row_get(com, 'opcio_nom', '') or '').strip()
         num_pres     = (_row_get(com, 'num_pressupost', '') or '').strip()
         observacions = (_row_get(com, 'observacions', '') or '').strip()
@@ -8995,22 +9003,20 @@ def _fd_linies_de_comandes(comandes, recarrec=False):
         client_nom   = (_row_get(com, 'client_nom', '') or '').strip()
 
         revers_peu   = str(_row_get(com, 'revers_peu', '') or '').strip().lower() in ('1', 'true', 'yes', 'on')
-        encolat      = (_row_get(com, 'encolat', '') or '').strip()
-        impressio    = (_row_get(com, 'impressio', '') or '').strip()
+        encolat      = _marc_comp(_row_get(com, 'encolat', ''))
+        impressio    = _marc_comp(_row_get(com, 'impressio', ''))
 
         tipus_peca = (_row_get(com, 'tipus_peca', '') or '').strip().lower()
         parts_opc = []
-        if passpartout and passpartout != 'cap': parts_opc.append(passpartout)
-        if vidre:                                parts_opc.append(vidre)
-        if pre_marc and pre_marc != '-':         parts_opc.append(f'+ {pre_marc}')
-        if encolat and encolat != '-':           parts_opc.append(encolat)
-        if revers_peu:                           parts_opc.append('Revers amb peu')
-        if impressio and impressio != '-':       parts_opc.append(impressio)
+        if passpartout: parts_opc.append(passpartout)
+        if vidre:       parts_opc.append(vidre)
+        if pre_marc:    parts_opc.append(f'+ {pre_marc}')
+        if encolat:     parts_opc.append(encolat)
+        if revers_peu:  parts_opc.append('Revers amb peu')
+        if impressio:   parts_opc.append(impressio)
         # Fotografia impresa NOMÉS: sense motllura ni cap material, només còpia.
-        only_print = (not marc and (not pre_marc or pre_marc == '-')
-                      and (not passpartout or passpartout == 'cap') and not vidre
-                      and (not encolat or encolat == '-')
-                      and bool(impressio and impressio != '-'))
+        only_print = (not marc and not pre_marc and not passpartout and not vidre
+                      and not encolat and bool(impressio))
         if tipus_peca == 'producte':
             # Línia de producte desada de la cistella (llenç, àlbum, orla, regals,
             # offset…): marc_principal ja porta la descripció completa del producte.
@@ -9018,7 +9024,7 @@ def _fd_linies_de_comandes(comandes, recarrec=False):
         elif only_print:
             _mida = _format_size_text(_row_get(com, 'amplada', 0), _row_get(com, 'alcada', 0))
             desc_marc = 'Fotografia impresa' + (f' {_mida}' if _mida else '')
-            if impressio and impressio != '-':
+            if impressio:
                 desc_marc += f' · {impressio}'
         else:
             desc_marc = f'Marc {marc}' if marc else 'Emmarcació'
