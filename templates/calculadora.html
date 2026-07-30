@@ -2083,6 +2083,15 @@ function setClientFilter(f, btn){
   // (PVD/PVP/tots) al resum del producte actiu i a la cistella.
   if(typeof _refreshActiveResum === 'function') _refreshActiveResum();
   if(typeof renderCistella === 'function') renderCistella();
+  // El PVD va sempre lligat a un client de taller. Si es tria PVD i encara no
+  // hi ha cap client seleccionat, obrim directament el formulari de nou client
+  // ja marcat com a taller (PVD) — així el pressupost queda a PVD de veritat i
+  // no es desa com a PVP per no haver escollit client. (Es pot cancel·lar: la
+  // llista de sota queda filtrada als clients PVD existents per triar-ne un.)
+  var hid = document.getElementById('client_extern_id');
+  if(f === 'taller' && !(hid && hid.value)){
+    openClientModal(null, 'taller');
+  }
 }
 
 function filterClients(){
@@ -2179,7 +2188,7 @@ function editSelectedClient(){
   var id = hid && hid.value ? parseInt(hid.value, 10) : null;
   if(id) openClientModal(id);
 }
-function openClientModal(editId){
+function openClientModal(editId, presetTipus){
   var m = document.getElementById('client-modal'); if(!m) return;
   _editingClientId = editId || null;
   var c = null;
@@ -2192,7 +2201,9 @@ function openClientModal(editId){
   document.getElementById('cm-tel').value = c ? (c.telefon||'') : ((document.getElementById('client_tel')||{}).value || '');
   document.getElementById('cm-nif').value = c ? (c.nif||'') : '';
   document.getElementById('cm-email').value = c ? (c.email||'') : '';
-  var tipus = c ? (c.tipus||'pvp') : 'pvp';
+  // Nou client: si s'ha demanat un tipus concret (presetTipus) o el filtre PVD
+  // està actiu, el deixem marcat com a taller (PVD); si no, PVP per defecte.
+  var tipus = c ? (c.tipus||'pvp') : (presetTipus || (clientFilter==='taller' ? 'taller' : 'pvp'));
   var radios = document.getElementsByName('cm-tipus');
   for(var j=0;j<radios.length;j++) radios[j].checked = (radios[j].value===tipus);
   var re = document.getElementById('cm-recarrec');
