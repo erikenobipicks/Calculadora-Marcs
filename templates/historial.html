@@ -351,8 +351,8 @@ tr:hover td{background:#fbf8f3}
               <span class="btn-sm btn-albara-ok" title="Albarà: {{ op.fd_albara }}">✓ {{ op.fd_albara }}</span>
               {% else %}
               <span class="albara-grp">
-                <button onclick="crearAlbaraIndividual({{ op.id }}, 'pvp', this)" class="btn-sm btn-albara" title="Albarà a PVP (preu venda)">FD pvp</button>
-                <button onclick="crearAlbaraIndividual({{ op.id }}, 'cost', this)" class="btn-sm btn-albara-cost" title="Albarà a cost producció">FD cost</button>
+                <button onclick="crearAlbaraIndividual({{ op.id }}, 'cost', this)" class="btn-sm btn-albara-cost" title="Albarà a PVD (preu taller)">FD PVD</button>
+                <button onclick="crearAlbaraIndividual({{ op.id }}, 'pvp', this)" class="btn-sm btn-albara" title="Albarà a PVP (preu venda)">FD PVP</button>
               </span>
               {% endif %}
               {% if op.impressio and op.impressio != '-' and op.impressio != '' %}
@@ -647,7 +647,7 @@ function crearFacturaComanda(sessioId, btn) {
 }
 
 function crearAlbaraIndividual(comandaId, modePreu, btn) {
-  var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
+  var label = modePreu === 'cost' ? 'PVD' : 'PVP';
   if(!confirm('Crear albarà a Factura Directa amb preu de ' + label + '?')) return;
   var grp = btn.closest('.albara-grp');
   if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = true; });

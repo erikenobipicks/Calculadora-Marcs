@@ -2083,15 +2083,9 @@ function setClientFilter(f, btn){
   // (PVD/PVP/tots) al resum del producte actiu i a la cistella.
   if(typeof _refreshActiveResum === 'function') _refreshActiveResum();
   if(typeof renderCistella === 'function') renderCistella();
-  // El PVD va sempre lligat a un client de taller. Si es tria PVD i encara no
-  // hi ha cap client seleccionat, obrim directament el formulari de nou client
-  // ja marcat com a taller (PVD) — així el pressupost queda a PVD de veritat i
-  // no es desa com a PVP per no haver escollit client. (Es pot cancel·lar: la
-  // llista de sota queda filtrada als clients PVD existents per triar-ne un.)
-  var hid = document.getElementById('client_extern_id');
-  if(f === 'taller' && !(hid && hid.value)){
-    openClientModal(null, 'taller');
-  }
+  // En triar PVD només filtrem la llista als clients de taller existents perquè
+  // en puguis escollir un. Si no en tens cap, el botó "+ Nou client" ja et surt
+  // pre-marcat com a taller (PVD) — però no obrim el formulari automàticament.
 }
 
 function filterClients(){
@@ -2720,9 +2714,38 @@ function costGrup(grup){
   var k=_tipusGrupMap[grup]&&_tipusGrupMap[grup][val];
   return (k&&CLOSEST[k])?CLOSEST[k].preu:(PREUS[grup]||0);
 }
+// ── Descompte per volum a la impressió (només PVD professional) ─────────────
+// El descompte per quantitat s'aplica NOMÉS al PVD (preu al client de taller);
+// el PVP (públic) no es toca. Terra: el PVD amb descompte mai baixa del preu de
+// referència de 3F per a la mida. Per a mides on ja som iguals/més barats que 3F
+// (o sense referència), el terra iguala la base → no s'aplica descompte. Així el
+// descompte s'auto-focalitza a les còpies petites/mitjanes, que és on interessa.
+var IMP_3F_FLOOR = {
+  'IMP7x10':0.55,'IMP10x15':0.60,'IMP13x18':0.66,'IMP15x20':0.71,'IMP18x24':1.25,
+  'IMP20x20':1.05,'IMP20x25':1.38,'IMP20x30':1.47,'IMP24x30':2.15,'IMP28x35':2.90,'IMP30x30':2.60
+};
+function _impVolPct(qty){
+  qty = qty || 1;
+  if(qty >= 200) return 0.26;
+  if(qty >= 100) return 0.20;
+  if(qty >= 50)  return 0.14;
+  if(qty >= 10)  return 0.08;
+  return 0;
+}
+function _impVolPVD(base, c){
+  if(!c || !c.ref || !(base > 0)) return base;
+  var qty = parseFloat((document.getElementById('quantitat')||{}).value) || 1;
+  var pct = _impVolPct(qty);
+  if(pct <= 0) return base;
+  var floor = (IMP_3F_FLOOR[c.ref] != null) ? IMP_3F_FLOOR[c.ref] : base;
+  var disc  = base * (1 - pct);
+  return Math.round(Math.max(disc, Math.min(floor, base)) * 10000) / 10000;
+}
 function costImpressio(){
   if(!document.getElementById('chk-impressio').checked) return 0;
-  return CLOSEST.impressio?CLOSEST.impressio.preu:(PREUS.impressio||0);
+  var c = CLOSEST.impressio;
+  var base = c ? c.preu : (PREUS.impressio || 0);
+  return _impVolPVD(base, c);
 }
 // PVP per unitat de la impressió:
 //  - Si el backend ja retorna 'pvp' (preu amb marge per tram d'àrea aplicat),
@@ -4230,7 +4253,7 @@ function crearAlbaraFD(modePreu, docType){
   var docNom = esPres ? 'pressupost' : 'albarà';
   if(_marcInvalid || _preInvalid){ showAlert('Corregeix la referència de la motllura abans de generar el ' + docNom + '.', 'err'); return; }
   var c = window._c || {};
-  var label = modePreu === 'cost' ? 'cost producció' : 'PVP';
+  var label = modePreu === 'cost' ? 'PVD' : 'PVP';
   var grp = document.getElementById('albara-btns');
   if(grp) grp.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
 
@@ -5994,8 +6017,8 @@ recalcMides();
       <button type="button" onclick="cistellaComandaTaller()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per correu, amb el detall i el PVD">📧 Taller email</button>
       {% if session.is_admin %}
       <button type="button" onclick="cistellaFD('pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa; usa PVD si el client és de taller">Pressupost FD</button>
+      <button type="button" onclick="cistellaFD('albara','cost')" class="albara-btn albara-cost">Albarà PVD</button>
       <button type="button" onclick="cistellaFD('albara','pvp')" class="albara-btn albara-pvp">Albarà PVP</button>
-      <button type="button" onclick="cistellaFD('albara','cost')" class="albara-btn albara-cost">Albarà Cost</button>
       {% endif %}
     </div>
   </div>
