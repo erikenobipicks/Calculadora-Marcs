@@ -5098,8 +5098,17 @@ function _offsetSelected(){
     var esp=(_offsetPaper==='esp');
     if(esp && (prod.preu_esp===null || prod.preu_esp===undefined)){ esp=false; noEsp=true; }
     unit = esp ? prod.preu_esp : prod.preu;
-    desc = prod.label + ' · ' + (esp ? 'paper especial' : 'paper bàsic') + ' · ' + qty + ' u';
-    hint = 'En surten ' + prod.mult + ' per full SRA3.' + (noEsp ? ' Aquest producte no té paper especial.' : '');
+    // Facturació per full SRA3: mínim 1 full (= mult u.) i múltiples de full;
+    // si la quantitat no omple un full sencer, s'arrodoneix cap amunt (com 3F).
+    var mult = prod.mult || 1;
+    var sheets = Math.ceil(qty / mult);
+    var billed = sheets * mult;
+    desc = prod.label + ' · ' + (esp ? 'paper especial' : 'paper bàsic') + ' · ' +
+           billed + ' u (' + sheets + ' full' + (sheets > 1 ? 's' : '') + ' SRA3)';
+    hint = 'Mínim 1 full = ' + mult + ' u; es factura per fulls sencers (' + mult + '/full).' +
+           (billed > qty ? ' Demanades ' + qty + ' → facturades ' + billed + '.' : '') +
+           (noEsp ? ' Aquest producte no té paper especial.' : '');
+    qty = billed;   // el preu i la línia de cistella van amb les unitats facturades
   }
   var pvd=Math.round(unit*qty*100)/100;
   var pvp=Math.round(pvd*(1+margin/100)*100)/100;
