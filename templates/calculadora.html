@@ -1354,6 +1354,7 @@ body{
         <div class="res-body">
           <div class="r-row"><span class="r-lbl">Subtotal PVP</span><span class="r-val" id="r-subtotal">0,00 €</span></div>
           <div class="r-row" id="r-row-combo" style="display:none"><span class="r-lbl" id="r-lbl-combo">Descompte pack</span><span class="r-val" style="color:var(--amber)" id="r-combo">— €</span></div>
+          <div class="r-row" id="r-row-impvol" style="display:none"><span class="r-lbl" id="r-lbl-impvol">Descompte volum impressió</span><span class="r-val" style="color:var(--amber)" id="r-impvol">— €</span></div>
           <div class="r-row"><span class="r-lbl" id="r-lbl-net">Preu net PVP (sense IVA)</span><span class="r-val" id="r-net">0,00 €</span></div>
           <div class="r-row" id="r-row-desc" style="display:none"><span class="r-lbl" id="r-lbl-desc">Descompte</span><span class="r-val" style="color:var(--amber)" id="r-desc">— €</span></div>
           <div class="r-row"><span class="r-lbl">IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
@@ -3684,9 +3685,16 @@ function calcular(){
   var isCost=rmode==='cost';
   var cTotQty=cTot*qty;
 
-  // Subtotal abans de qualsevol descompte (només mode PVP).
+  // Descompte per volum de la impressió: només afecta el cost/PVD. Calculem
+  // l'estalvi (preu base − preu descomptat) × unitats per fer-lo visible al resum.
+  var impBaseUnit = (document.getElementById('chk-impressio').checked && CLOSEST.impressio) ? (CLOSEST.impressio.preu||0) : 0;
+  var impVolSave  = Math.max(0, (impBaseUnit - cImpressio)) * qty;
+  var impVolPct   = impBaseUnit>0 ? Math.round((1 - cImpressio/impBaseUnit)*100) : 0;
+  var showImpVol  = isCost && impVolSave > 0.005;
+
+  // Subtotal abans de qualsevol descompte (només mode PVP; en cost, base sense el descompte de volum).
   var elSubtotal = document.getElementById('r-subtotal');
-  if(elSubtotal) elSubtotal.textContent = fmt(isCost?cTotQty:pNet);
+  if(elSubtotal) elSubtotal.textContent = fmt(isCost ? (cTotQty + (showImpVol?impVolSave:0)) : pNet);
   document.getElementById('r-net').textContent    = fmt(isCost?cTotQty:pNetAfterCombo);
   document.getElementById('r-iva').textContent    = fmt(isCost?cTotQty*0.21:pIva);
   document.getElementById('r-final').textContent  = fmt(isCost?cTotQty*1.21:pFin);
@@ -3700,6 +3708,14 @@ function calcular(){
   if(showCombo){
     document.getElementById('r-lbl-combo').textContent = comboLbl + ' (-'+comboPct+'%)';
     document.getElementById('r-combo').textContent = '- '+fmt(comboEur);
+  }
+
+  // Línia de descompte per volum de la impressió (només vista cost/PVD).
+  var elImpVolRow = document.getElementById('r-row-impvol');
+  if(elImpVolRow) elImpVolRow.style.display = showImpVol ? '' : 'none';
+  if(showImpVol){
+    document.getElementById('r-lbl-impvol').textContent = 'Descompte volum impressió (-'+impVolPct+'%)';
+    document.getElementById('r-impvol').textContent = '- '+fmt(impVolSave);
   }
 
   var showDesc=desc>0&&!isCost;
@@ -4593,6 +4609,7 @@ function recalcLlenc(){
   _setTxt('r-lbl-final','Total amb IVA 21%');
   var comboRow=document.getElementById('r-row-combo'); if(comboRow) comboRow.style.display='none';
   var descRow=document.getElementById('r-row-desc');  if(descRow)  descRow.style.display='none';
+  var ivRow=document.getElementById('r-row-impvol');  if(ivRow)    ivRow.style.display='none';
 
   var hint = document.getElementById('llenc-fitxer-hint');
   if(hint) hint.textContent = 'Arxiu recomanat amb marges: ' + r.fileW + ' × ' + r.fileH + ' cm.';
@@ -4643,6 +4660,7 @@ function _feedResumEconomic(net, view){
   _s('r-lbl-final', 'Total amb IVA 21%');
   var cr = document.getElementById('r-row-combo'); if(cr) cr.style.display = 'none';
   var dr = document.getElementById('r-row-desc');  if(dr) dr.style.display = 'none';
+  var ivr = document.getElementById('r-row-impvol'); if(ivr) ivr.style.display = 'none';
   return total;
 }
 
