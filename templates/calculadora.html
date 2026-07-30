@@ -787,6 +787,8 @@ body{
           <button type="button" id="alb-sub-com" class="mode-chip" onclick="setAlbumSub('comunio')">Pack comunió</button>
         </div>
 
+        <div class="f" style="margin-bottom:.7rem"><label>Nom / referència de l'àlbum (opcional)</label><input type="text" id="alb-nom" placeholder="Ex: Àlbum de la família Pérez" autocomplete="off"></div>
+
         <!-- Individual -->
         <div id="alb-individual">
           <div style="margin-bottom:.6rem">
@@ -4696,6 +4698,10 @@ function _albumSelected(){
     desc = (_albumType==='album' ? 'Àlbum ' : 'Libreto ') + size.label + ' · ' + sheets + ' plecs · ' + mat.label;
     if(extraLabels.length) desc += ' · ' + extraLabels.join(' + ');
   }
+  // Nom/referència opcional de l'àlbum: es posa davant de la descripció perquè
+  // surti a l'albarà i al PDF (viatja dins del 'text' de la línia de cistella).
+  var nom = (((document.getElementById('alb-nom')||{}).value) || '').trim();
+  if(nom) desc = nom + ' · ' + desc;
   var pvd = Math.round(pvdUnit * qty * 100) / 100;
   var pvp = Math.round(pvd * (1 + margin/100) * 100) / 100;
   return {qty:qty, pvd:pvd, pvp:pvp, desc:desc};
@@ -4719,6 +4725,7 @@ function afegirAlbumACistella(){
   _cistella.push({ text: r.desc, quantity: r.qty, preu_net: r.pvp, cost_produccio: r.pvd });
   renderCistella();
   var q = document.getElementById('alb-qty'); if(q) q.value = '1';
+  var nm = document.getElementById('alb-nom'); if(nm) nm.value = '';
   recalcAlbum();
   showAlert('Àlbum afegit (' + _cistella.length + ' al pressupost).', 'ok');
 }
