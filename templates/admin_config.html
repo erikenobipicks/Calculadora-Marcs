@@ -110,6 +110,45 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     </div>
 
     <div class="section">
+      <div class="section-title">Descomptes per volum d'impressió (PVD)</div>
+      <p class="muted" style="margin-bottom:1rem">Descompte per quantitat aplicat només al PVD (preu professional) de les còpies. El PVP (públic) no es toca i el descompte mai baixa del preu de referència de la competència. Els trams s'ordenen automàticament per quantitat.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));gap:1rem">
+        <div>
+          <label>Tram 1 · des de (u.)</label>
+          <input type="number" name="imp_vol_t1_qty" value="{{ config.get('imp_vol_t1_qty', '10') }}" min="1" step="1">
+        </div>
+        <div>
+          <label>Tram 1 · descompte (%)</label>
+          <input type="number" name="imp_vol_t1_pct" value="{{ config.get('imp_vol_t1_pct', '8') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Tram 2 · des de (u.)</label>
+          <input type="number" name="imp_vol_t2_qty" value="{{ config.get('imp_vol_t2_qty', '50') }}" min="1" step="1">
+        </div>
+        <div>
+          <label>Tram 2 · descompte (%)</label>
+          <input type="number" name="imp_vol_t2_pct" value="{{ config.get('imp_vol_t2_pct', '14') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Tram 3 · des de (u.)</label>
+          <input type="number" name="imp_vol_t3_qty" value="{{ config.get('imp_vol_t3_qty', '100') }}" min="1" step="1">
+        </div>
+        <div>
+          <label>Tram 3 · descompte (%)</label>
+          <input type="number" name="imp_vol_t3_pct" value="{{ config.get('imp_vol_t3_pct', '20') }}" min="0" max="100" step="0.1">
+        </div>
+        <div>
+          <label>Tram 4 · des de (u.)</label>
+          <input type="number" name="imp_vol_t4_qty" value="{{ config.get('imp_vol_t4_qty', '200') }}" min="1" step="1">
+        </div>
+        <div>
+          <label>Tram 4 · descompte (%)</label>
+          <input type="number" name="imp_vol_t4_pct" value="{{ config.get('imp_vol_t4_pct', '26') }}" min="0" max="100" step="0.1">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-title">Marge professional per defecte i flag global</div>
       <label>Marge de benefici per defecte (%)</label>
       <p class="hint">S'aplica als comptes nous. Recomanació: 60. Per editar el marge d'un usuari concret, vés a <a href="/admin/usuaris">Clients</a>.</p>

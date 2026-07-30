@@ -975,6 +975,22 @@ def get_config_value(clau, default=None):
     return r['valor'] if r else default
 
 
+def _imp_vol_tiers():
+    """Trams de descompte per volum de la impressió (editables des de
+    /admin/config). Retorna [{'qty': int, 'pct': float}, ...] ascendent."""
+    def _f(clau, d):
+        try:
+            return float(get_config_value(clau, d))
+        except (TypeError, ValueError):
+            return float(d)
+    return [
+        {'qty': int(_f('imp_vol_t1_qty', 10)),  'pct': _f('imp_vol_t1_pct', 8)},
+        {'qty': int(_f('imp_vol_t2_qty', 50)),  'pct': _f('imp_vol_t2_pct', 14)},
+        {'qty': int(_f('imp_vol_t3_qty', 100)), 'pct': _f('imp_vol_t3_pct', 20)},
+        {'qty': int(_f('imp_vol_t4_qty', 200)), 'pct': _f('imp_vol_t4_pct', 26)},
+    ]
+
+
 # ── Extras (càrrecs configurables) ────────────────────────────────────────
 EXTRAS_DEFAULTS = [
     {
@@ -4077,6 +4093,7 @@ def calculadora():
                            orlas_pricing=ORLAS_PRICING,
                            regals_pricing=REGALS_PRICING,
                            offset_pricing=OFFSET_PRICING,
+                           imp_vol_disc=_imp_vol_tiers(),
                            commercial_margins=_load_user_commercial_margins(user),
                            user_has_email=user_has_email)
 
@@ -8711,6 +8728,15 @@ def admin_config():
         for clau in ('combo_desc_marc_imp_protter', 'combo_desc_marc_imp_foam',
                      'combo_desc_marc_imp', 'combo_desc_marc_suport',
                      'combo_desc_minim_pvp'):
+            val = request.form.get(clau)
+            if val is not None and val != '':
+                execute(
+                    "INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                    [clau, str(val).strip()],
+                )
+        # Trams de descompte per volum de la impressió (PVD).
+        for clau in ('imp_vol_t1_qty', 'imp_vol_t2_qty', 'imp_vol_t3_qty', 'imp_vol_t4_qty',
+                     'imp_vol_t1_pct', 'imp_vol_t2_pct', 'imp_vol_t3_pct', 'imp_vol_t4_pct'):
             val = request.form.get(clau)
             if val is not None and val != '':
                 execute(

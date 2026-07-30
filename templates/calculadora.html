@@ -2740,13 +2740,13 @@ var IMP_3F_FLOOR = {
   'IMP7x10':0.55,'IMP10x15':0.60,'IMP13x18':0.66,'IMP15x20':0.71,'IMP18x24':1.25,
   'IMP20x20':1.05,'IMP20x25':1.38,'IMP20x30':1.47,'IMP24x30':2.15,'IMP28x35':2.90,'IMP30x30':2.60
 };
+// Trams de descompte per volum (editables des de /admin/config). Ascendents.
+var IMP_VOL_TIERS = ({{ imp_vol_disc | tojson }} || []).slice().sort(function(a,b){return a.qty-b.qty;});
 function _impVolPct(qty){
   qty = qty || 1;
-  if(qty >= 200) return 0.26;
-  if(qty >= 100) return 0.20;
-  if(qty >= 50)  return 0.14;
-  if(qty >= 10)  return 0.08;
-  return 0;
+  var pct = 0;
+  for(var i=0;i<IMP_VOL_TIERS.length;i++){ if(qty >= IMP_VOL_TIERS[i].qty) pct = IMP_VOL_TIERS[i].pct; }
+  return pct/100;
 }
 function _impVolPVD(base, c){
   if(!c || !c.ref || !(base > 0)) return base;
