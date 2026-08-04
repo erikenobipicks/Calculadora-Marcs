@@ -5351,6 +5351,7 @@ function renderCistella(){
           meta = it.quantity+' u · PVP '+pvp.toFixed(2)+' €';
           if(IS_ADMIN && view === 'both') meta += ' · cost '+pvd.toFixed(2)+' €';
         }
+        if(it.lliure) meta += ' · línia lliure';
         if(dpct>0) meta += ' · net '+(baseShown*(1-dpct/100)).toFixed(2)+' €';
         return '<div style="display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border)">'+
           '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;line-height:1.3">'+escapeHtml(it.text)+'</div>'+
@@ -5364,6 +5365,29 @@ function renderCistella(){
     }
   }
   renderCistellaTotals();
+}
+
+// Afegeix una línia lliure (concepte + import escrits a mà) al pressupost, per
+// a serveis o extres que no tenim tarifats (p. ex. edició de fotografia).
+// L'import és el preu final al client SENSE IVA; l'IVA s'aplica al total com a
+// la resta de línies. Es desa com un ítem de cistella normal, així que flueix
+// sol al render, els totals, el text/WhatsApp, el PDF i Factura Directa. El
+// cost_produccio s'iguala a l'import (passthrough) perquè la línia no
+// desaparegui de les vistes de cost/PVD.
+function afegirLliniaLliure(){
+  var cEl = document.getElementById('lliure-concepte');
+  var iEl = document.getElementById('lliure-import');
+  var concepte = ((cEl && cEl.value) || '').trim();
+  var imp = parseFloat(iEl && iEl.value);
+  if(!concepte){ showAlert('Escriu el concepte de la línia lliure.', 'err'); if(cEl) cEl.focus(); return; }
+  if(isNaN(imp) || imp < 0){ showAlert('Escriu un import vàlid (€).', 'err'); if(iEl) iEl.focus(); return; }
+  imp = Math.round(imp*100)/100;
+  _cistella.push({ text: concepte, quantity: 1, preu_net: imp, cost_produccio: imp, lliure: true });
+  if(cEl) cEl.value = '';
+  if(iEl) iEl.value = '';
+  if(cEl) cEl.focus();
+  renderCistella();
+  showAlert('Línia lliure afegida al pressupost.', 'ok');
 }
 
 // Construeix el text del pressupost per copiar (WhatsApp, etc.).
@@ -6079,6 +6103,19 @@ recalcMides();
     </div>
     <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1">
       <div id="cistella-items"></div>
+      <div style="margin-top:.9rem;padding-top:.8rem;border-top:1px dashed var(--border2)">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:5px">➕ Línia lliure (servei o extra no tarifat)</label>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:2;min-width:150px">
+            <input type="text" id="lliure-concepte" placeholder="Concepte (p. ex. Edició de fotografia)" onkeydown="if(event.key==='Enter'){event.preventDefault();afegirLliniaLliure();}" style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:6px;font-size:13px">
+          </div>
+          <div style="flex:1;min-width:90px">
+            <input type="number" id="lliure-import" min="0" step="0.01" placeholder="Import €" onkeydown="if(event.key==='Enter'){event.preventDefault();afegirLliniaLliure();}" style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:6px;font-size:13px">
+          </div>
+          <button type="button" onclick="afegirLliniaLliure()" style="padding:8px 14px;border:none;border-radius:7px;background:#A67843;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir</button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:5px">L'import és el preu final al client, sense IVA. L'IVA (21%) s'afegeix al total del pressupost.</p>
+      </div>
       <div style="margin-top:1rem;padding-top:.8rem;border-top:2px solid var(--border);display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end">
         <div style="flex:1;min-width:110px">
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px">Descompte global (%)</label>
