@@ -5334,7 +5334,9 @@ function renderCistella(){
   var fab = document.getElementById('cistella-fab');
   var cnt = document.getElementById('cistella-count');
   if(cnt) cnt.textContent = n;
-  if(fab) fab.style.display = n>0 ? 'inline-flex' : 'none';
+  // El botó del pressupost és SEMPRE visible perquè s'hi pugui entrar a afegir
+  // línies lliures (serveis no tarifats) encara que no hi hagi cap marc.
+  if(fab) fab.style.display = 'inline-flex';
   var cont = document.getElementById('cistella-items');
   if(cont){
     if(!n){
@@ -6088,7 +6090,7 @@ recalcMides();
 </div>
 
 <!-- ── Cistella pressupost multi-marc ──────────────────────────────────── -->
-<button type="button" id="cistella-fab" onclick="obrirCistella()" style="display:none;position:fixed;left:18px;bottom:88px;z-index:7000;align-items:center;gap:7px;padding:11px 16px;border:none;border-radius:30px;background:#A67843;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 6px 20px rgba(166,120,67,.4)">
+<button type="button" id="cistella-fab" onclick="obrirCistella()" style="display:inline-flex;position:fixed;left:18px;bottom:88px;z-index:7000;align-items:center;gap:7px;padding:11px 16px;border:none;border-radius:30px;background:#A67843;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 6px 20px rgba(166,120,67,.4)">
   🛒 Pressupost <span id="cistella-count" style="background:#fff;color:#A67843;border-radius:11px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0 5px">0</span>
 </button>
 
