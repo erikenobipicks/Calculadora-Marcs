@@ -934,6 +934,26 @@ def _bridge_token_ok(provided):
     return any(hmac.compare_digest(provided, t) for t in _bridge_tokens_valids())
 
 
+def _pvp_tokens_valids():
+    """Tokens dedicats per als endpoints públics de PVP (/api/public/pvp/*),
+    independents del bridge perquè es puguin revocar a part. Suporten rotació
+    sense downtime amb PUBLIC_PVP_TOKEN_NEXT, igual que el bridge."""
+    toks = [
+        os.environ.get('PUBLIC_PVP_TOKEN', '').strip(),
+        os.environ.get('PUBLIC_PVP_TOKEN_NEXT', '').strip(),
+    ]
+    return [t for t in toks if t]
+
+
+def _pvp_token_ok(provided):
+    """Compara el token PVP rebut (capçalera X-Pvp-Token) en temps constant.
+    Fail-closed: buit o sense token configurat → False."""
+    provided = (provided or '').strip()
+    if not provided:
+        return False
+    return any(hmac.compare_digest(provided, t) for t in _pvp_tokens_valids())
+
+
 def _bridge_ip_allowed():
     """Allowlist d'IPs opcional per als endpoints /api/public/*. Si
     BRIDGE_ALLOWED_IPS no està definida (cas per defecte), no restringeix res
@@ -3353,6 +3373,111 @@ def public_pro_clients_get(client_id):
     return jsonify({'ok': True, 'client': _pro_clients_row_to_dict(row)})
 
 
+# ── Motor de preu públic compartit (PVD base → PVP) ────────────────────────
+# Codis d'error del càlcul base i el seu status HTTP.
+_PUBLIC_PRICE_ERR_STATUS = {
+    'unknown_kind': 400,
+    'invalid_size': 400,
+    'missing_moldura_id': 400,
+    'impressio_not_found': 404,
+    'laminate_not_found': 404,
+    'moldura_not_found': 404,
+    'compute_failed': 500,
+}
+
+
+def _public_base_price_unit(kind, w, h, paper='', finish='none', moldura_id=''):
+    """Preu base PVD per unitat (sense marge de client ni IVA) per a un producte.
+    Font única de veritat compartida per /api/public/compute i pels endpoints
+    PVP. Retorna (base_price, breakdown, error) on error és None o un dels codis
+    de _PUBLIC_PRICE_ERR_STATUS."""
+    if kind not in ('impressio', 'laminate', 'protter', 'frame'):
+        return (0.0, {}, 'unknown_kind')
+    breakdown = {}
+    base_price = 0.0
+
+    if kind == 'impressio':
+        # Impressió: usa la taula amb min-contain (no té preu_cost, ja porta marge)
+        imp = _imp_closest(w, h)
+        if not imp:
+            return (0.0, {}, 'impressio_not_found')
+        base_price = float(imp.get('preu', 0))
+        breakdown['impressio'] = base_price
+        if finish == 'laminate':
+            lam = _laminate_only_closest(w, h)
+            if lam:
+                breakdown['finish'] = float(lam.get('preu', 0))
+                base_price += breakdown['finish']
+        elif finish == 'protter':
+            prot = calcular_cost_laminat(w, h, tipus='semibrillo')
+            breakdown['finish'] = prot['pvd']
+            base_price += prot['pvd']
+        elif finish == 'foam':
+            foam = calcular_cost_foam(w, h)
+            breakdown['finish'] = foam['pvd']
+            base_price += foam['pvd']
+
+    elif kind == 'laminate':
+        lam = _laminate_only_closest(w, h)
+        if not lam:
+            return (0.0, {}, 'laminate_not_found')
+        base_price = float(lam.get('preu', 0))
+        breakdown['laminate'] = base_price
+
+    elif kind == 'protter':
+        r = calcular_cost_laminat(w, h, tipus='semibrillo')
+        base_price = r['pvd']
+        breakdown['protter'] = r['pvd']
+        breakdown['origen'] = r['origen']
+
+    elif kind == 'frame':
+        if not moldura_id:
+            return (0.0, {}, 'missing_moldura_id')
+        m = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_id], one=True)
+        if not m:
+            return (0.0, {}, 'moldura_not_found')
+        pc = _row_get(m, 'preu_cost')
+        gruix = float(_row_get(m, 'gruix') or 0)
+        merma = float(_row_get(m, 'merma_pct') or 10.0)
+        minim = float(_row_get(m, 'minim_cm') or 100.0)
+        if pc is not None:
+            marc = calcular_preu_marc(w, h, gruix, float(pc), merma_pct=merma, minim_cm=minim)
+            if not marc:
+                return (0.0, {}, 'compute_failed')
+            base_price = marc['pvd']
+            breakdown['moldura'] = marc['pvd']
+            breakdown['cost'] = marc['cost']
+        else:
+            # Fallback a preu_taller com €/cm lineal
+            preu_cm = float(_row_get(m, 'preu_taller') or 0)
+            perimetre = 2 * (w + h)
+            longitud = (perimetre + gruix * 8) * (1 + merma / 100)
+            longitud = max(longitud, minim)
+            base_price = round(longitud * preu_cm / 100, 4)
+            breakdown['moldura'] = base_price
+
+    return (base_price, breakdown, None)
+
+
+def _marge_public_pct():
+    """Marge retail (%) per al preu públic (PVP) de la web pública. Fase 1: el
+    marge per defecte global (marge_defecte). Es podria fer per categoria més
+    endavant sense canviar el contracte de l'API."""
+    try:
+        return float(get_config_value('marge_defecte', '60'))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def _pvp_from_pvd(base_price, marge_pct, vat_rate=0.21):
+    """Converteix un preu base PVD en el PVP al client final: aplica el marge
+    retail i l'IVA. base_price ja ha d'incloure la quantitat. Retorna
+    {pvp_net, iva, pvp_total} arrodonit a 2 decimals."""
+    net = round(float(base_price) * (1 + float(marge_pct) / 100.0), 2)
+    iva = round(net * float(vat_rate), 2)
+    return {'pvp_net': net, 'iva': iva, 'pvp_total': round(net + iva, 2)}
+
+
 @app.route('/api/public/compute', methods=['GET'])
 def public_compute():
     """Calcula un preu base (sense marge del client, sense IVA) per un producte concret.
@@ -3395,69 +3520,9 @@ def public_compute():
     finish = (request.args.get('finish') or 'none').strip().lower()
     moldura_id = (request.args.get('moldura_id') or '').strip()
 
-    breakdown = {}
-    base_price = 0.0
-
-    if kind == 'impressio':
-        # Impressió: usa la taula amb min-contain (no té preu_cost, ja porta marge)
-        imp = _imp_closest(w, h)
-        if not imp:
-            return jsonify({'ok': False, 'error': 'impressio_not_found'}), 404
-        base_price = float(imp.get('preu', 0))
-        breakdown['impressio'] = base_price
-        # Acabats opcionals
-        if finish == 'laminate':
-            lam = _laminate_only_closest(w, h)
-            if lam:
-                breakdown['finish'] = float(lam.get('preu', 0))
-                base_price += breakdown['finish']
-        elif finish == 'protter':
-            prot = calcular_cost_laminat(w, h, tipus='semibrillo')
-            breakdown['finish'] = prot['pvd']
-            base_price += prot['pvd']
-        elif finish == 'foam':
-            foam = calcular_cost_foam(w, h)
-            breakdown['finish'] = foam['pvd']
-            base_price += foam['pvd']
-
-    elif kind == 'laminate':
-        lam = _laminate_only_closest(w, h)
-        if not lam:
-            return jsonify({'ok': False, 'error': 'laminate_not_found'}), 404
-        base_price = float(lam.get('preu', 0))
-        breakdown['laminate'] = base_price
-
-    elif kind == 'protter':
-        r = calcular_cost_laminat(w, h, tipus='semibrillo')
-        base_price = r['pvd']
-        breakdown['protter'] = r['pvd']
-        breakdown['origen'] = r['origen']
-
-    elif kind == 'frame':
-        if not moldura_id:
-            return jsonify({'ok': False, 'error': 'missing_moldura_id'}), 400
-        m = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_id], one=True)
-        if not m:
-            return jsonify({'ok': False, 'error': 'moldura_not_found'}), 404
-        pc = _row_get(m, 'preu_cost')
-        gruix = float(_row_get(m, 'gruix') or 0)
-        merma = float(_row_get(m, 'merma_pct') or 10.0)
-        minim = float(_row_get(m, 'minim_cm') or 100.0)
-        if pc is not None:
-            marc = calcular_preu_marc(w, h, gruix, float(pc), merma_pct=merma, minim_cm=minim)
-            if not marc:
-                return jsonify({'ok': False, 'error': 'compute_failed'}), 500
-            base_price = marc['pvd']
-            breakdown['moldura'] = marc['pvd']
-            breakdown['cost'] = marc['cost']
-        else:
-            # Fallback a preu_taller com €/cm lineal
-            preu_cm = float(_row_get(m, 'preu_taller') or 0)
-            perimetre = 2 * (w + h)
-            longitud = (perimetre + gruix * 8) * (1 + merma / 100)
-            longitud = max(longitud, minim)
-            base_price = round(longitud * preu_cm / 100, 4)
-            breakdown['moldura'] = base_price
+    base_price, breakdown, err = _public_base_price_unit(kind, w, h, paper, finish, moldura_id)
+    if err:
+        return jsonify({'ok': False, 'error': err}), _PUBLIC_PRICE_ERR_STATUS.get(err, 400)
 
     # Apply quantity
     total = round(base_price * qty, 4)
@@ -3471,6 +3536,64 @@ def public_compute():
         'base_price': total,
         'vat_rate': 0.21,
         'breakdown': breakdown,
+    })
+
+
+@app.route('/api/public/pvp/compute', methods=['GET'])
+def public_pvp_compute():
+    """Preu PVP (preu al client final) per a un producte concret: aplica el
+    marge retail per defecte sobre el PVD i hi suma l'IVA. Pensat per a la web
+    pública, que NO ha de conèixer costos ni marges.
+
+    Auth: capçalera X-Pvp-Token (token dedicat, independent del bridge).
+
+    Query params: idèntics a /api/public/compute
+      kind='impressio'|'laminate'|'protter'|'frame', width_cm, height_cm,
+      paper, finish, moldura_id, qty.
+
+    Resposta: {ok, kind, width_cm, height_cm, qty, marge_pct, pvp_net, iva,
+               vat_rate, pvp_total}. MAI retorna cost ni PVD.
+    """
+    if not _pvp_token_ok(request.headers.get('X-Pvp-Token', '')) or not _bridge_ip_allowed():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    kind = (request.args.get('kind') or '').strip().lower()
+
+    try:
+        w = float(request.args.get('width_cm', 0))
+        h = float(request.args.get('height_cm', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid_size'}), 400
+    if w <= 0 or h <= 0:
+        return jsonify({'ok': False, 'error': 'invalid_size'}), 400
+
+    try:
+        qty = max(1, int(request.args.get('qty', 1)))
+    except (TypeError, ValueError):
+        qty = 1
+
+    paper = (request.args.get('paper') or '').strip().lower()
+    finish = (request.args.get('finish') or 'none').strip().lower()
+    moldura_id = (request.args.get('moldura_id') or '').strip()
+
+    base_unit, _breakdown, err = _public_base_price_unit(kind, w, h, paper, finish, moldura_id)
+    if err:
+        return jsonify({'ok': False, 'error': err}), _PUBLIC_PRICE_ERR_STATUS.get(err, 400)
+
+    base_total = round(base_unit * qty, 4)
+    marge = _marge_public_pct()
+    p = _pvp_from_pvd(base_total, marge)
+    return jsonify({
+        'ok': True,
+        'kind': kind,
+        'width_cm': w,
+        'height_cm': h,
+        'qty': qty,
+        'marge_pct': marge,
+        'vat_rate': 0.21,
+        'pvp_net': p['pvp_net'],
+        'iva': p['iva'],
+        'pvp_total': p['pvp_total'],
     })
 
 
