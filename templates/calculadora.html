@@ -5436,14 +5436,23 @@ function _cistellaText(){
   lines.push(head);
   if(nom) lines.push('Client: ' + nom);
   lines.push('');
-  var tot = 0;
   _cistella.forEach(function(it){
     var preu = isPVD ? (it.cost_produccio||0) : (it.preu_net||0);
-    tot += preu;
     lines.push('• ' + it.text + ' — ' + it.quantity + ' u · ' + preu.toFixed(2) + ' €');
   });
   lines.push('');
-  lines.push('Total: ' + tot.toFixed(2) + ' € + IVA');
+  // Totals coherents amb el resum de la cistella (descomptes + IVA + entrega).
+  var T = _cistellaComputeTotals();
+  lines.push('Subtotal (sense IVA): ' + T.subtotal.toFixed(2) + ' €');
+  if(T.lineDisc > 0) lines.push('Descomptes per línia: -' + T.lineDisc.toFixed(2) + ' €');
+  if(T.gp > 0) lines.push('Descompte global ' + _gNum(T.gp) + '%: -' + T.globalDisc.toFixed(2) + ' €');
+  if(T.lineDisc > 0 || T.gp > 0) lines.push('Base imposable: ' + T.baseImp.toFixed(2) + ' €');
+  lines.push('IVA 21%: ' + T.iva.toFixed(2) + ' €');
+  lines.push('TOTAL (IVA inclòs): ' + T.total.toFixed(2) + ' €');
+  if(T.entrega > 0){
+    lines.push('Entrega a compte: -' + T.entrega.toFixed(2) + ' €');
+    lines.push('Pendent: ' + T.pendent.toFixed(2) + ' €');
+  }
   return lines.join('\n');
 }
 
