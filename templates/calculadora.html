@@ -1364,6 +1364,23 @@ body{
         </div>
       </div>
 
+      <div class="card" id="lliure-card">
+        <div class="card-t"><span class="ct-n">+</span>Línia lliure (servei o extra no tarifat)</div>
+        <p style="font-size:12px;color:var(--muted);margin:-.15rem 0 .7rem">Afegeix al pressupost qualsevol servei que no tinguem tarifat (p. ex. edició de fotografia), sigui quin sigui el producte. L'import és el preu al client, sense IVA.</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:2;min-width:150px">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px">Concepte</label>
+            <input type="text" id="lliure-concepte-main" placeholder="Edició de fotografia" onkeydown="if(event.key==='Enter'){event.preventDefault();afegirLliniaLliureMain();}" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px">
+          </div>
+          <div style="flex:1;min-width:90px">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px">Import €</label>
+            <input type="number" id="lliure-import-main" min="0" step="0.01" placeholder="0,00" onkeydown="if(event.key==='Enter'){event.preventDefault();afegirLliniaLliureMain();}" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px">
+          </div>
+          <button type="button" onclick="afegirLliniaLliureMain()" style="padding:9px 16px;border:none;border-radius:7px;background:var(--green,#1A6B45);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">+ Afegir al pressupost</button>
+        </div>
+        <div id="lliure-feedback" style="font-size:11.5px;color:var(--green,#1A6B45);font-weight:600;margin-top:7px;display:none"></div>
+      </div>
+
       <div class="card">
         <div class="card-t"><span class="ct-n">8</span>Dades finals</div>
         <div class="f"><label>Observacions i termini</label><input type="text" id="observacions" placeholder="Termini d'entrega, indicacions especials..."></div>
@@ -3298,6 +3315,11 @@ function setBudgetMode(mode){
   // La digitalització és sense IVA i a part de FD: amaguem el «Resum econòmic».
   var resCard = document.querySelector('.res-card');
   if(resCard) resCard.style.display = isDigital ? 'none' : '';
+  // La targeta de línia lliure acompanya el resum: visible a tots els modes de
+  // producte (marc, impressió, llenç, àlbum, orla, regals, offset), amagada
+  // només en digital (sense IVA, flux a part).
+  var lliureCard = document.getElementById('lliure-card');
+  if(lliureCard) lliureCard.style.display = isDigital ? 'none' : '';
   ['card-peca','card-materials','card-preu'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.style.display = isCustom ? 'none' : '';
   });
@@ -5376,9 +5398,9 @@ function renderCistella(){
 // sol al render, els totals, el text/WhatsApp, el PDF i Factura Directa. El
 // cost_produccio s'iguala a l'import (passthrough) perquè la línia no
 // desaparegui de les vistes de cost/PVD.
-function afegirLliniaLliure(){
-  var cEl = document.getElementById('lliure-concepte');
-  var iEl = document.getElementById('lliure-import');
+function _afegirLliniaLliureFrom(concepteId, importId, feedbackId){
+  var cEl = document.getElementById(concepteId);
+  var iEl = document.getElementById(importId);
   var concepte = ((cEl && cEl.value) || '').trim();
   var imp = parseFloat(iEl && iEl.value);
   if(!concepte){ showAlert('Escriu el concepte de la línia lliure.', 'err'); if(cEl) cEl.focus(); return; }
@@ -5389,8 +5411,19 @@ function afegirLliniaLliure(){
   if(iEl) iEl.value = '';
   if(cEl) cEl.focus();
   renderCistella();
-  showAlert('Línia lliure afegida al pressupost.', 'ok');
+  var fb = feedbackId && document.getElementById(feedbackId);
+  if(fb){
+    fb.textContent = '✓ «' + concepte + '» afegit al pressupost (' + imp.toFixed(2).replace('.', ',') + ' €). Obre 🛒 Pressupost per veure-ho.';
+    fb.style.display = 'block';
+    setTimeout(function(){ fb.style.display = 'none'; }, 7000);
+  } else {
+    showAlert('Línia lliure afegida al pressupost.', 'ok');
+  }
 }
+// Punt d'entrada des del panell del pressupost (🛒) i des de la targeta sempre
+// visible de la columna dreta (disponible a totes les opcions de producte).
+function afegirLliniaLliure(){ _afegirLliniaLliureFrom('lliure-concepte', 'lliure-import', null); }
+function afegirLliniaLliureMain(){ _afegirLliniaLliureFrom('lliure-concepte-main', 'lliure-import-main', 'lliure-feedback'); }
 
 // Construeix el text del pressupost per copiar (WhatsApp, etc.).
 function _cistellaText(){
