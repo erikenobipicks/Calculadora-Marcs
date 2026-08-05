@@ -170,3 +170,22 @@ def test_defaults_include_norilab_catalog():
 def test_norilab_proveidor_data():
     assert app.CONSUM_PROVEIDOR_NORILAB['email'] == 'administracion@norilabiberia.es'
     assert app.CONSUM_PROVEIDOR_NORILAB['nom']
+
+
+def test_delex_catalog_and_registry():
+    d = app.CONSUM_CATALEG_DELEX
+    refs = {c['referencia'] for c in d}
+    assert 'PFI1300PBK' in refs and 'T46K140' in refs and 'HQR23061' in refs
+    assert all(c['preu'] > 0 and c['referencia'] and c['nom'] for c in d)
+    # Tintes Canon → equip Canon; tintes Epson → equip Epson.
+    assert all(c['equip'] == 'canon_pro_4000' for c in d if c['referencia'].startswith('PFI'))
+    assert all(c['equip'] == 'epson_surelab_d1000' for c in d if c['referencia'].startswith('T46K'))
+    # Registre de catàlegs.
+    assert set(app.CONSUM_CATALEGS) == {'norilab', 'delex'}
+    assert app.CONSUM_CATALEGS['delex']['proveidor']['email'] == 'info@delex.es'
+    assert app.CONSUM_CATALEGS['delex']['equips'] == ['canon_pro_4000', 'epson_surelab_d1000']
+
+
+def test_defaults_include_both_catalogs():
+    refs = {c.get('referencia') for c in app.CONSUMIBLES_DEFAULTS}
+    assert {'H086162-00', 'PFI1300PBK', 'T46K140'} <= refs

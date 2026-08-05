@@ -1124,12 +1124,34 @@ CONSUM_CATALEG_NORILAB = [
     {'equip': 'noritsu_green_iv', 'referencia': 'PAPGF1BA0103', 'nom': 'Bobina papel MAX HQ Silk Mil Puntos 17" (43,2cm x 30m)',  'preu': 49.99},
 ]
 
+# Catàleg de fàbrica de Delex ReproMedia (proveïdor de la Canon Pro 4000 i de
+# tintes Epson). Tintes Canon PFI-1300 (PRO 2000/4000) i paper pòster; tintes
+# Epson T46K. Nota: les tintes Epson T46K (250 ml, magenta clar) semblen d'una
+# SureColor P; s'assignen a l'equip Epson existent i es poden reassignar.
+CONSUM_PROVEIDOR_DELEX = {'nom': 'Delex ReproMedia', 'email': 'info@delex.es'}
+
+CONSUM_CATALEG_DELEX = [
+    {'equip': 'canon_pro_4000', 'referencia': 'PFI1300PBK', 'nom': 'Tinta Canon Negro Brillo (PBK) PRO 2000/4000 330ml', 'preu': 155.12},
+    {'equip': 'canon_pro_4000', 'referencia': 'PFI1300C',   'nom': 'Tinta Canon Cyan PRO 2000/4000 330ml',               'preu': 155.12},
+    {'equip': 'canon_pro_4000', 'referencia': 'PFI1300Y',   'nom': 'Tinta Canon Amarillo PRO 2000/4000 330ml',           'preu': 155.12},
+    {'equip': 'canon_pro_4000', 'referencia': 'PFI1300PC',  'nom': 'Tinta Canon Cyan Claro (PC) PRO 2000/4000 330ml',     'preu': 155.12},
+    {'equip': 'canon_pro_4000', 'referencia': 'PFI1300B',   'nom': 'Tinta Canon Azul (B) PRO 2000/4000 330ml',           'preu': 155.12},
+    {'equip': 'canon_pro_4000', 'referencia': 'PFI1300CO',  'nom': 'Tinta Canon Optimizador Brillo (CO) PRO 2000/4000 330ml', 'preu': 155.12},
+    {'equip': 'canon_pro_4000', 'referencia': 'HQR23061',   'nom': 'Papel Póster Premium Mate 230gr 30m x 610mm',        'preu': 24.71},
+    {'equip': 'canon_pro_4000', 'referencia': 'HQR23043',   'nom': 'Papel Póster Premium Mate 230gr 30m x 432mm',        'preu': 18.66},
+    {'equip': 'epson_surelab_d1000', 'referencia': 'T46K140', 'nom': 'Tinta Epson T46K140 Negro 250ml',        'preu': 48.75},
+    {'equip': 'epson_surelab_d1000', 'referencia': 'T46K640', 'nom': 'Tinta Epson T46K640 Magenta Claro 250ml', 'preu': 48.75},
+]
+
+# Registre de catàlegs de fàbrica carregables des de l'admin.
+CONSUM_CATALEGS = {
+    'norilab': {'nom': 'Norilab', 'items': CONSUM_CATALEG_NORILAB, 'proveidor': CONSUM_PROVEIDOR_NORILAB, 'equips': ['noritsu_green_iv']},
+    'delex':   {'nom': 'Delex',   'items': CONSUM_CATALEG_DELEX,   'proveidor': CONSUM_PROVEIDOR_DELEX,   'equips': ['canon_pro_4000', 'epson_surelab_d1000']},
+}
+
 CONSUMIBLES_DEFAULTS = [
     dict(c, quantitat=1, pendent=False, notes='', actiu=True, ordre=i + 1)
-    for i, c in enumerate(CONSUM_CATALEG_NORILAB)
-] + [
-    {'equip': 'canon_pro_4000',      'nom': 'Tinta Canon Pro 4000',      'referencia': '', 'preu': 0, 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix color/codi', 'actiu': True, 'ordre': 90},
-    {'equip': 'epson_surelab_d1000', 'nom': 'Tinta Epson SureLab D1000', 'referencia': '', 'preu': 0, 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix color/codi', 'actiu': True, 'ordre': 91},
+    for i, c in enumerate(CONSUM_CATALEG_NORILAB + CONSUM_CATALEG_DELEX)
 ]
 
 
@@ -9276,22 +9298,26 @@ def admin_consumibles_enviar():
 @app.route('/admin/consumibles/carregar-plantilla', methods=['POST'])
 @admin_required
 def admin_consumibles_carregar_plantilla():
-    """Carrega el catàleg de fàbrica de Norilab (tintes Noritsu + papers) i fixa
-    Norilab com a proveïdor del Noritsu. És additiu i idempotent: només afegeix
-    els consumibles el codi (referència) dels quals no hi és; no toca ni esborra
-    res del que ja tens."""
+    """Carrega un catàleg de fàbrica (Norilab / Delex) i fixa el proveïdor dels
+    seus equips. Additiu i idempotent: només afegeix els consumibles el codi
+    (referència) dels quals no hi és; no toca ni esborra res del que ja tens."""
+    key = (request.form.get('catalog') or 'norilab').strip().lower()
+    cat = CONSUM_CATALEGS.get(key)
+    if not cat:
+        flash('Catàleg desconegut.', 'error')
+        return redirect(url_for('admin_consumibles'))
     avui = _consum_avui()
     items = get_consumibles_list()
     refs_existents = {(c.get('referencia') or '').strip().lower()
                       for c in items if (c.get('referencia') or '').strip()}
     afegits = 0
-    for cat in CONSUM_CATALEG_NORILAB:
-        if cat['referencia'].strip().lower() in refs_existents:
+    for it in cat['items']:
+        if it['referencia'].strip().lower() in refs_existents:
             continue
         item = _normalize_consumible({
             'id': _consum_nou_id(afegits),
-            'equip': cat['equip'], 'nom': cat['nom'], 'referencia': cat['referencia'],
-            'quantitat': 1, 'preu': cat['preu'], 'pendent': False, 'notes': '',
+            'equip': it['equip'], 'nom': it['nom'], 'referencia': it['referencia'],
+            'quantitat': 1, 'preu': it['preu'], 'pendent': False, 'notes': '',
             'actiu': True, 'ordre': len(items) + afegits + 1,
         })
         _apply_preu_historial(item, None, avui)
@@ -9299,16 +9325,17 @@ def admin_consumibles_carregar_plantilla():
         afegits += 1
     if afegits:
         save_consumibles_list(items)
-    # Proveïdor del Noritsu = Norilab (només si encara no està omplert).
-    prov = get_consum_proveidor('noritsu_green_iv')
-    if not prov['nom']:
-        execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consum_prov_noritsu_green_iv_nom', ?)",
-                [CONSUM_PROVEIDOR_NORILAB['nom']])
-    if not prov['email']:
-        execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consum_prov_noritsu_green_iv_email', ?)",
-                [CONSUM_PROVEIDOR_NORILAB['email']])
-    flash(f"Catàleg Norilab carregat: {afegits} consumible(s) afegit(s)." if afegits
-          else "El catàleg Norilab ja hi era (res a afegir).", 'ok')
+    # Proveïdor dels equips del catàleg (només si encara no està omplert).
+    for eq in cat['equips']:
+        prov = get_consum_proveidor(eq)
+        if not prov['nom']:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                    [f'consum_prov_{eq}_nom', cat['proveidor']['nom']])
+        if not prov['email']:
+            execute("INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                    [f'consum_prov_{eq}_email', cat['proveidor']['email']])
+    flash(f"Catàleg {cat['nom']} carregat: {afegits} consumible(s) afegit(s)." if afegits
+          else f"El catàleg {cat['nom']} ja hi era (res a afegir).", 'ok')
     return redirect(url_for('admin_consumibles'))
 
 
