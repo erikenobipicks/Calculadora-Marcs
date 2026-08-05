@@ -88,11 +88,18 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     <a href="/admin/consumibles/comanda" class="btn btn-primary">📧 Preparar comanda{% if n_pendents %} ({{ n_pendents }}){% endif %}</a>
   </div>
 
-  <div class="section" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-    <div class="muted">Carrega el catàleg de fàbrica de <strong>Norilab</strong> (tintes Noritsu V.104 + papers, amb codi i preu) i fixa Norilab com a proveïdor del Noritsu. Només afegeix els que falten (per codi); no toca ni esborra res del que ja tens.</div>
-    <form method="post" action="/admin/consumibles/carregar-plantilla" onsubmit="return confirm('Carregar el catàleg Norilab? Afegeix els consumibles que falten (per codi) sense tocar la resta.')" style="margin:0">
-      <button type="submit" class="btn btn-outline">⬇ Carregar catàleg Norilab</button>
-    </form>
+  <div class="section">
+    <div class="muted" style="margin-bottom:.7rem">Carrega els catàlegs de fàbrica (amb codi i preu) i fixa el proveïdor de cada equip. Només afegeixen els consumibles que falten (per codi); no toquen ni esborren res del que ja tens.</div>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+      <form method="post" action="/admin/consumibles/carregar-plantilla" onsubmit="return confirm('Carregar el catàleg Norilab (Noritsu: tintes + papers)?')" style="margin:0">
+        <input type="hidden" name="catalog" value="norilab">
+        <button type="submit" class="btn btn-outline">⬇ Catàleg Norilab (Noritsu)</button>
+      </form>
+      <form method="post" action="/admin/consumibles/carregar-plantilla" onsubmit="return confirm('Carregar el catàleg Delex (Canon PFI-1300 + papers + tintes Epson)?')" style="margin:0">
+        <input type="hidden" name="catalog" value="delex">
+        <button type="submit" class="btn btn-outline">⬇ Catàleg Delex (Canon/Epson)</button>
+      </form>
+    </div>
   </div>
 
   <form method="post" action="/admin/consumibles">
