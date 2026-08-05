@@ -1129,16 +1129,57 @@ def _normalize_consumible(c):
         ordre = int(c.get('ordre') or 0)
     except (TypeError, ValueError):
         ordre = 0
+    try:
+        preu = round(float(c.get('preu') or 0), 4)
+    except (TypeError, ValueError):
+        preu = 0.0
+    # Històric de preus: llista de {preu, data} en ordre cronològic.
+    hist = c.get('historial')
+    hist_norm = []
+    if isinstance(hist, list):
+        for h in hist:
+            h = h or {}
+            try:
+                hist_norm.append({'preu': round(float(h.get('preu') or 0), 4),
+                                  'data': str(h.get('data') or '')})
+            except (TypeError, ValueError):
+                continue
     return {
+        'id': str(c.get('id') or '').strip(),
         'equip': equip,
         'nom': str(c.get('nom') or '').strip(),
         'referencia': str(c.get('referencia') or '').strip(),
         'quantitat': qty,
+        'preu': preu,
         'pendent': bool(c.get('pendent')),
         'notes': str(c.get('notes') or '').strip(),
+        'historial': hist_norm,
         'actiu': bool(c.get('actiu', True)),
         'ordre': ordre,
     }
+
+
+def _consum_avui():
+    """Data d'avui (YYYY-MM-DD) per a l'històric de preus."""
+    return datetime.now().strftime('%Y-%m-%d')
+
+
+def _consum_nou_id(i=0):
+    """Genera un id estable per a un consumible nou."""
+    return 'c' + str(int(time.time() * 1000)) + str(i)
+
+
+def _apply_preu_historial(item, prev, avui):
+    """Actualitza l'històric de preus d'un consumible. Parteix de l'històric
+    anterior (prev) i, si el preu ha canviat respecte l'últim registrat (o és
+    nou amb preu > 0), hi afegeix una entrada {preu, data}. Retorna l'item."""
+    hist = list((prev or {}).get('historial') or [])
+    preu = item.get('preu') or 0
+    last = hist[-1]['preu'] if hist else None
+    if preu and (last is None or abs(float(preu) - float(last)) > 1e-9):
+        hist.append({'preu': round(float(preu), 4), 'data': avui})
+    item['historial'] = hist
+    return item
 
 
 def get_consumibles_list():
@@ -9113,27 +9154,37 @@ def admin_consumibles():
                             [f'consum_prov_{k}_{camp}', val.strip()])
         # Ítems: arrays paral·lels alineats per ordre del DOM. c_pendent[] és un
         # hidden 0/1 per fila (sempre present) perquè s'alineï amb la resta.
+        # Estat anterior indexat per id, per arrossegar l'històric de preus.
+        prev_by_id = {c['id']: c for c in get_consumibles_list() if c.get('id')}
+        avui = _consum_avui()
         equips = request.form.getlist('c_equip[]')
         noms   = request.form.getlist('c_nom[]')
         refs   = request.form.getlist('c_ref[]')
         qtys   = request.form.getlist('c_qty[]')
+        preus  = request.form.getlist('c_preu[]')
         notes  = request.form.getlist('c_notes[]')
         pends  = request.form.getlist('c_pendent[]')
+        ids    = request.form.getlist('c_id[]')
         items = []
         for i, nom in enumerate(noms):
             nom = (nom or '').strip()
             if not nom:
                 continue
-            items.append({
+            cid = ((ids[i] if i < len(ids) else '') or '').strip() or _consum_nou_id(i)
+            item = _normalize_consumible({
+                'id': cid,
                 'equip': equips[i] if i < len(equips) else 'altres',
                 'nom': nom,
                 'referencia': refs[i] if i < len(refs) else '',
                 'quantitat': qtys[i] if i < len(qtys) else 0,
+                'preu': preus[i] if i < len(preus) else 0,
                 'pendent': (i < len(pends) and str(pends[i]).strip() in ('1', 'true', 'on')),
                 'notes': notes[i] if i < len(notes) else '',
                 'actiu': True,
                 'ordre': i + 1,
             })
+            _apply_preu_historial(item, prev_by_id.get(cid), avui)
+            items.append(item)
         save_consumibles_list(items)
         flash('Consumibles desats.', 'ok')
         return redirect(url_for('admin_consumibles'))

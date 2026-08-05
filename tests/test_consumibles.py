@@ -89,3 +89,53 @@ def test_admin_consumibles_requires_admin():
     client = app.app.test_client()
     r = client.get('/admin/consumibles')
     assert r.status_code != 200  # gated: sense sessió admin no s'hi accedeix
+
+
+# ── Preu i històric de preus ───────────────────────────────────────────────
+def test_normalize_includes_preu_id_historial():
+    c = app._normalize_consumible({'nom': 'Cian', 'preu': '18.5', 'id': 'abc',
+                                   'historial': [{'preu': '15', 'data': '2026-01-01'}]})
+    assert c['id'] == 'abc'
+    assert c['preu'] == 18.5
+    assert c['historial'] == [{'preu': 15.0, 'data': '2026-01-01'}]
+
+
+def test_normalize_bad_preu_and_historial():
+    c = app._normalize_consumible({'nom': 'X', 'preu': 'abc', 'historial': 'nope'})
+    assert c['preu'] == 0.0
+    assert c['historial'] == []
+
+
+def test_apply_historial_new_item_records_price():
+    item = {'preu': 20.0}
+    app._apply_preu_historial(item, None, '2026-08-05')
+    assert item['historial'] == [{'preu': 20.0, 'data': '2026-08-05'}]
+
+
+def test_apply_historial_zero_price_records_nothing():
+    item = {'preu': 0}
+    app._apply_preu_historial(item, None, '2026-08-05')
+    assert item['historial'] == []
+
+
+def test_apply_historial_unchanged_price_no_new_entry():
+    prev = {'preu': 20.0, 'historial': [{'preu': 20.0, 'data': '2026-01-01'}]}
+    item = {'preu': 20.0}
+    app._apply_preu_historial(item, prev, '2026-08-05')
+    assert item['historial'] == [{'preu': 20.0, 'data': '2026-01-01'}]  # sense canvi
+
+
+def test_apply_historial_changed_price_appends():
+    prev = {'preu': 20.0, 'historial': [{'preu': 20.0, 'data': '2026-01-01'}]}
+    item = {'preu': 22.5}
+    app._apply_preu_historial(item, prev, '2026-08-05')
+    assert item['historial'] == [
+        {'preu': 20.0, 'data': '2026-01-01'},
+        {'preu': 22.5, 'data': '2026-08-05'},
+    ]
+
+
+def test_consum_nou_id_unique_per_index():
+    a = app._consum_nou_id(0)
+    b = app._consum_nou_id(1)
+    assert a != b and a.startswith('c')

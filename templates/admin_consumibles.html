@@ -39,7 +39,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--green);box-shadow:0 0
 .prov-eq{font-size:13px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:0}
 .c-row{border:1px solid var(--border);border-radius:10px;padding:.85rem .95rem;margin-bottom:.7rem;background:#fdfcf9}
 .c-row.is-pend{background:color-mix(in srgb, var(--amber) 8%, #fff);border-color:color-mix(in srgb, var(--amber) 30%, var(--border))}
-.c-grid{display:grid;grid-template-columns:1fr 1.4fr 1fr .7fr 1.2fr;gap:.6rem}
+.c-grid{display:grid;grid-template-columns:1fr 1.3fr 1fr .6fr .7fr 1.1fr;gap:.6rem}
 .c-foot{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-top:.6rem;flex-wrap:wrap}
 .check-row{display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;margin:0}
 .check-row input{width:auto;margin:0}
@@ -106,6 +106,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <div id="c-list">
         {% for c in consumibles %}
         <div class="c-row{% if c.pendent %} is-pend{% endif %}">
+          <input type="hidden" name="c_id[]" value="{{ c.id }}">
           <div class="c-grid">
             <div>
               <label>Equip</label>
@@ -116,6 +117,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
             <div><label>Nom</label><input type="text" name="c_nom[]" value="{{ c.nom }}" placeholder="Cartutx cian, paper lustre…"></div>
             <div><label>Referència</label><input type="text" name="c_ref[]" value="{{ c.referencia }}" placeholder="Codi proveïdor"></div>
             <div><label>Quantitat</label><input type="number" name="c_qty[]" value="{{ c.quantitat }}" min="0" step="1"></div>
+            <div><label>Preu €</label><input type="number" name="c_preu[]" value="{{ c.preu }}" min="0" step="0.01" placeholder="0,00"></div>
             <div><label>Notes</label><input type="text" name="c_notes[]" value="{{ c.notes }}" placeholder="Opcional"></div>
           </div>
           <div class="c-foot">
@@ -125,6 +127,14 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
             </label>
             <button type="button" class="btn-danger" onclick="esborrarFila(this)">Esborrar</button>
           </div>
+          {% if c.historial %}
+          <details style="margin-top:.55rem">
+            <summary class="muted" style="cursor:pointer">Històric de preus ({{ c.historial|length }})</summary>
+            <div class="muted" style="margin-top:.35rem;padding-left:.3rem">
+              {% for h in c.historial|reverse %}<div>{{ h.data }} — {{ '%.2f'|format(h.preu) }} €{% if loop.first %} <span style="color:var(--green);font-weight:600">(actual)</span>{% endif %}</div>{% endfor %}
+            </div>
+          </details>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -140,6 +150,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
 
 <template id="c-row-tpl">
   <div class="c-row">
+    <input type="hidden" name="c_id[]" value="">
     <div class="c-grid">
       <div>
         <label>Equip</label>
@@ -150,6 +161,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <div><label>Nom</label><input type="text" name="c_nom[]" placeholder="Cartutx cian, paper lustre…"></div>
       <div><label>Referència</label><input type="text" name="c_ref[]" placeholder="Codi proveïdor"></div>
       <div><label>Quantitat</label><input type="number" name="c_qty[]" value="1" min="0" step="1"></div>
+      <div><label>Preu €</label><input type="number" name="c_preu[]" min="0" step="0.01" placeholder="0,00"></div>
       <div><label>Notes</label><input type="text" name="c_notes[]" placeholder="Opcional"></div>
     </div>
     <div class="c-foot">
