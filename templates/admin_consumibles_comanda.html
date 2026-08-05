@@ -70,7 +70,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     {% set enviables = grups | selectattr('proveidor_email') | list %}
     {% if email_ok and enviables|length > 1 %}
     <div class="section" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
-      <div class="muted">Enviar totes les comandes de cop ({{ enviables|length }} equips amb email).</div>
+      <div class="muted">Enviar totes les comandes de cop ({{ enviables|length }} proveïdors amb email).</div>
       <form method="post" action="/admin/consumibles/enviar"><button type="submit" class="btn btn-primary">📧 Enviar totes</button></form>
     </div>
     {% endif %}
@@ -79,20 +79,21 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
     <div class="section">
       <div class="grup-head">
         <div>
-          <div class="grup-title">{{ g.equip_label }}</div>
+          <div class="grup-title">{{ g.proveidor_nom or g.proveidor_email or 'Sense proveïdor' }}</div>
           <div class="grup-dest">
             {% if g.proveidor_email %}
-              → {{ g.proveidor_nom or 'Proveïdor' }} &lt;{{ g.proveidor_email }}&gt;
+              → &lt;{{ g.proveidor_email }}&gt;
             {% else %}
               <span style="color:var(--red)">Sense email de proveïdor</span>
             {% endif %}
+            {% if g.equips_label %} · {{ g.equips_label }}{% endif %}
           </div>
         </div>
         <span class="muted">{{ g['items']|length }} consumible{{ 's' if g['items']|length != 1 }}</span>
       </div>
 
       {% if not g.proveidor_email %}
-        <div class="warn">Aquest equip no té email de proveïdor. Afegeix-l'hi a <a href="/admin/consumibles" style="color:inherit;text-decoration:underline">Consumibles</a> per poder enviar-lo.</div>
+        <div class="warn">Aquests consumibles no tenen email de proveïdor. Posa'l a l'equip (o com a proveïdor propi del consumible) a <a href="/admin/consumibles" style="color:inherit;text-decoration:underline">Consumibles</a> per poder enviar-los.</div>
       {% endif %}
 
       <div class="preview">
@@ -103,7 +104,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <div class="actions-row">
         <span class="muted"></span>
         <form method="post" action="/admin/consumibles/enviar">
-          <input type="hidden" name="equip" value="{{ g.equip_key }}">
+          <input type="hidden" name="proveidor" value="{{ g.proveidor_email }}">
           <button type="submit" class="btn btn-primary"{% if not g.proveidor_email or not email_ok %} disabled{% endif %}>📧 Enviar aquesta comanda</button>
         </form>
       </div>

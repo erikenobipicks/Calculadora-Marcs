@@ -41,15 +41,15 @@ def test_consum_esc():
 
 def test_email_html_lists_items_and_escapes():
     grup = {
-        'equip_label': 'Noritsu Green IV',
         'proveidor_nom': 'Prov <X>',
         'items': [
-            {'nom': 'Cartutx cian', 'referencia': 'ABC-1', 'quantitat': 2},
-            {'nom': 'Paper <lustre>', 'referencia': '', 'quantitat': 1},
+            {'nom': 'Cartutx cian', 'referencia': 'ABC-1', 'quantitat': 2, 'equip': 'noritsu_green_iv'},
+            {'nom': 'Paper <lustre>', 'referencia': '', 'quantitat': 1, 'equip': 'noritsu_green_iv'},
         ],
     }
     html = app._consumibles_email_html(grup)
-    assert 'Noritsu Green IV' in html
+    assert 'Equipo' in html                  # columna d'equip
+    assert 'Noritsu Green IV' in html        # etiqueta d'equip a la columna
     assert 'Cartutx cian' in html
     assert 'ABC-1' in html
     assert '&lt;lustre&gt;' in html          # nom escapat
@@ -58,23 +58,39 @@ def test_email_html_lists_items_and_escapes():
     assert '—' in html                       # referència buida → guió
 
 
-def test_comanda_grups_groups_pending(monkeypatch):
+def test_prov_efectiu_override_and_fallback():
+    equip_prov = {'canon_pro_4000': {'nom': 'Delex', 'email': 'delex@x.com'}}
+    # Override per consumible → mana.
+    assert app._consum_prov_efectiu(
+        {'equip': 'canon_pro_4000', 'proveidor_nom': 'Norilab', 'proveidor_email': 'n@x.com'},
+        equip_prov) == ('Norilab', 'n@x.com')
+    # Sense override → proveïdor de l'equip.
+    assert app._consum_prov_efectiu(
+        {'equip': 'canon_pro_4000', 'proveidor_nom': '', 'proveidor_email': ''},
+        equip_prov) == ('Delex', 'delex@x.com')
+
+
+def test_comanda_grups_by_supplier(monkeypatch):
     items = [
-        {'equip': 'noritsu_green_iv', 'nom': 'Cian', 'referencia': '', 'quantitat': 1, 'pendent': True,  'notes': '', 'actiu': True, 'ordre': 1},
-        {'equip': 'noritsu_green_iv', 'nom': 'Negre', 'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 2},
-        {'equip': 'canon_pro_4000',   'nom': 'Tinta', 'referencia': '', 'quantitat': 3, 'pendent': True,  'notes': '', 'actiu': True, 'ordre': 3},
+        {'equip': 'noritsu_green_iv', 'nom': 'Cian', 'referencia': '', 'quantitat': 1, 'pendent': True,  'proveidor_nom': '', 'proveidor_email': '', 'notes': '', 'actiu': True, 'ordre': 1},
+        {'equip': 'noritsu_green_iv', 'nom': 'Negre', 'referencia': '', 'quantitat': 1, 'pendent': False, 'proveidor_nom': '', 'proveidor_email': '', 'notes': '', 'actiu': True, 'ordre': 2},
+        {'equip': 'canon_pro_4000',   'nom': 'Tinta Delex',   'referencia': 'PFI1300C', 'quantitat': 1, 'pendent': True, 'proveidor_nom': '', 'proveidor_email': '', 'notes': '', 'actiu': True, 'ordre': 3},
+        {'equip': 'canon_pro_4000',   'nom': 'Tinta Norilab', 'referencia': 'PFI1300C', 'quantitat': 1, 'pendent': True, 'proveidor_nom': 'Norilab', 'proveidor_email': 'norilab@x.com', 'notes': '', 'actiu': True, 'ordre': 4},
     ]
     monkeypatch.setattr(app, 'get_consumibles_list', lambda: items)
+    # Tots els equips comparteixen el mateix email de proveïdor 'lab@x.com'.
     monkeypatch.setattr(app, 'get_config_value',
-                        lambda clau, default=None: ('x@prov.com' if clau.endswith('_email')
-                                                    else 'ProvX' if clau.endswith('_nom') else default))
+                        lambda clau, default=None: ('lab@x.com' if clau.endswith('_email')
+                                                    else 'Lab' if clau.endswith('_nom') else default))
     grups = app._consumibles_comanda_grups()
-    # Només equips amb pendents, en l'ordre d'EQUIPS_CONSUMIBLES (canon abans que noritsu).
-    assert [g['equip_key'] for g in grups] == ['canon_pro_4000', 'noritsu_green_iv']
-    noritsu = next(g for g in grups if g['equip_key'] == 'noritsu_green_iv')
-    assert len(noritsu['items']) == 1  # només el pendent, no el 'Negre'
-    assert noritsu['proveidor_email'] == 'x@prov.com'
-    assert noritsu['proveidor_nom'] == 'ProvX'
+    emails = sorted(g['proveidor_email'] for g in grups)
+    # Els dos sense override (Noritsu Cian + Canon Delex) → mateix proveïdor d'equip → 1 grup.
+    # El de Norilab (override) → grup a part. El 'Negre' no és pendent.
+    assert emails == ['lab@x.com', 'norilab@x.com']
+    lab = next(g for g in grups if g['proveidor_email'] == 'lab@x.com')
+    assert len(lab['items']) == 2
+    nor = next(g for g in grups if g['proveidor_email'] == 'norilab@x.com')
+    assert len(nor['items']) == 1 and nor['proveidor_nom'] == 'Norilab'
 
 
 def test_comanda_grups_empty_when_none_pending(monkeypatch):
@@ -181,7 +197,7 @@ def test_delex_catalog_and_registry():
     assert all(c['equip'] == 'canon_pro_4000' for c in d if c['referencia'].startswith('PFI'))
     assert all(c['equip'] == 'epson_surelab_d1000' for c in d if c['referencia'].startswith('T46K'))
     # Registre de catàlegs.
-    assert set(app.CONSUM_CATALEGS) == {'norilab', 'delex'}
+    assert {'norilab', 'delex', 'norilab_canon'} <= set(app.CONSUM_CATALEGS)
     assert app.CONSUM_CATALEGS['delex']['proveidor']['email'] == 'info@delex.es'
     assert app.CONSUM_CATALEGS['delex']['equips'] == ['canon_pro_4000', 'epson_surelab_d1000']
 
@@ -189,3 +205,19 @@ def test_delex_catalog_and_registry():
 def test_defaults_include_both_catalogs():
     refs = {c.get('referencia') for c in app.CONSUMIBLES_DEFAULTS}
     assert {'H086162-00', 'PFI1300PBK', 'T46K140'} <= refs
+
+
+def test_normalize_includes_proveidor_override():
+    c = app._normalize_consumible({'nom': 'X', 'proveidor_nom': ' Norilab ', 'proveidor_email': ' n@x.com '})
+    assert c['proveidor_nom'] == 'Norilab'
+    assert c['proveidor_email'] == 'n@x.com'
+
+
+def test_norilab_canon_catalog():
+    cat = app.CONSUM_CATALEG_NORILAB_CANON
+    assert len(cat) == 12
+    assert all(c['preu'] == 144.0 and c['equip'] == 'canon_pro_4000' for c in cat)
+    assert all(c['proveidor']['email'] == 'administracion@norilabiberia.es' for c in cat)
+    # Registrat i sense fixar proveïdor d'equip (els ítems ja porten proveïdor propi).
+    assert 'norilab_canon' in app.CONSUM_CATALEGS
+    assert app.CONSUM_CATALEGS['norilab_canon']['equips'] == []

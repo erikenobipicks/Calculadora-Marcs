@@ -99,7 +99,12 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
         <input type="hidden" name="catalog" value="delex">
         <button type="submit" class="btn btn-outline">⬇ Catàleg Delex (Canon/Epson)</button>
       </form>
+      <form method="post" action="/admin/consumibles/carregar-plantilla" onsubmit="return confirm('Carregar les 12 tintes Canon PFI-1300 de Norilab (144 €) com a alternativa a Delex, per comparar preus?')" style="margin:0">
+        <input type="hidden" name="catalog" value="norilab_canon">
+        <button type="submit" class="btn btn-outline">⬇ Canon PFI-1300 a Norilab (144 €)</button>
+      </form>
     </div>
+    <div class="hint" style="margin-top:.5rem">Les tintes Canon de Norilab entren amb el seu propi proveïdor (Norilab), en paral·lel a les de Delex, perquè puguis comparar preu i triar a qui demanes cada consumible.</div>
   </div>
 
   <form method="post" action="/admin/consumibles">
@@ -133,6 +138,10 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
             <div><label>Quantitat</label><input type="number" name="c_qty[]" value="{{ c.quantitat }}" min="0" step="1"></div>
             <div><label>Preu €</label><input type="number" name="c_preu[]" value="{{ c.preu }}" min="0" step="0.01" placeholder="0,00"></div>
             <div><label>Notes</label><input type="text" name="c_notes[]" value="{{ c.notes }}" placeholder="Opcional"></div>
+          </div>
+          <div style="margin-top:.5rem;display:grid;grid-template-columns:1fr 1.3fr;gap:.6rem">
+            <div><label>Proveïdor propi (opcional)</label><input type="text" name="c_prov_nom[]" value="{{ c.proveidor_nom }}" placeholder="Buit = proveïdor de l'equip"></div>
+            <div><label>Email proveïdor propi</label><input type="email" name="c_prov_email[]" value="{{ c.proveidor_email }}" placeholder="Buit = email de l'equip"></div>
           </div>
           <div class="c-foot">
             <label class="check-row">
@@ -177,6 +186,10 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       <div><label>Quantitat</label><input type="number" name="c_qty[]" value="1" min="0" step="1"></div>
       <div><label>Preu €</label><input type="number" name="c_preu[]" min="0" step="0.01" placeholder="0,00"></div>
       <div><label>Notes</label><input type="text" name="c_notes[]" placeholder="Opcional"></div>
+    </div>
+    <div style="margin-top:.5rem;display:grid;grid-template-columns:1fr 1.3fr;gap:.6rem">
+      <div><label>Proveïdor propi (opcional)</label><input type="text" name="c_prov_nom[]" placeholder="Buit = proveïdor de l'equip"></div>
+      <div><label>Email proveïdor propi</label><input type="email" name="c_prov_email[]" placeholder="Buit = email de l'equip"></div>
     </div>
     <div class="c-foot">
       <label class="check-row">
