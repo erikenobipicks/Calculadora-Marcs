@@ -139,3 +139,34 @@ def test_consum_nou_id_unique_per_index():
     a = app._consum_nou_id(0)
     b = app._consum_nou_id(1)
     assert a != b and a.startswith('c')
+
+
+# ── Correu en castellà + catàleg Norilab ───────────────────────────────────
+def test_email_and_subject_in_spanish():
+    grup = {'equip_label': 'Noritsu Green IV', 'proveidor_nom': 'Norilab',
+            'items': [{'nom': 'Tinta cyan', 'referencia': 'H086163-00', 'quantitat': 2}]}
+    html = app._consumibles_email_html(grup)
+    assert 'Buenos días' in html
+    assert 'Cantidad' in html and 'Referencia' in html
+    assert 'Muchas gracias' in html
+    assert app._consumibles_email_subject(grup).startswith('Pedido de consumibles')
+
+
+def test_norilab_catalog_has_codes_and_prices():
+    cat = app.CONSUM_CATALEG_NORILAB
+    assert len(cat) == 9
+    refs = {c['referencia'] for c in cat}
+    assert {'H086162-00', 'H086163-00', 'H086164-00', 'H086165-00'} <= refs
+    assert all(c['preu'] > 0 and c['referencia'] and c['nom'] for c in cat)
+
+
+def test_defaults_include_norilab_catalog():
+    refs = {c.get('referencia') for c in app.CONSUMIBLES_DEFAULTS}
+    assert 'H086162-00' in refs and 'PAPRL1000128' in refs
+    for c in app.CONSUMIBLES_DEFAULTS:
+        assert app._normalize_consumible(c)['nom']  # tots normalitzables amb nom
+
+
+def test_norilab_proveidor_data():
+    assert app.CONSUM_PROVEIDOR_NORILAB['email'] == 'administracion@norilabiberia.es'
+    assert app.CONSUM_PROVEIDOR_NORILAB['nom']
