@@ -1106,13 +1106,30 @@ EQUIPS_CONSUMIBLES = [
 ]
 _EQUIPS_CONSUMIBLES_KEYS = {e['key'] for e in EQUIPS_CONSUMIBLES}
 
+# Proveïdor i catàleg de fàbrica extret de les factures de Norilab Iberia
+# (proveïdor del minilab Noritsu). Les tintes són Noritsu V.104; els papers, del
+# mateix proveïdor. Tot s'assigna a Noritsu Green IV perquè el proveïdor és únic;
+# les bobines amples (17"/24") es poden reassignar a la Canon amb el desplegable.
+CONSUM_PROVEIDOR_NORILAB = {'nom': 'Norilab Iberia', 'email': 'administracion@norilabiberia.es'}
+
+CONSUM_CATALEG_NORILAB = [
+    {'equip': 'noritsu_green_iv', 'referencia': 'H086162-00',   'nom': 'Tinta negra Noritsu V.104 500ML',    'preu': 215.0},
+    {'equip': 'noritsu_green_iv', 'referencia': 'H086163-00',   'nom': 'Tinta cyan Noritsu V.104 500ML',      'preu': 215.0},
+    {'equip': 'noritsu_green_iv', 'referencia': 'H086164-00',   'nom': 'Tinta magenta Noritsu V.104 500ML',   'preu': 215.0},
+    {'equip': 'noritsu_green_iv', 'referencia': 'H086165-00',   'nom': 'Tinta amarilla Noritsu V.104 500ML',  'preu': 215.0},
+    {'equip': 'noritsu_green_iv', 'referencia': 'PAPRL1000115', 'nom': 'Rollo papel MAX HQ Lustre 152mm 250GR (2 rollos x 65m)',  'preu': 60.21},
+    {'equip': 'noritsu_green_iv', 'referencia': 'PAPRL1000128', 'nom': 'Rollo papel MAX HQ Lustre 203mm 250GR (2 rollos x 101m)', 'preu': 124.99},
+    {'equip': 'noritsu_green_iv', 'referencia': 'PAPRL1000130', 'nom': 'Rollo papel MAX HQ Lustre 305mm 250GR (2 rollos x 101m)', 'preu': 187.45},
+    {'equip': 'noritsu_green_iv', 'referencia': 'PAPGF1BA0109', 'nom': 'Bobina papel MAX HQ Photo Lustre 275GR 24" (61cm x 30m)', 'preu': 66.94},
+    {'equip': 'noritsu_green_iv', 'referencia': 'PAPGF1BA0103', 'nom': 'Bobina papel MAX HQ Silk Mil Puntos 17" (43,2cm x 30m)',  'preu': 49.99},
+]
+
 CONSUMIBLES_DEFAULTS = [
-    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx cian',    'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 1},
-    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx negre',   'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 2},
-    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx magenta', 'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 3},
-    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx groc',    'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 4},
-    {'equip': 'canon_pro_4000',      'nom': 'Tinta',           'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix el color/codi', 'actiu': True, 'ordre': 5},
-    {'equip': 'epson_surelab_d1000', 'nom': 'Tinta',           'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix el color/codi', 'actiu': True, 'ordre': 6},
+    dict(c, quantitat=1, pendent=False, notes='', actiu=True, ordre=i + 1)
+    for i, c in enumerate(CONSUM_CATALEG_NORILAB)
+] + [
+    {'equip': 'canon_pro_4000',      'nom': 'Tinta Canon Pro 4000',      'referencia': '', 'preu': 0, 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix color/codi', 'actiu': True, 'ordre': 90},
+    {'equip': 'epson_surelab_d1000', 'nom': 'Tinta Epson SureLab D1000', 'referencia': '', 'preu': 0, 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix color/codi', 'actiu': True, 'ordre': 91},
 ]
 
 
@@ -1250,11 +1267,13 @@ def _consumibles_comanda_grups():
 
 
 def _consumibles_email_subject(grup):
-    return f"Comanda de consumibles · {grup['equip_label']}"
+    # Els proveïdors són castellanoparlants: assumpte i cos en castellà.
+    return f"Pedido de consumibles · {grup['equip_label']}"
 
 
 def _consumibles_email_html(grup):
-    """Cos HTML del correu de comanda per a un equip/proveïdor."""
+    """Cos HTML del correu de comanda per a un equip/proveïdor. En castellà,
+    perquè els proveïdors són castellanoparlants."""
     files = ''.join(
         "<tr>"
         f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['nom'])}</td>"
@@ -1263,17 +1282,17 @@ def _consumibles_email_html(grup):
         "</tr>"
         for c in grup['items']
     )
-    salutacio = ('Bon dia ' + _consum_esc(grup['proveidor_nom']) + ',') if grup['proveidor_nom'] else 'Bon dia,'
+    salutacio = ('Buenos días ' + _consum_esc(grup['proveidor_nom']) + ',') if grup['proveidor_nom'] else 'Buenos días,'
     return (
         f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222'>"
         f"<p>{salutacio}</p>"
-        f"<p>Voldríem fer la següent comanda de consumibles per a <strong>{_consum_esc(grup['equip_label'])}</strong>:</p>"
+        f"<p>Nos gustaría realizar el siguiente pedido de consumibles para <strong>{_consum_esc(grup['equip_label'])}</strong>:</p>"
         f"<table style='border-collapse:collapse;font-size:14px;margin:8px 0'>"
         f"<tr><th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Consumible</th>"
-        f"<th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Referència</th>"
-        f"<th style='text-align:right;padding:5px 10px;border-bottom:2px solid #333'>Quantitat</th></tr>"
+        f"<th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Referencia</th>"
+        f"<th style='text-align:right;padding:5px 10px;border-bottom:2px solid #333'>Cantidad</th></tr>"
         f"{files}</table>"
-        f"<p>Moltes gràcies!</p>"
+        f"<p>¡Muchas gracias!</p>"
         f"</div>"
     )
 
@@ -9251,6 +9270,45 @@ def admin_consumibles_enviar():
               + '. Configura\'l a Consumibles.', 'error')
     if fallits:
         flash('No s\'ha pogut enviar a: ' + ', '.join(fallits) + '.', 'error')
+    return redirect(url_for('admin_consumibles'))
+
+
+@app.route('/admin/consumibles/carregar-plantilla', methods=['POST'])
+@admin_required
+def admin_consumibles_carregar_plantilla():
+    """Carrega el catàleg de fàbrica de Norilab (tintes Noritsu + papers) i fixa
+    Norilab com a proveïdor del Noritsu. És additiu i idempotent: només afegeix
+    els consumibles el codi (referència) dels quals no hi és; no toca ni esborra
+    res del que ja tens."""
+    avui = _consum_avui()
+    items = get_consumibles_list()
+    refs_existents = {(c.get('referencia') or '').strip().lower()
+                      for c in items if (c.get('referencia') or '').strip()}
+    afegits = 0
+    for cat in CONSUM_CATALEG_NORILAB:
+        if cat['referencia'].strip().lower() in refs_existents:
+            continue
+        item = _normalize_consumible({
+            'id': _consum_nou_id(afegits),
+            'equip': cat['equip'], 'nom': cat['nom'], 'referencia': cat['referencia'],
+            'quantitat': 1, 'preu': cat['preu'], 'pendent': False, 'notes': '',
+            'actiu': True, 'ordre': len(items) + afegits + 1,
+        })
+        _apply_preu_historial(item, None, avui)
+        items.append(item)
+        afegits += 1
+    if afegits:
+        save_consumibles_list(items)
+    # Proveïdor del Noritsu = Norilab (només si encara no està omplert).
+    prov = get_consum_proveidor('noritsu_green_iv')
+    if not prov['nom']:
+        execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consum_prov_noritsu_green_iv_nom', ?)",
+                [CONSUM_PROVEIDOR_NORILAB['nom']])
+    if not prov['email']:
+        execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consum_prov_noritsu_green_iv_email', ?)",
+                [CONSUM_PROVEIDOR_NORILAB['email']])
+    flash(f"Catàleg Norilab carregat: {afegits} consumible(s) afegit(s)." if afegits
+          else "El catàleg Norilab ja hi era (res a afegir).", 'ok')
     return redirect(url_for('admin_consumibles'))
 
 
