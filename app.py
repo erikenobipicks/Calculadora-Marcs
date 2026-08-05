@@ -934,6 +934,26 @@ def _bridge_token_ok(provided):
     return any(hmac.compare_digest(provided, t) for t in _bridge_tokens_valids())
 
 
+def _pvp_tokens_valids():
+    """Tokens dedicats per als endpoints públics de PVP (/api/public/pvp/*),
+    independents del bridge perquè es puguin revocar a part. Suporten rotació
+    sense downtime amb PUBLIC_PVP_TOKEN_NEXT, igual que el bridge."""
+    toks = [
+        os.environ.get('PUBLIC_PVP_TOKEN', '').strip(),
+        os.environ.get('PUBLIC_PVP_TOKEN_NEXT', '').strip(),
+    ]
+    return [t for t in toks if t]
+
+
+def _pvp_token_ok(provided):
+    """Compara el token PVP rebut (capçalera X-Pvp-Token) en temps constant.
+    Fail-closed: buit o sense token configurat → False."""
+    provided = (provided or '').strip()
+    if not provided:
+        return False
+    return any(hmac.compare_digest(provided, t) for t in _pvp_tokens_valids())
+
+
 def _bridge_ip_allowed():
     """Allowlist d'IPs opcional per als endpoints /api/public/*. Si
     BRIDGE_ALLOWED_IPS no està definida (cas per defecte), no restringeix res
@@ -1071,6 +1091,150 @@ def save_extras_list(extras):
     """Persist extras as JSON in the config table."""
     payload = json.dumps([_normalize_extra(e) for e in extras], ensure_ascii=False)
     execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('extras_json', ?)", [payload])
+
+
+# ── Consumibles (registre + comanda per equip) ─────────────────────────────
+# Secció només admin per registrar consumibles (tintes, cartutxos, paper...),
+# marcar-los com a pendents de demanar i enviar la comanda per email al
+# proveïdor de cada equip. La llista es desa com a JSON a config (com els
+# extras); el proveïdor + email són per equip (claus de config).
+EQUIPS_CONSUMIBLES = [
+    {'key': 'canon_pro_4000',      'label': 'Canon Pro 4000'},
+    {'key': 'noritsu_green_iv',    'label': 'Noritsu Green IV'},
+    {'key': 'epson_surelab_d1000', 'label': 'Epson SureLab D1000'},
+    {'key': 'altres',              'label': 'Altres'},
+]
+_EQUIPS_CONSUMIBLES_KEYS = {e['key'] for e in EQUIPS_CONSUMIBLES}
+
+CONSUMIBLES_DEFAULTS = [
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx cian',    'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 1},
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx negre',   'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 2},
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx magenta', 'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 3},
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx groc',    'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 4},
+    {'equip': 'canon_pro_4000',      'nom': 'Tinta',           'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix el color/codi', 'actiu': True, 'ordre': 5},
+    {'equip': 'epson_surelab_d1000', 'nom': 'Tinta',           'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix el color/codi', 'actiu': True, 'ordre': 6},
+]
+
+
+def _normalize_consumible(c):
+    c = c or {}
+    equip = str(c.get('equip') or 'altres').strip()
+    if equip not in _EQUIPS_CONSUMIBLES_KEYS:
+        equip = 'altres'
+    try:
+        qty = float(c.get('quantitat') or 0)
+    except (TypeError, ValueError):
+        qty = 0
+    try:
+        ordre = int(c.get('ordre') or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    return {
+        'equip': equip,
+        'nom': str(c.get('nom') or '').strip(),
+        'referencia': str(c.get('referencia') or '').strip(),
+        'quantitat': qty,
+        'pendent': bool(c.get('pendent')),
+        'notes': str(c.get('notes') or '').strip(),
+        'actiu': bool(c.get('actiu', True)),
+        'ordre': ordre,
+    }
+
+
+def get_consumibles_list():
+    """Llista de consumibles (JSON a config), seedejant defaults el primer cop."""
+    raw = get_config_value('consumibles_json')
+    if not raw:
+        save_consumibles_list(CONSUMIBLES_DEFAULTS)
+        return [_normalize_consumible(c) for c in CONSUMIBLES_DEFAULTS]
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return [_normalize_consumible(c) for c in CONSUMIBLES_DEFAULTS]
+        return [_normalize_consumible(c) for c in data]
+    except Exception:
+        return [_normalize_consumible(c) for c in CONSUMIBLES_DEFAULTS]
+
+
+def save_consumibles_list(items):
+    payload = json.dumps([_normalize_consumible(c) for c in items], ensure_ascii=False)
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consumibles_json', ?)", [payload])
+
+
+def get_consum_proveidor(equip_key):
+    """Proveïdor (nom + email) d'un equip, des de config."""
+    return {
+        'nom': (get_config_value(f'consum_prov_{equip_key}_nom', '') or '').strip(),
+        'email': (get_config_value(f'consum_prov_{equip_key}_email', '') or '').strip(),
+    }
+
+
+def _consum_equip_label(key):
+    for e in EQUIPS_CONSUMIBLES:
+        if e['key'] == key:
+            return e['label']
+    return key
+
+
+def _consum_esc(s):
+    return str(s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def _consum_qty(q):
+    try:
+        q = float(q)
+    except (TypeError, ValueError):
+        return '0'
+    return str(int(q)) if q == int(q) else ('%.2f' % q)
+
+
+def _consumibles_comanda_grups():
+    """Agrupa els consumibles PENDENTS i actius per equip amb el seu proveïdor.
+    Retorna [{equip_key, equip_label, proveidor_nom, proveidor_email, items}]."""
+    pendents = [c for c in get_consumibles_list() if c.get('pendent') and c.get('actiu', True)]
+    grups = []
+    for e in EQUIPS_CONSUMIBLES:
+        eits = [c for c in pendents if c['equip'] == e['key']]
+        if not eits:
+            continue
+        prov = get_consum_proveidor(e['key'])
+        grups.append({
+            'equip_key': e['key'],
+            'equip_label': e['label'],
+            'proveidor_nom': prov['nom'],
+            'proveidor_email': prov['email'],
+            'items': eits,
+        })
+    return grups
+
+
+def _consumibles_email_subject(grup):
+    return f"Comanda de consumibles · {grup['equip_label']}"
+
+
+def _consumibles_email_html(grup):
+    """Cos HTML del correu de comanda per a un equip/proveïdor."""
+    files = ''.join(
+        "<tr>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['nom'])}</td>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['referencia']) or '—'}</td>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee;text-align:right'>{_consum_qty(c['quantitat'])}</td>"
+        "</tr>"
+        for c in grup['items']
+    )
+    salutacio = ('Bon dia ' + _consum_esc(grup['proveidor_nom']) + ',') if grup['proveidor_nom'] else 'Bon dia,'
+    return (
+        f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222'>"
+        f"<p>{salutacio}</p>"
+        f"<p>Voldríem fer la següent comanda de consumibles per a <strong>{_consum_esc(grup['equip_label'])}</strong>:</p>"
+        f"<table style='border-collapse:collapse;font-size:14px;margin:8px 0'>"
+        f"<tr><th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Consumible</th>"
+        f"<th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Referència</th>"
+        f"<th style='text-align:right;padding:5px 10px;border-bottom:2px solid #333'>Quantitat</th></tr>"
+        f"{files}</table>"
+        f"<p>Moltes gràcies!</p>"
+        f"</div>"
+    )
 
 
 def calcular_pvd(preu_cost, categoria):
@@ -3353,6 +3517,111 @@ def public_pro_clients_get(client_id):
     return jsonify({'ok': True, 'client': _pro_clients_row_to_dict(row)})
 
 
+# ── Motor de preu públic compartit (PVD base → PVP) ────────────────────────
+# Codis d'error del càlcul base i el seu status HTTP.
+_PUBLIC_PRICE_ERR_STATUS = {
+    'unknown_kind': 400,
+    'invalid_size': 400,
+    'missing_moldura_id': 400,
+    'impressio_not_found': 404,
+    'laminate_not_found': 404,
+    'moldura_not_found': 404,
+    'compute_failed': 500,
+}
+
+
+def _public_base_price_unit(kind, w, h, paper='', finish='none', moldura_id=''):
+    """Preu base PVD per unitat (sense marge de client ni IVA) per a un producte.
+    Font única de veritat compartida per /api/public/compute i pels endpoints
+    PVP. Retorna (base_price, breakdown, error) on error és None o un dels codis
+    de _PUBLIC_PRICE_ERR_STATUS."""
+    if kind not in ('impressio', 'laminate', 'protter', 'frame'):
+        return (0.0, {}, 'unknown_kind')
+    breakdown = {}
+    base_price = 0.0
+
+    if kind == 'impressio':
+        # Impressió: usa la taula amb min-contain (no té preu_cost, ja porta marge)
+        imp = _imp_closest(w, h)
+        if not imp:
+            return (0.0, {}, 'impressio_not_found')
+        base_price = float(imp.get('preu', 0))
+        breakdown['impressio'] = base_price
+        if finish == 'laminate':
+            lam = _laminate_only_closest(w, h)
+            if lam:
+                breakdown['finish'] = float(lam.get('preu', 0))
+                base_price += breakdown['finish']
+        elif finish == 'protter':
+            prot = calcular_cost_laminat(w, h, tipus='semibrillo')
+            breakdown['finish'] = prot['pvd']
+            base_price += prot['pvd']
+        elif finish == 'foam':
+            foam = calcular_cost_foam(w, h)
+            breakdown['finish'] = foam['pvd']
+            base_price += foam['pvd']
+
+    elif kind == 'laminate':
+        lam = _laminate_only_closest(w, h)
+        if not lam:
+            return (0.0, {}, 'laminate_not_found')
+        base_price = float(lam.get('preu', 0))
+        breakdown['laminate'] = base_price
+
+    elif kind == 'protter':
+        r = calcular_cost_laminat(w, h, tipus='semibrillo')
+        base_price = r['pvd']
+        breakdown['protter'] = r['pvd']
+        breakdown['origen'] = r['origen']
+
+    elif kind == 'frame':
+        if not moldura_id:
+            return (0.0, {}, 'missing_moldura_id')
+        m = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_id], one=True)
+        if not m:
+            return (0.0, {}, 'moldura_not_found')
+        pc = _row_get(m, 'preu_cost')
+        gruix = float(_row_get(m, 'gruix') or 0)
+        merma = float(_row_get(m, 'merma_pct') or 10.0)
+        minim = float(_row_get(m, 'minim_cm') or 100.0)
+        if pc is not None:
+            marc = calcular_preu_marc(w, h, gruix, float(pc), merma_pct=merma, minim_cm=minim)
+            if not marc:
+                return (0.0, {}, 'compute_failed')
+            base_price = marc['pvd']
+            breakdown['moldura'] = marc['pvd']
+            breakdown['cost'] = marc['cost']
+        else:
+            # Fallback a preu_taller com €/cm lineal
+            preu_cm = float(_row_get(m, 'preu_taller') or 0)
+            perimetre = 2 * (w + h)
+            longitud = (perimetre + gruix * 8) * (1 + merma / 100)
+            longitud = max(longitud, minim)
+            base_price = round(longitud * preu_cm / 100, 4)
+            breakdown['moldura'] = base_price
+
+    return (base_price, breakdown, None)
+
+
+def _marge_public_pct():
+    """Marge retail (%) per al preu públic (PVP) de la web pública. Fase 1: el
+    marge per defecte global (marge_defecte). Es podria fer per categoria més
+    endavant sense canviar el contracte de l'API."""
+    try:
+        return float(get_config_value('marge_defecte', '60'))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def _pvp_from_pvd(base_price, marge_pct, vat_rate=0.21):
+    """Converteix un preu base PVD en el PVP al client final: aplica el marge
+    retail i l'IVA. base_price ja ha d'incloure la quantitat. Retorna
+    {pvp_net, iva, pvp_total} arrodonit a 2 decimals."""
+    net = round(float(base_price) * (1 + float(marge_pct) / 100.0), 2)
+    iva = round(net * float(vat_rate), 2)
+    return {'pvp_net': net, 'iva': iva, 'pvp_total': round(net + iva, 2)}
+
+
 @app.route('/api/public/compute', methods=['GET'])
 def public_compute():
     """Calcula un preu base (sense marge del client, sense IVA) per un producte concret.
@@ -3395,69 +3664,9 @@ def public_compute():
     finish = (request.args.get('finish') or 'none').strip().lower()
     moldura_id = (request.args.get('moldura_id') or '').strip()
 
-    breakdown = {}
-    base_price = 0.0
-
-    if kind == 'impressio':
-        # Impressió: usa la taula amb min-contain (no té preu_cost, ja porta marge)
-        imp = _imp_closest(w, h)
-        if not imp:
-            return jsonify({'ok': False, 'error': 'impressio_not_found'}), 404
-        base_price = float(imp.get('preu', 0))
-        breakdown['impressio'] = base_price
-        # Acabats opcionals
-        if finish == 'laminate':
-            lam = _laminate_only_closest(w, h)
-            if lam:
-                breakdown['finish'] = float(lam.get('preu', 0))
-                base_price += breakdown['finish']
-        elif finish == 'protter':
-            prot = calcular_cost_laminat(w, h, tipus='semibrillo')
-            breakdown['finish'] = prot['pvd']
-            base_price += prot['pvd']
-        elif finish == 'foam':
-            foam = calcular_cost_foam(w, h)
-            breakdown['finish'] = foam['pvd']
-            base_price += foam['pvd']
-
-    elif kind == 'laminate':
-        lam = _laminate_only_closest(w, h)
-        if not lam:
-            return jsonify({'ok': False, 'error': 'laminate_not_found'}), 404
-        base_price = float(lam.get('preu', 0))
-        breakdown['laminate'] = base_price
-
-    elif kind == 'protter':
-        r = calcular_cost_laminat(w, h, tipus='semibrillo')
-        base_price = r['pvd']
-        breakdown['protter'] = r['pvd']
-        breakdown['origen'] = r['origen']
-
-    elif kind == 'frame':
-        if not moldura_id:
-            return jsonify({'ok': False, 'error': 'missing_moldura_id'}), 400
-        m = query('SELECT preu_taller, preu_cost, gruix, merma_pct, minim_cm FROM moldures WHERE LOWER(referencia)=LOWER(?)', [moldura_id], one=True)
-        if not m:
-            return jsonify({'ok': False, 'error': 'moldura_not_found'}), 404
-        pc = _row_get(m, 'preu_cost')
-        gruix = float(_row_get(m, 'gruix') or 0)
-        merma = float(_row_get(m, 'merma_pct') or 10.0)
-        minim = float(_row_get(m, 'minim_cm') or 100.0)
-        if pc is not None:
-            marc = calcular_preu_marc(w, h, gruix, float(pc), merma_pct=merma, minim_cm=minim)
-            if not marc:
-                return jsonify({'ok': False, 'error': 'compute_failed'}), 500
-            base_price = marc['pvd']
-            breakdown['moldura'] = marc['pvd']
-            breakdown['cost'] = marc['cost']
-        else:
-            # Fallback a preu_taller com €/cm lineal
-            preu_cm = float(_row_get(m, 'preu_taller') or 0)
-            perimetre = 2 * (w + h)
-            longitud = (perimetre + gruix * 8) * (1 + merma / 100)
-            longitud = max(longitud, minim)
-            base_price = round(longitud * preu_cm / 100, 4)
-            breakdown['moldura'] = base_price
+    base_price, breakdown, err = _public_base_price_unit(kind, w, h, paper, finish, moldura_id)
+    if err:
+        return jsonify({'ok': False, 'error': err}), _PUBLIC_PRICE_ERR_STATUS.get(err, 400)
 
     # Apply quantity
     total = round(base_price * qty, 4)
@@ -3471,6 +3680,64 @@ def public_compute():
         'base_price': total,
         'vat_rate': 0.21,
         'breakdown': breakdown,
+    })
+
+
+@app.route('/api/public/pvp/compute', methods=['GET'])
+def public_pvp_compute():
+    """Preu PVP (preu al client final) per a un producte concret: aplica el
+    marge retail per defecte sobre el PVD i hi suma l'IVA. Pensat per a la web
+    pública, que NO ha de conèixer costos ni marges.
+
+    Auth: capçalera X-Pvp-Token (token dedicat, independent del bridge).
+
+    Query params: idèntics a /api/public/compute
+      kind='impressio'|'laminate'|'protter'|'frame', width_cm, height_cm,
+      paper, finish, moldura_id, qty.
+
+    Resposta: {ok, kind, width_cm, height_cm, qty, marge_pct, pvp_net, iva,
+               vat_rate, pvp_total}. MAI retorna cost ni PVD.
+    """
+    if not _pvp_token_ok(request.headers.get('X-Pvp-Token', '')) or not _bridge_ip_allowed():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+
+    kind = (request.args.get('kind') or '').strip().lower()
+
+    try:
+        w = float(request.args.get('width_cm', 0))
+        h = float(request.args.get('height_cm', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid_size'}), 400
+    if w <= 0 or h <= 0:
+        return jsonify({'ok': False, 'error': 'invalid_size'}), 400
+
+    try:
+        qty = max(1, int(request.args.get('qty', 1)))
+    except (TypeError, ValueError):
+        qty = 1
+
+    paper = (request.args.get('paper') or '').strip().lower()
+    finish = (request.args.get('finish') or 'none').strip().lower()
+    moldura_id = (request.args.get('moldura_id') or '').strip()
+
+    base_unit, _breakdown, err = _public_base_price_unit(kind, w, h, paper, finish, moldura_id)
+    if err:
+        return jsonify({'ok': False, 'error': err}), _PUBLIC_PRICE_ERR_STATUS.get(err, 400)
+
+    base_total = round(base_unit * qty, 4)
+    marge = _marge_public_pct()
+    p = _pvp_from_pvd(base_total, marge)
+    return jsonify({
+        'ok': True,
+        'kind': kind,
+        'width_cm': w,
+        'height_cm': h,
+        'qty': qty,
+        'marge_pct': marge,
+        'vat_rate': 0.21,
+        'pvp_net': p['pvp_net'],
+        'iva': p['iva'],
+        'pvp_total': p['pvp_total'],
     })
 
 
@@ -8830,6 +9097,111 @@ def admin_extras():
         return redirect(url_for('admin_extras'))
 
     return render_template('admin_extras.html', extras=get_extras_list())
+
+
+@app.route('/admin/consumibles', methods=['GET', 'POST'])
+@admin_required
+def admin_consumibles():
+    if request.method == 'POST':
+        # Proveïdor + email per equip (config).
+        for e in EQUIPS_CONSUMIBLES:
+            k = e['key']
+            for camp in ('nom', 'email'):
+                val = request.form.get(f'prov_{k}_{camp}')
+                if val is not None:
+                    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                            [f'consum_prov_{k}_{camp}', val.strip()])
+        # Ítems: arrays paral·lels alineats per ordre del DOM. c_pendent[] és un
+        # hidden 0/1 per fila (sempre present) perquè s'alineï amb la resta.
+        equips = request.form.getlist('c_equip[]')
+        noms   = request.form.getlist('c_nom[]')
+        refs   = request.form.getlist('c_ref[]')
+        qtys   = request.form.getlist('c_qty[]')
+        notes  = request.form.getlist('c_notes[]')
+        pends  = request.form.getlist('c_pendent[]')
+        items = []
+        for i, nom in enumerate(noms):
+            nom = (nom or '').strip()
+            if not nom:
+                continue
+            items.append({
+                'equip': equips[i] if i < len(equips) else 'altres',
+                'nom': nom,
+                'referencia': refs[i] if i < len(refs) else '',
+                'quantitat': qtys[i] if i < len(qtys) else 0,
+                'pendent': (i < len(pends) and str(pends[i]).strip() in ('1', 'true', 'on')),
+                'notes': notes[i] if i < len(notes) else '',
+                'actiu': True,
+                'ordre': i + 1,
+            })
+        save_consumibles_list(items)
+        flash('Consumibles desats.', 'ok')
+        return redirect(url_for('admin_consumibles'))
+
+    items = sorted(get_consumibles_list(), key=lambda c: (
+        [e['key'] for e in EQUIPS_CONSUMIBLES].index(c['equip']) if c['equip'] in _EQUIPS_CONSUMIBLES_KEYS else 99,
+        c.get('ordre', 0),
+    ))
+    proveidors = {e['key']: get_consum_proveidor(e['key']) for e in EQUIPS_CONSUMIBLES}
+    n_pendents = sum(1 for c in items if c.get('pendent'))
+    return render_template('admin_consumibles.html',
+                           equips=EQUIPS_CONSUMIBLES,
+                           consumibles=items,
+                           proveidors=proveidors,
+                           n_pendents=n_pendents,
+                           email_ok=_email_is_configured())
+
+
+@app.route('/admin/consumibles/comanda')
+@admin_required
+def admin_consumibles_comanda():
+    grups = _consumibles_comanda_grups()
+    for g in grups:
+        g['subject'] = _consumibles_email_subject(g)
+        g['html'] = _consumibles_email_html(g)
+    return render_template('admin_consumibles_comanda.html',
+                           grups=grups,
+                           email_ok=_email_is_configured())
+
+
+@app.route('/admin/consumibles/enviar', methods=['POST'])
+@admin_required
+def admin_consumibles_enviar():
+    equip_key = (request.form.get('equip') or '').strip()  # buit = tots els equips
+    grups = _consumibles_comanda_grups()
+    if equip_key:
+        grups = [g for g in grups if g['equip_key'] == equip_key]
+    if not grups:
+        flash('No hi ha consumibles pendents per enviar.', 'error')
+        return redirect(url_for('admin_consumibles_comanda'))
+    enviats, sense_email, fallits = [], [], []
+    for g in grups:
+        if not g['proveidor_email']:
+            sense_email.append(g['equip_label'])
+            continue
+        ok = _send_user_email_html(
+            g['proveidor_email'],
+            _consumibles_email_subject(g),
+            _consumibles_email_html(g),
+            log_tag='consum_comanda',
+        )
+        (enviats if ok else fallits).append(g['equip_key'] if ok else g['equip_label'])
+    # Els equips enviats correctament: marquem els seus consumibles com a NO
+    # pendents (ja demanats).
+    if enviats:
+        items = get_consumibles_list()
+        for c in items:
+            if c['equip'] in enviats and c.get('pendent'):
+                c['pendent'] = False
+        save_consumibles_list(items)
+        flash(f"Comanda enviada a {len(enviats)} equip(s) i marcats com a demanats.", 'ok')
+    if sense_email:
+        flash('Sense email de proveïdor (no enviat): ' + ', '.join(sense_email)
+              + '. Configura\'l a Consumibles.', 'error')
+    if fallits:
+        flash('No s\'ha pogut enviar a: ' + ', '.join(fallits) + '.', 'error')
+    return redirect(url_for('admin_consumibles'))
+
 
 # ── Factura Directa ───────────────────────────────────────────────────────
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
