@@ -1270,6 +1270,58 @@ def save_consumibles_list(items):
     execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consumibles_json', ?)", [payload])
 
 
+def _consum_ara():
+    """Data i hora actuals (YYYY-MM-DD HH:MM) per a l'historial de comandes."""
+    return datetime.now().strftime('%Y-%m-%d %H:%M')
+
+
+def get_consumibles_comandes():
+    """Historial de comandes de consumibles enviades (JSON a config), més
+    recents primer."""
+    raw = get_config_value('consumibles_comandes_json')
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _consumibles_comandes_add(records):
+    """Afegeix comandes a l'historial (les més noves primer), amb un topall."""
+    if not records:
+        return
+    hist = list(records) + get_consumibles_comandes()
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consumibles_comandes_json', ?)",
+            [json.dumps(hist[:200], ensure_ascii=False)])
+
+
+def _consumibles_reorder_apply(items, linies):
+    """Torna a marcar com a pendents els consumibles d'una comanda de l'historial.
+    Empara per id; si el consumible ja no hi és, per referència+equip. Restaura
+    també la quantitat demanada. Retorna (marcats, no_trobats)."""
+    by_id = {c['id']: c for c in items if c.get('id')}
+    by_refeq = {}
+    for c in items:
+        r = (c.get('referencia') or '').strip().lower()
+        if r:
+            by_refeq[(r, c.get('equip'))] = c
+    marcats, no_trobats = 0, 0
+    for l in (linies or []):
+        target = by_id.get(l.get('consumible_id'))
+        if not target:
+            target = by_refeq.get(((l.get('referencia') or '').strip().lower(), l.get('equip')))
+        if not target:
+            no_trobats += 1
+            continue
+        target['pendent'] = True
+        if l.get('quantitat'):
+            target['quantitat'] = l['quantitat']
+        marcats += 1
+    return marcats, no_trobats
+
+
 def get_consum_proveidor(equip_key):
     """Proveïdor (nom + email) d'un equip, des de config."""
     return {
@@ -9319,9 +9371,10 @@ def admin_consumibles_enviar():
     if not grups:
         flash('No hi ha consumibles pendents per enviar.', 'error')
         return redirect(url_for('admin_consumibles_comanda'))
-    enviats_ids, sense_email, fallits = set(), [], []
+    ara = _consum_ara()
+    enviats_ids, sense_email, fallits, registres = set(), [], [], []
     n_ok = 0
-    for g in grups:
+    for gi, g in enumerate(grups):
         etiqueta = g['proveidor_nom'] or g['proveidor_email'] or g.get('equips_label') or 'proveïdor'
         if not g['proveidor_email']:
             sense_email.append(etiqueta)
@@ -9335,8 +9388,19 @@ def admin_consumibles_enviar():
         if ok:
             n_ok += 1
             enviats_ids.update(c.get('id') for c in g['items'] if c.get('id'))
+            registres.append({
+                'id': _consum_nou_id(gi),
+                'data': ara,
+                'proveidor_nom': g['proveidor_nom'],
+                'proveidor_email': g['proveidor_email'],
+                'equips': g.get('_equips') or [],
+                'linies': [{'nom': c.get('nom', ''), 'referencia': c.get('referencia', ''),
+                            'quantitat': c.get('quantitat', 0), 'equip': c.get('equip', ''),
+                            'consumible_id': c.get('id', '')} for c in g['items']],
+            })
         else:
             fallits.append(etiqueta)
+    _consumibles_comandes_add(registres)
     # Consumibles enviats correctament (per id): marcats com a NO pendents.
     if enviats_ids:
         items = get_consumibles_list()
@@ -9410,6 +9474,34 @@ def admin_consumibles_carregar_plantilla():
                     [f'consum_prov_{eq}_email', cat['proveidor']['email']])
     flash(f"Catàleg {cat['nom']} carregat: {afegits} consumible(s) afegit(s)." if afegits
           else f"El catàleg {cat['nom']} ja hi era (res a afegir).", 'ok')
+    return redirect(url_for('admin_consumibles'))
+
+
+@app.route('/admin/consumibles/historial')
+@admin_required
+def admin_consumibles_historial():
+    return render_template('admin_consumibles_historial.html',
+                           comandes=get_consumibles_comandes())
+
+
+@app.route('/admin/consumibles/historial/tornar', methods=['POST'])
+@admin_required
+def admin_consumibles_historial_tornar():
+    """Torna a marcar com a pendents els consumibles d'una comanda de
+    l'historial, per repetir-la."""
+    cid = (request.form.get('comanda_id') or '').strip()
+    rec = next((c for c in get_consumibles_comandes() if c.get('id') == cid), None)
+    if not rec:
+        flash('Comanda no trobada a l\'historial.', 'error')
+        return redirect(url_for('admin_consumibles_historial'))
+    items = get_consumibles_list()
+    marcats, no_trobats = _consumibles_reorder_apply(items, rec.get('linies'))
+    if marcats:
+        save_consumibles_list(items)
+    msg = f"{marcats} consumible(s) tornats a marcar com a pendents."
+    if no_trobats:
+        msg += f" {no_trobats} ja no existeixen (omesos)."
+    flash(msg, 'ok' if marcats else 'error')
     return redirect(url_for('admin_consumibles'))
 
 

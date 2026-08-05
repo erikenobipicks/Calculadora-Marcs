@@ -221,3 +221,39 @@ def test_norilab_canon_catalog():
     # Registrat i sense fixar proveïdor d'equip (els ítems ja porten proveïdor propi).
     assert 'norilab_canon' in app.CONSUM_CATALEGS
     assert app.CONSUM_CATALEGS['norilab_canon']['equips'] == []
+
+
+# ── Historial de comandes + tornar a demanar ───────────────────────────────
+def test_get_comandes_history_parse(monkeypatch):
+    import json as _json
+    data = [{'id': 'c1', 'data': '2026-08-05 10:00', 'proveidor_nom': 'Norilab', 'linies': []}]
+    monkeypatch.setattr(app, 'get_config_value',
+                        lambda clau, default=None: (_json.dumps(data)
+                                                    if clau == 'consumibles_comandes_json' else default))
+    h = app.get_consumibles_comandes()
+    assert len(h) == 1 and h[0]['id'] == 'c1'
+
+
+def test_get_comandes_history_empty(monkeypatch):
+    monkeypatch.setattr(app, 'get_config_value', lambda clau, default=None: default)
+    assert app.get_consumibles_comandes() == []
+
+
+def test_reorder_apply_by_id_and_ref_fallback():
+    items = [
+        {'id': 'A', 'equip': 'noritsu_green_iv', 'referencia': 'H1', 'quantitat': 1, 'pendent': False},
+        {'id': 'B', 'equip': 'canon_pro_4000', 'referencia': 'PFI1300C', 'quantitat': 1, 'pendent': False},
+    ]
+    linies = [
+        {'consumible_id': 'A', 'referencia': 'H1', 'equip': 'noritsu_green_iv', 'quantitat': 3},        # per id
+        {'consumible_id': 'X', 'referencia': 'PFI1300C', 'equip': 'canon_pro_4000', 'quantitat': 2},    # id perdut → ref+equip
+        {'consumible_id': 'Y', 'referencia': 'NOEXIST', 'equip': 'canon_pro_4000', 'quantitat': 1},     # no existeix
+    ]
+    marcats, no_trobats = app._consumibles_reorder_apply(items, linies)
+    assert marcats == 2 and no_trobats == 1
+    assert items[0]['pendent'] is True and items[0]['quantitat'] == 3
+    assert items[1]['pendent'] is True and items[1]['quantitat'] == 2
+
+
+def test_reorder_apply_empty():
+    assert app._consumibles_reorder_apply([], None) == (0, 0)

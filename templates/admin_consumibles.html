@@ -85,7 +85,10 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
       {% endif %}
       {% if not email_ok %}<div class="hint" style="color:var(--red);margin-top:.4rem">⚠ No hi ha cap proveïdor d'email configurat (Resend/Gmail): no es podrà enviar la comanda fins que es configuri a /admin/config.</div>{% endif %}
     </div>
-    <a href="/admin/consumibles/comanda" class="btn btn-primary">📧 Preparar comanda{% if n_pendents %} ({{ n_pendents }}){% endif %}</a>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <a href="/admin/consumibles/historial" class="btn btn-outline">🗂️ Historial de comandes</a>
+      <a href="/admin/consumibles/comanda" class="btn btn-primary">📧 Preparar comanda{% if n_pendents %} ({{ n_pendents }}){% endif %}</a>
+    </div>
   </div>
 
   <div class="section">
