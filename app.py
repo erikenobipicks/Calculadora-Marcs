@@ -1093,6 +1093,150 @@ def save_extras_list(extras):
     execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('extras_json', ?)", [payload])
 
 
+# ── Consumibles (registre + comanda per equip) ─────────────────────────────
+# Secció només admin per registrar consumibles (tintes, cartutxos, paper...),
+# marcar-los com a pendents de demanar i enviar la comanda per email al
+# proveïdor de cada equip. La llista es desa com a JSON a config (com els
+# extras); el proveïdor + email són per equip (claus de config).
+EQUIPS_CONSUMIBLES = [
+    {'key': 'canon_pro_4000',      'label': 'Canon Pro 4000'},
+    {'key': 'noritsu_green_iv',    'label': 'Noritsu Green IV'},
+    {'key': 'epson_surelab_d1000', 'label': 'Epson SureLab D1000'},
+    {'key': 'altres',              'label': 'Altres'},
+]
+_EQUIPS_CONSUMIBLES_KEYS = {e['key'] for e in EQUIPS_CONSUMIBLES}
+
+CONSUMIBLES_DEFAULTS = [
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx cian',    'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 1},
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx negre',   'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 2},
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx magenta', 'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 3},
+    {'equip': 'noritsu_green_iv',    'nom': 'Cartutx groc',    'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': '', 'actiu': True, 'ordre': 4},
+    {'equip': 'canon_pro_4000',      'nom': 'Tinta',           'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix el color/codi', 'actiu': True, 'ordre': 5},
+    {'equip': 'epson_surelab_d1000', 'nom': 'Tinta',           'referencia': '', 'quantitat': 1, 'pendent': False, 'notes': 'Afegeix el color/codi', 'actiu': True, 'ordre': 6},
+]
+
+
+def _normalize_consumible(c):
+    c = c or {}
+    equip = str(c.get('equip') or 'altres').strip()
+    if equip not in _EQUIPS_CONSUMIBLES_KEYS:
+        equip = 'altres'
+    try:
+        qty = float(c.get('quantitat') or 0)
+    except (TypeError, ValueError):
+        qty = 0
+    try:
+        ordre = int(c.get('ordre') or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    return {
+        'equip': equip,
+        'nom': str(c.get('nom') or '').strip(),
+        'referencia': str(c.get('referencia') or '').strip(),
+        'quantitat': qty,
+        'pendent': bool(c.get('pendent')),
+        'notes': str(c.get('notes') or '').strip(),
+        'actiu': bool(c.get('actiu', True)),
+        'ordre': ordre,
+    }
+
+
+def get_consumibles_list():
+    """Llista de consumibles (JSON a config), seedejant defaults el primer cop."""
+    raw = get_config_value('consumibles_json')
+    if not raw:
+        save_consumibles_list(CONSUMIBLES_DEFAULTS)
+        return [_normalize_consumible(c) for c in CONSUMIBLES_DEFAULTS]
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return [_normalize_consumible(c) for c in CONSUMIBLES_DEFAULTS]
+        return [_normalize_consumible(c) for c in data]
+    except Exception:
+        return [_normalize_consumible(c) for c in CONSUMIBLES_DEFAULTS]
+
+
+def save_consumibles_list(items):
+    payload = json.dumps([_normalize_consumible(c) for c in items], ensure_ascii=False)
+    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES ('consumibles_json', ?)", [payload])
+
+
+def get_consum_proveidor(equip_key):
+    """Proveïdor (nom + email) d'un equip, des de config."""
+    return {
+        'nom': (get_config_value(f'consum_prov_{equip_key}_nom', '') or '').strip(),
+        'email': (get_config_value(f'consum_prov_{equip_key}_email', '') or '').strip(),
+    }
+
+
+def _consum_equip_label(key):
+    for e in EQUIPS_CONSUMIBLES:
+        if e['key'] == key:
+            return e['label']
+    return key
+
+
+def _consum_esc(s):
+    return str(s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def _consum_qty(q):
+    try:
+        q = float(q)
+    except (TypeError, ValueError):
+        return '0'
+    return str(int(q)) if q == int(q) else ('%.2f' % q)
+
+
+def _consumibles_comanda_grups():
+    """Agrupa els consumibles PENDENTS i actius per equip amb el seu proveïdor.
+    Retorna [{equip_key, equip_label, proveidor_nom, proveidor_email, items}]."""
+    pendents = [c for c in get_consumibles_list() if c.get('pendent') and c.get('actiu', True)]
+    grups = []
+    for e in EQUIPS_CONSUMIBLES:
+        eits = [c for c in pendents if c['equip'] == e['key']]
+        if not eits:
+            continue
+        prov = get_consum_proveidor(e['key'])
+        grups.append({
+            'equip_key': e['key'],
+            'equip_label': e['label'],
+            'proveidor_nom': prov['nom'],
+            'proveidor_email': prov['email'],
+            'items': eits,
+        })
+    return grups
+
+
+def _consumibles_email_subject(grup):
+    return f"Comanda de consumibles · {grup['equip_label']}"
+
+
+def _consumibles_email_html(grup):
+    """Cos HTML del correu de comanda per a un equip/proveïdor."""
+    files = ''.join(
+        "<tr>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['nom'])}</td>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['referencia']) or '—'}</td>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee;text-align:right'>{_consum_qty(c['quantitat'])}</td>"
+        "</tr>"
+        for c in grup['items']
+    )
+    salutacio = ('Bon dia ' + _consum_esc(grup['proveidor_nom']) + ',') if grup['proveidor_nom'] else 'Bon dia,'
+    return (
+        f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222'>"
+        f"<p>{salutacio}</p>"
+        f"<p>Voldríem fer la següent comanda de consumibles per a <strong>{_consum_esc(grup['equip_label'])}</strong>:</p>"
+        f"<table style='border-collapse:collapse;font-size:14px;margin:8px 0'>"
+        f"<tr><th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Consumible</th>"
+        f"<th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Referència</th>"
+        f"<th style='text-align:right;padding:5px 10px;border-bottom:2px solid #333'>Quantitat</th></tr>"
+        f"{files}</table>"
+        f"<p>Moltes gràcies!</p>"
+        f"</div>"
+    )
+
+
 def calcular_pvd(preu_cost, categoria):
     """cost × (1 + marge_admin_pct/100). categoria: 'moldures'|'vidres'|'passpartu'|'encolat'"""
     if preu_cost is None:
@@ -8953,6 +9097,111 @@ def admin_extras():
         return redirect(url_for('admin_extras'))
 
     return render_template('admin_extras.html', extras=get_extras_list())
+
+
+@app.route('/admin/consumibles', methods=['GET', 'POST'])
+@admin_required
+def admin_consumibles():
+    if request.method == 'POST':
+        # Proveïdor + email per equip (config).
+        for e in EQUIPS_CONSUMIBLES:
+            k = e['key']
+            for camp in ('nom', 'email'):
+                val = request.form.get(f'prov_{k}_{camp}')
+                if val is not None:
+                    execute("INSERT OR REPLACE INTO config (clau, valor) VALUES (?, ?)",
+                            [f'consum_prov_{k}_{camp}', val.strip()])
+        # Ítems: arrays paral·lels alineats per ordre del DOM. c_pendent[] és un
+        # hidden 0/1 per fila (sempre present) perquè s'alineï amb la resta.
+        equips = request.form.getlist('c_equip[]')
+        noms   = request.form.getlist('c_nom[]')
+        refs   = request.form.getlist('c_ref[]')
+        qtys   = request.form.getlist('c_qty[]')
+        notes  = request.form.getlist('c_notes[]')
+        pends  = request.form.getlist('c_pendent[]')
+        items = []
+        for i, nom in enumerate(noms):
+            nom = (nom or '').strip()
+            if not nom:
+                continue
+            items.append({
+                'equip': equips[i] if i < len(equips) else 'altres',
+                'nom': nom,
+                'referencia': refs[i] if i < len(refs) else '',
+                'quantitat': qtys[i] if i < len(qtys) else 0,
+                'pendent': (i < len(pends) and str(pends[i]).strip() in ('1', 'true', 'on')),
+                'notes': notes[i] if i < len(notes) else '',
+                'actiu': True,
+                'ordre': i + 1,
+            })
+        save_consumibles_list(items)
+        flash('Consumibles desats.', 'ok')
+        return redirect(url_for('admin_consumibles'))
+
+    items = sorted(get_consumibles_list(), key=lambda c: (
+        [e['key'] for e in EQUIPS_CONSUMIBLES].index(c['equip']) if c['equip'] in _EQUIPS_CONSUMIBLES_KEYS else 99,
+        c.get('ordre', 0),
+    ))
+    proveidors = {e['key']: get_consum_proveidor(e['key']) for e in EQUIPS_CONSUMIBLES}
+    n_pendents = sum(1 for c in items if c.get('pendent'))
+    return render_template('admin_consumibles.html',
+                           equips=EQUIPS_CONSUMIBLES,
+                           consumibles=items,
+                           proveidors=proveidors,
+                           n_pendents=n_pendents,
+                           email_ok=_email_is_configured())
+
+
+@app.route('/admin/consumibles/comanda')
+@admin_required
+def admin_consumibles_comanda():
+    grups = _consumibles_comanda_grups()
+    for g in grups:
+        g['subject'] = _consumibles_email_subject(g)
+        g['html'] = _consumibles_email_html(g)
+    return render_template('admin_consumibles_comanda.html',
+                           grups=grups,
+                           email_ok=_email_is_configured())
+
+
+@app.route('/admin/consumibles/enviar', methods=['POST'])
+@admin_required
+def admin_consumibles_enviar():
+    equip_key = (request.form.get('equip') or '').strip()  # buit = tots els equips
+    grups = _consumibles_comanda_grups()
+    if equip_key:
+        grups = [g for g in grups if g['equip_key'] == equip_key]
+    if not grups:
+        flash('No hi ha consumibles pendents per enviar.', 'error')
+        return redirect(url_for('admin_consumibles_comanda'))
+    enviats, sense_email, fallits = [], [], []
+    for g in grups:
+        if not g['proveidor_email']:
+            sense_email.append(g['equip_label'])
+            continue
+        ok = _send_user_email_html(
+            g['proveidor_email'],
+            _consumibles_email_subject(g),
+            _consumibles_email_html(g),
+            log_tag='consum_comanda',
+        )
+        (enviats if ok else fallits).append(g['equip_key'] if ok else g['equip_label'])
+    # Els equips enviats correctament: marquem els seus consumibles com a NO
+    # pendents (ja demanats).
+    if enviats:
+        items = get_consumibles_list()
+        for c in items:
+            if c['equip'] in enviats and c.get('pendent'):
+                c['pendent'] = False
+        save_consumibles_list(items)
+        flash(f"Comanda enviada a {len(enviats)} equip(s) i marcats com a demanats.", 'ok')
+    if sense_email:
+        flash('Sense email de proveïdor (no enviat): ' + ', '.join(sense_email)
+              + '. Configura\'l a Consumibles.', 'error')
+    if fallits:
+        flash('No s\'ha pogut enviar a: ' + ', '.join(fallits) + '.', 'error')
+    return redirect(url_for('admin_consumibles'))
+
 
 # ── Factura Directa ───────────────────────────────────────────────────────
 _FD_TOKEN   = os.environ.get('FACTURADIRECTA_TOKEN', '')
