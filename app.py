@@ -1143,10 +1143,35 @@ CONSUM_CATALEG_DELEX = [
     {'equip': 'epson_surelab_d1000', 'referencia': 'T46K640', 'nom': 'Tinta Epson T46K640 Magenta Claro 250ml', 'preu': 48.75},
 ]
 
-# Registre de catàlegs de fàbrica carregables des de l'admin.
+# Tintes Canon PFI-1300 (330 ml) també a Norilab, més barates (144 € vs 155,12 €
+# a Delex). Porten proveïdor propi (override) perquè conviuen amb les de Delex al
+# mateix equip: així pots comparar preus i triar a qui demanes.
+_CANON_PFI1300_NORILAB = [
+    ('PFI1300C',   'Tinta Canon PFI-1300C Cian 330ml'),
+    ('PFI1300M',   'Tinta Canon PFI-1300M Magenta 330ml'),
+    ('PFI1300Y',   'Tinta Canon PFI-1300Y Amarillo 330ml'),
+    ('PFI1300PC',  'Tinta Canon PFI-1300PC Cian Foto 330ml'),
+    ('PFI1300PM',  'Tinta Canon PFI-1300PM Magenta Foto 330ml'),
+    ('PFI1300PBK', 'Tinta Canon PFI-1300PBK Negro Foto 330ml'),
+    ('PFI1300MBK', 'Tinta Canon PFI-1300MBK Negro Mate 330ml'),
+    ('PFI1300GY',  'Tinta Canon PFI-1300GY Gris 330ml'),
+    ('PFI1300PGY', 'Tinta Canon PFI-1300PGY Gris Foto Claro 330ml'),
+    ('PFI1300B',   'Tinta Canon PFI-1300B Azul 330ml'),
+    ('PFI1300R',   'Tinta Canon PFI-1300R Rojo 330ml'),
+    ('PFI1300CO',  'Tinta Canon PFI-1300CO Optimizador de Brillo 330ml'),
+]
+CONSUM_CATALEG_NORILAB_CANON = [
+    {'equip': 'canon_pro_4000', 'referencia': ref, 'nom': nom, 'preu': 144.0,
+     'proveidor': CONSUM_PROVEIDOR_NORILAB}
+    for ref, nom in _CANON_PFI1300_NORILAB
+]
+
+# Registre de catàlegs de fàbrica carregables des de l'admin. 'equips' = equips
+# als quals fixar el proveïdor (buit si els ítems ja porten proveïdor propi).
 CONSUM_CATALEGS = {
-    'norilab': {'nom': 'Norilab', 'items': CONSUM_CATALEG_NORILAB, 'proveidor': CONSUM_PROVEIDOR_NORILAB, 'equips': ['noritsu_green_iv']},
-    'delex':   {'nom': 'Delex',   'items': CONSUM_CATALEG_DELEX,   'proveidor': CONSUM_PROVEIDOR_DELEX,   'equips': ['canon_pro_4000', 'epson_surelab_d1000']},
+    'norilab':       {'nom': 'Norilab (Noritsu)',      'items': CONSUM_CATALEG_NORILAB,       'proveidor': CONSUM_PROVEIDOR_NORILAB, 'equips': ['noritsu_green_iv']},
+    'delex':         {'nom': 'Delex (Canon/Epson)',    'items': CONSUM_CATALEG_DELEX,         'proveidor': CONSUM_PROVEIDOR_DELEX,   'equips': ['canon_pro_4000', 'epson_surelab_d1000']},
+    'norilab_canon': {'nom': 'Norilab (Canon PFI-1300)', 'items': CONSUM_CATALEG_NORILAB_CANON, 'proveidor': CONSUM_PROVEIDOR_NORILAB, 'equips': []},
 }
 
 CONSUMIBLES_DEFAULTS = [
@@ -1190,6 +1215,10 @@ def _normalize_consumible(c):
         'referencia': str(c.get('referencia') or '').strip(),
         'quantitat': qty,
         'preu': preu,
+        # Proveïdor propi (opcional): si s'omple, mana sobre el de l'equip. Permet
+        # tenir el mateix consumible de dos proveïdors i triar a qui es demana.
+        'proveidor_nom': str(c.get('proveidor_nom') or '').strip(),
+        'proveidor_email': str(c.get('proveidor_email') or '').strip(),
         'pendent': bool(c.get('pendent')),
         'notes': str(c.get('notes') or '').strip(),
         'historial': hist_norm,
@@ -1268,38 +1297,57 @@ def _consum_qty(q):
     return str(int(q)) if q == int(q) else ('%.2f' % q)
 
 
+def _consum_prov_efectiu(item, equip_prov):
+    """Proveïdor efectiu d'un consumible: el propi (override per consumible) si
+    en té, si no el de l'equip. Retorna (nom, email)."""
+    nom = (item.get('proveidor_nom') or '').strip()
+    email = (item.get('proveidor_email') or '').strip()
+    if not (nom or email):
+        p = equip_prov.get(item.get('equip'), {})
+        nom, email = (p.get('nom') or ''), (p.get('email') or '')
+    return nom, email
+
+
 def _consumibles_comanda_grups():
-    """Agrupa els consumibles PENDENTS i actius per equip amb el seu proveïdor.
-    Retorna [{equip_key, equip_label, proveidor_nom, proveidor_email, items}]."""
+    """Agrupa els consumibles PENDENTS i actius pel seu PROVEÏDOR efectiu (el
+    propi del consumible, o el de l'equip). Així el mateix producte de dos
+    proveïdors va a la comanda del proveïdor triat. Retorna
+    [{proveidor_nom, proveidor_email, equips_label, items}]."""
+    equip_prov = {e['key']: get_consum_proveidor(e['key']) for e in EQUIPS_CONSUMIBLES}
     pendents = [c for c in get_consumibles_list() if c.get('pendent') and c.get('actiu', True)]
-    grups = []
-    for e in EQUIPS_CONSUMIBLES:
-        eits = [c for c in pendents if c['equip'] == e['key']]
-        if not eits:
-            continue
-        prov = get_consum_proveidor(e['key'])
-        grups.append({
-            'equip_key': e['key'],
-            'equip_label': e['label'],
-            'proveidor_nom': prov['nom'],
-            'proveidor_email': prov['email'],
-            'items': eits,
-        })
-    return grups
+    grups, ordre = {}, []
+    for c in pendents:
+        nom, email = _consum_prov_efectiu(c, equip_prov)
+        key = email.lower() if email else ('nom:' + nom.lower() if nom else 'sense')
+        if key not in grups:
+            grups[key] = {'proveidor_nom': nom, 'proveidor_email': email, 'items': [], '_equips': []}
+            ordre.append(key)
+        grups[key]['items'].append(c)
+        el = _consum_equip_label(c['equip'])
+        if el not in grups[key]['_equips']:
+            grups[key]['_equips'].append(el)
+    res = []
+    for k in ordre:
+        g = grups[k]
+        g['equips_label'] = ', '.join(g['_equips'])
+        res.append(g)
+    return res
 
 
 def _consumibles_email_subject(grup):
     # Els proveïdors són castellanoparlants: assumpte i cos en castellà.
-    return f"Pedido de consumibles · {grup['equip_label']}"
+    eq = grup.get('equips_label') or ''
+    return f"Pedido de consumibles · {eq}" if eq else "Pedido de consumibles"
 
 
 def _consumibles_email_html(grup):
-    """Cos HTML del correu de comanda per a un equip/proveïdor. En castellà,
-    perquè els proveïdors són castellanoparlants."""
+    """Cos HTML del correu de comanda per a un proveïdor (en castellà). Inclou
+    una columna d'equip perquè un proveïdor pot servir més d'un equip."""
     files = ''.join(
         "<tr>"
         f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['nom'])}</td>"
         f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(c['referencia']) or '—'}</td>"
+        f"<td style='padding:5px 10px;border-bottom:1px solid #eee'>{_consum_esc(_consum_equip_label(c.get('equip')))}</td>"
         f"<td style='padding:5px 10px;border-bottom:1px solid #eee;text-align:right'>{_consum_qty(c['quantitat'])}</td>"
         "</tr>"
         for c in grup['items']
@@ -1308,10 +1356,11 @@ def _consumibles_email_html(grup):
     return (
         f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#222'>"
         f"<p>{salutacio}</p>"
-        f"<p>Nos gustaría realizar el siguiente pedido de consumibles para <strong>{_consum_esc(grup['equip_label'])}</strong>:</p>"
+        f"<p>Nos gustaría realizar el siguiente pedido de consumibles:</p>"
         f"<table style='border-collapse:collapse;font-size:14px;margin:8px 0'>"
         f"<tr><th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Consumible</th>"
         f"<th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Referencia</th>"
+        f"<th style='text-align:left;padding:5px 10px;border-bottom:2px solid #333'>Equipo</th>"
         f"<th style='text-align:right;padding:5px 10px;border-bottom:2px solid #333'>Cantidad</th></tr>"
         f"{files}</table>"
         f"<p>¡Muchas gracias!</p>"
@@ -9206,6 +9255,8 @@ def admin_consumibles():
         notes  = request.form.getlist('c_notes[]')
         pends  = request.form.getlist('c_pendent[]')
         ids    = request.form.getlist('c_id[]')
+        prov_noms   = request.form.getlist('c_prov_nom[]')
+        prov_emails = request.form.getlist('c_prov_email[]')
         items = []
         for i, nom in enumerate(noms):
             nom = (nom or '').strip()
@@ -9219,6 +9270,8 @@ def admin_consumibles():
                 'referencia': refs[i] if i < len(refs) else '',
                 'quantitat': qtys[i] if i < len(qtys) else 0,
                 'preu': preus[i] if i < len(preus) else 0,
+                'proveidor_nom': prov_noms[i] if i < len(prov_noms) else '',
+                'proveidor_email': prov_emails[i] if i < len(prov_emails) else '',
                 'pendent': (i < len(pends) and str(pends[i]).strip() in ('1', 'true', 'on')),
                 'notes': notes[i] if i < len(notes) else '',
                 'actiu': True,
@@ -9259,17 +9312,19 @@ def admin_consumibles_comanda():
 @app.route('/admin/consumibles/enviar', methods=['POST'])
 @admin_required
 def admin_consumibles_enviar():
-    equip_key = (request.form.get('equip') or '').strip()  # buit = tots els equips
+    email_sel = (request.form.get('proveidor') or '').strip().lower()  # buit = tots
     grups = _consumibles_comanda_grups()
-    if equip_key:
-        grups = [g for g in grups if g['equip_key'] == equip_key]
+    if email_sel:
+        grups = [g for g in grups if (g['proveidor_email'] or '').lower() == email_sel]
     if not grups:
         flash('No hi ha consumibles pendents per enviar.', 'error')
         return redirect(url_for('admin_consumibles_comanda'))
-    enviats, sense_email, fallits = [], [], []
+    enviats_ids, sense_email, fallits = set(), [], []
+    n_ok = 0
     for g in grups:
+        etiqueta = g['proveidor_nom'] or g['proveidor_email'] or g.get('equips_label') or 'proveïdor'
         if not g['proveidor_email']:
-            sense_email.append(g['equip_label'])
+            sense_email.append(etiqueta)
             continue
         ok = _send_user_email_html(
             g['proveidor_email'],
@@ -9277,16 +9332,19 @@ def admin_consumibles_enviar():
             _consumibles_email_html(g),
             log_tag='consum_comanda',
         )
-        (enviats if ok else fallits).append(g['equip_key'] if ok else g['equip_label'])
-    # Els equips enviats correctament: marquem els seus consumibles com a NO
-    # pendents (ja demanats).
-    if enviats:
+        if ok:
+            n_ok += 1
+            enviats_ids.update(c.get('id') for c in g['items'] if c.get('id'))
+        else:
+            fallits.append(etiqueta)
+    # Consumibles enviats correctament (per id): marcats com a NO pendents.
+    if enviats_ids:
         items = get_consumibles_list()
         for c in items:
-            if c['equip'] in enviats and c.get('pendent'):
+            if c.get('id') in enviats_ids and c.get('pendent'):
                 c['pendent'] = False
         save_consumibles_list(items)
-        flash(f"Comanda enviada a {len(enviats)} equip(s) i marcats com a demanats.", 'ok')
+        flash(f"Comanda enviada a {n_ok} proveïdor(s) i marcats com a demanats.", 'ok')
     if sense_email:
         flash('Sense email de proveïdor (no enviat): ' + ', '.join(sense_email)
               + '. Configura\'l a Consumibles.', 'error')
@@ -9308,20 +9366,36 @@ def admin_consumibles_carregar_plantilla():
         return redirect(url_for('admin_consumibles'))
     avui = _consum_avui()
     items = get_consumibles_list()
-    refs_existents = {(c.get('referencia') or '').strip().lower()
-                      for c in items if (c.get('referencia') or '').strip()}
+    equip_prov = {e['key']: get_consum_proveidor(e['key']) for e in EQUIPS_CONSUMIBLES}
+
+    def _dedup_key(equip, ref, prov_email):
+        return (equip or '') + '|' + (ref or '').strip().lower() + '|' + (prov_email or '').strip().lower()
+
+    # Clau existent = equip + referència + proveïdor efectiu. Així el mateix codi
+    # de dos proveïdors distints es considera dues entrades diferents (no es
+    # deduplica), però recarregar el mateix catàleg no en crea duplicats.
+    existents = set()
+    for c in items:
+        if (c.get('referencia') or '').strip():
+            _, em = _consum_prov_efectiu(c, equip_prov)
+            existents.add(_dedup_key(c['equip'], c['referencia'], em))
     afegits = 0
     for it in cat['items']:
-        if it['referencia'].strip().lower() in refs_existents:
+        prov = it.get('proveidor') or {}
+        eff_email = (prov.get('email') or '') or (equip_prov.get(it['equip'], {}).get('email') or '')
+        k = _dedup_key(it['equip'], it['referencia'], eff_email)
+        if k in existents:
             continue
         item = _normalize_consumible({
             'id': _consum_nou_id(afegits),
             'equip': it['equip'], 'nom': it['nom'], 'referencia': it['referencia'],
-            'quantitat': 1, 'preu': it['preu'], 'pendent': False, 'notes': '',
-            'actiu': True, 'ordre': len(items) + afegits + 1,
+            'quantitat': 1, 'preu': it['preu'],
+            'proveidor_nom': prov.get('nom', ''), 'proveidor_email': prov.get('email', ''),
+            'pendent': False, 'notes': '', 'actiu': True, 'ordre': len(items) + afegits + 1,
         })
         _apply_preu_historial(item, None, avui)
         items.append(item)
+        existents.add(k)
         afegits += 1
     if afegits:
         save_consumibles_list(items)
