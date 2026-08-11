@@ -384,11 +384,14 @@ tr:hover td{background:#fbf8f3}
           {# ── Documents (comanda conjunta) ── #}
           <a href="/pdf-comanda-conjunta/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF de tota la comanda junta (totes les línies, amb descomptes i pendent)">📄 PDF comanda</a>
           <button onclick="whatsappComandaConjunta('{{ sessio_id }}', this)" class="btn-sm btn-cmp" title="Enviar el resum de tota la comanda al client per WhatsApp">🟢 WhatsApp</button>
+          <button onclick="copiarResumComanda('{{ sessio_id }}','pvp',this)" class="btn-sm btn-cmp" title="Copiar el resum del pressupost (preu al client) per enganxar a WhatsApp o mail">📋 Text</button>
           <a href="/pdf-comparativa/{{ sessio_id }}" class="btn-sm btn-cmp" target="_blank" title="PDF comparativa (opcions A/B/C per a la mateixa peça)">Comparativa</a>
           {% endif %}
           {% if session.is_admin and c0.es_taller %}
           <a href="/pdf-comanda-conjunta/{{ sessio_id }}?mode=cost" class="btn-sm btn-cmp" target="_blank" title="PDF per al client de taller: només el preu PVD (sense suggeriment de venda)">📄 PDF PVD</a>
+          <button onclick="copiarResumComanda('{{ sessio_id }}','pvd',this)" class="btn-sm btn-cmp" title="Copiar el resum en preu taller (PVD) per enganxar a WhatsApp o mail">📋 Text PVD</button>
           <a href="/pdf-comanda-conjunta/{{ sessio_id }}?mode=dual" class="btn-sm btn-cmp" target="_blank" title="PDF per al client de taller: preu PVD + PVP suggerit de venda al seu client final (marge Reus Revela)">📄 PDF PVD+PVP</a>
+          <button onclick="copiarResumComanda('{{ sessio_id }}','dual',this)" class="btn-sm btn-cmp" title="Copiar el resum PVD + PVP suggerit per enganxar a WhatsApp o mail">📋 Text PVD+PVP</button>
           {% endif %}
 
           <span class="act-sep"></span>
@@ -544,7 +547,38 @@ function whatsappComandaConjunta(sessioId, btn) {
     .catch(function(){ if(btn){ btn.disabled = false; btn.textContent = prev; } alert('Error de connexió.'); });
 }
 
-function liquidarComanda(id, btn) {
+// Copiar al portapapers amb fallback (per a navegadors sense clipboard API o http).
+function _histCopia(txt, btn){
+  var prev = (btn && btn.getAttribute('data-label')) || (btn ? btn.textContent : '');
+  function ok(){ if(btn){ btn.textContent = '✓ Copiat'; setTimeout(function(){ btn.textContent = prev; }, 1800); } }
+  function fb(){
+    try{
+      var ta=document.createElement('textarea'); ta.value=txt;
+      ta.style.position='fixed'; ta.style.top='0'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var r=document.execCommand('copy'); ta.remove();
+      if(r) ok(); else alert('No s\'ha pogut copiar automàticament.');
+    }catch(e){ alert('No s\'ha pogut copiar automàticament.'); }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(ok).catch(fb);
+  } else { fb(); }
+}
+
+// Copia el resum d'una comanda (mode: 'pvp' | 'pvd' | 'dual') per enganxar a
+// WhatsApp o mail.
+function copiarResumComanda(sessioId, mode, btn){
+  var prev = btn ? btn.textContent : '';
+  if(btn){ btn.setAttribute('data-label', prev); btn.disabled = true; btn.textContent = '…'; }
+  fetch('/api/comanda-conjunta-resum/' + encodeURIComponent(sessioId) + '?mode=' + encodeURIComponent(mode||'pvp'))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(btn){ btn.disabled = false; btn.textContent = prev; }
+      if(!d || !d.ok){ alert('No s\'ha pogut generar el resum de la comanda.'); return; }
+      _histCopia(d.text || '', btn);
+    })
+    .catch(function(){ if(btn){ btn.disabled = false; btn.textContent = prev; } alert('Error de connexió.'); });
+}
   if(!confirm('Vols marcar el pagament total com a completat?')) return;
   fetch('/comanda/'+id+'/liquidar', {method:'POST'})
     .then(r=>r.json()).then(function(d){
