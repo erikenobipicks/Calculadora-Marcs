@@ -9529,12 +9529,27 @@ _FD_IVA_CODE = os.environ.get('FD_IVA_CODE', 'S_IVA_21')
 _FD_RE_CODE  = os.environ.get('FD_RE_CODE', 'S_REQ_52')
 
 def _fd_line_tax(recarrec=False):
-    """Llista de codis de taxa per a una línia FD: IVA 21% i, si el client està
-    en règim de recàrrec d'equivalència, també el recàrrec (5,2%)."""
-    tax = [_FD_IVA_CODE]
-    if recarrec:
-        tax.append(_FD_RE_CODE)
-    return tax
+    """Codis de taxa d'una línia FD. Retorna només l'IVA (p. ex. S_IVA_21).
+
+    IMPORTANT: a FacturaDirecta el recàrrec d'equivalència NO és un impost que
+    s'afegeixi per línia, sinó un RÈGIM del CONTACTE. Si el contacte està marcat
+    com a recàrrec d'equivalència a FD, FD aplica el recàrrec automàticament a
+    tots els seus documents de venda. Afegir un codi de recàrrec a la línia (com
+    fèiem abans amb S_REQ_52) el rebutja amb l'error "Impuesto desconocido". Per
+    això aquí NO l'afegim; el recàrrec es gestiona des del règim del contacte a
+    FD. El paràmetre `recarrec` es manté per compatibilitat amb les crides."""
+    return [_FD_IVA_CODE]
+
+
+@app.route('/admin/fd-taxes')
+@admin_required
+def admin_fd_taxes():
+    """Diagnòstic (només admin): llista els codis d'impost vàlids del compte de
+    Factura Directa. Serveix per confirmar quins codis accepta FD (IVA,
+    recàrrec, etc.) sense endevinar."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat.'}), 503
+    return jsonify(_fd_get('taxes'))
 
 def _fd_docnumber(series):
     """Construeix el docNumber per a l'API de FD. Sempre ha d'anar present;
