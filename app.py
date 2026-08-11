@@ -8374,26 +8374,32 @@ def pdf_comanda_conjunta(sessio_id):
 @app.route('/api/comanda-conjunta-resum/<sessio_id>')
 @login_required
 def api_comanda_conjunta_resum(sessio_id):
-    """Text-resum de tota la comanda (per enviar per WhatsApp) + telèfon del
-    client. Preus al client (PVP), amb descomptes i entrega a compte."""
+    """Text-resum de tota la comanda per copiar/enviar (WhatsApp o mail).
+    ?mode: 'pvp' (per defecte, preus al client) · 'pvd' (preu taller) ·
+    'dual' (preu taller + PVP suggerit de venda al client final)."""
     comandes = query('SELECT * FROM comandes WHERE sessio_id=? ORDER BY id', [sessio_id])
     if not comandes:
         return jsonify({'ok': False, 'error': 'no_trobat'}), 404
     if not session.get('is_admin') and comandes[0]['user_id'] != session['user_id']:
         return jsonify({'ok': False, 'error': 'no_autoritzat'}), 403
     c0 = dict(comandes[0])
+    mode = (request.args.get('mode') or 'pvp').strip().lower()
+    dual = mode == 'dual'
+    es_pvd = dual or mode in ('pvd', 'cost')
     items, entrega_total = _comanda_conjunta_items(comandes)
     _r = query("SELECT valor FROM config WHERE clau='empresa_nom'", one=True)
     empresa = (_r['valor'] if _r else '') or 'Reus Revela'
     subtotal = 0.0
     desc_total = 0.0
+    pvp_net_total = 0.0
     linies_txt = []
     for it in items:
-        brut = float(it['preu_net'] or 0)
+        brut = float((it['cost_produccio'] if es_pvd else it['preu_net']) or 0)
         dp = max(0.0, min(100.0, float(it['descompte'] or 0)))
         net = brut * (1 - dp / 100.0)
         subtotal += brut
         desc_total += brut - net
+        pvp_net_total += float(it['preu_net'] or 0)
         q = it['quantity']
         q_txt = str(int(q)) if float(q).is_integer() else f'{q:g}'
         extra = f' (-{dp:g}%)' if dp > 0 else ''
@@ -8402,7 +8408,8 @@ def api_comanda_conjunta_resum(sessio_id):
     iva = base * 0.21
     total = base + iva
     pendent = total - entrega_total
-    L = [f"Pressupost {empresa}"]
+    capcalera = 'Pressupost' + (' (preu taller PVD)' if es_pvd else '')
+    L = [f"{capcalera} {empresa}"]
     if (c0.get('num_pressupost') or '').strip():
         L[0] += f" · {c0.get('num_pressupost').strip()}"
     if c0.get('client_nom'):
@@ -8414,10 +8421,18 @@ def api_comanda_conjunta_resum(sessio_id):
     if desc_total > 0:
         L.append(f"Descompte: -{desc_total:.2f} €")
     L.append(f"IVA 21%: {iva:.2f} €")
-    L.append(f"TOTAL: {total:.2f} €")
+    L.append(f"TOTAL{' PVD' if es_pvd else ''}: {total:.2f} €")
     if entrega_total > 0:
         L.append(f"Entrega a compte: -{entrega_total:.2f} €")
         L.append(f"Pendent: {pendent:.2f} €")
+    # Bloc de PVP suggerit de venda (només mode dual): sobre el preu_net (PVP)
+    # de cada línia, que ja porta el marge de Reus Revela.
+    if dual and pvp_net_total > 0:
+        L.append("")
+        L.append("— Preu de venda suggerit al teu client final —")
+        L.append(f"PVP suggerit (sense IVA): {pvp_net_total:.2f} €")
+        L.append(f"IVA 21%: {pvp_net_total * 0.21:.2f} €")
+        L.append(f"PVP suggerit amb IVA: {pvp_net_total * 1.21:.2f} €")
     L.append("")
     L.append(f"Gràcies! {empresa}")
     telefon = re.sub(r'\D', '', (c0.get('client_tel') or ''))
@@ -13063,9 +13078,16 @@ def api_pdf_marcs():
         'tel': (d.get('client_tel') or '').strip(),
         'nif': (d.get('client_nif') or '').strip(),
     }
-    mode = (d.get('mode_preu') or 'pvp').strip().lower()
-    # Els usuaris no-admin sempre generen el PDF a PVP (mai a cost de taller).
-    if mode != 'pvp' and not session.get('is_admin'):
+    # mode_preu: 'pvp' (client) · 'cost'/'pvd' (taller) · 'dual' (PVD + PVP
+    # suggerit). Els modes de taller i el dual només per a admin.
+    _mode_arg = (d.get('mode_preu') or 'pvp').strip().lower()
+    sugg_pvp = False
+    if _mode_arg == 'dual' and session.get('is_admin'):
+        mode = 'cost'
+        sugg_pvp = True
+    elif _mode_arg in ('cost', 'pvd') and session.get('is_admin'):
+        mode = 'cost'
+    else:
         mode = 'pvp'
     try:
         _dg = float(d.get('descompte_global') or 0)
@@ -13080,7 +13102,7 @@ def api_pdf_marcs():
                               num_pressupost=(d.get('num_pressupost') or '').strip(),
                               observacions=(d.get('observacions') or '').strip(),
                               user_id=session.get('user_id', 0),
-                              descompte_global=_dg, entrega=_ent)
+                              descompte_global=_dg, entrega=_ent, sugg_pvp=sugg_pvp)
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Error generant PDF: {e}'}), 500
     nom_fitxer = (client['nom'] or 'pressupost').replace(' ', '_')[:40]

@@ -5507,6 +5507,64 @@ function cistellaComandaTallerWA(){
   if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
   window.open('https://wa.me/34613346180?text=' + encodeURIComponent(_cistellaComandaText()), '_blank');
 }
+// Totals de la cistella forçant PVD (preu taller), amb descompte per línia +
+// global + entrega. Independent de la vista actual (per als textos de taller).
+function _cistellaTotalsPVD(){
+  var subtotal=0, lineDisc=0, pvpNet=0;
+  _cistella.forEach(function(it){
+    var base = it.cost_produccio||0;
+    var dp = Math.max(0, Math.min(100, parseFloat(it.descompte)||0));
+    subtotal += base; lineDisc += base*(dp/100); pvpNet += (it.preu_net||0);
+  });
+  var afterLine = subtotal - lineDisc;
+  var gp = Math.max(0, Math.min(100, parseFloat((document.getElementById('cist-desc-global')||{}).value)||0));
+  var globalDisc = afterLine*(gp/100);
+  var baseImp = afterLine - globalDisc;
+  var iva = baseImp*0.21, total = baseImp + iva;
+  var ent = Math.max(0, parseFloat((document.getElementById('cist-entrega')||{}).value)||0);
+  return {subtotal:subtotal, lineDisc:lineDisc, gp:gp, globalDisc:globalDisc, baseImp:baseImp,
+          iva:iva, total:total, entrega:ent, pendent:total-ent, pvpNet:pvpNet};
+}
+// Text del pressupost en preu taller (PVD); si dual=true, hi afegeix el bloc de
+// PVP suggerit de venda al client final. Coherent amb el PDF PVD / PVD+PVP.
+function _cistellaTextPVD(dual){
+  var nom=((document.getElementById('client_nom')||{}).value||'').trim();
+  var num=window._numPressupost||'';
+  var L=['Pressupost (preu taller PVD)'+(num?(' · '+num):'')];
+  if(nom) L.push('Client: '+nom);
+  L.push('');
+  _cistella.forEach(function(it){
+    var brut=it.cost_produccio||0, dp=Math.max(0,Math.min(100,parseFloat(it.descompte)||0)), net=brut*(1-dp/100);
+    L.push('• '+it.text+' · '+it.quantity+' u · '+net.toFixed(2)+' €'+(dp>0?(' (-'+_gNum(dp)+'%)'):''));
+  });
+  var T=_cistellaTotalsPVD();
+  L.push('');
+  L.push('Subtotal: '+T.subtotal.toFixed(2)+' €');
+  if(T.lineDisc>0) L.push('Descomptes per línia: -'+T.lineDisc.toFixed(2)+' €');
+  if(T.gp>0) L.push('Descompte global '+_gNum(T.gp)+'%: -'+T.globalDisc.toFixed(2)+' €');
+  L.push('IVA 21%: '+T.iva.toFixed(2)+' €');
+  L.push('TOTAL PVD: '+T.total.toFixed(2)+' €');
+  if(T.entrega>0){ L.push('Entrega a compte: -'+T.entrega.toFixed(2)+' €'); L.push('Pendent: '+T.pendent.toFixed(2)+' €'); }
+  if(dual && T.pvpNet>0){
+    L.push('');
+    L.push('— Preu de venda suggerit al teu client final —');
+    L.push('PVP suggerit (sense IVA): '+T.pvpNet.toFixed(2)+' €');
+    L.push('IVA 21%: '+(T.pvpNet*0.21).toFixed(2)+' €');
+    L.push('PVP suggerit amb IVA: '+(T.pvpNet*1.21).toFixed(2)+' €');
+  }
+  var obs=((document.getElementById('observacions')||{}).value||'').trim();
+  if(obs){ L.push(''); L.push('Observacions: '+obs); }
+  return L.join('\n');
+}
+function copiarCistellaPVD(dual){
+  if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
+  var txt=_cistellaTextPVD(dual);
+  function done(){ showAlert('Text copiat! Ja el pots enganxar a WhatsApp o al mail.', 'ok'); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ _copiaFallback(txt, done); });
+  } else { _copiaFallback(txt, done); }
+}
+
 // Desa la cistella com a comanda a l'historial (una línia per producte).
 function desarCistellaComanda(){
   if(!_cistella.length){ showAlert('El pressupost és buit.', 'err'); return; }
@@ -6179,6 +6237,10 @@ recalcMides();
       <button type="button" onclick="cistellaComandaTallerWA()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per WhatsApp, amb el detall i el PVD">🟢 Taller WhatsApp</button>
       <button type="button" onclick="cistellaComandaTaller()" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Enviar la comanda al taller (Reus Revela) per correu, amb el detall i el PVD">📧 Taller email</button>
       {% if session.is_admin %}
+      <button type="button" onclick="cistellaPDF('cost')" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="PDF en preu taller (PVD)">📄 PDF PVD</button>
+      <button type="button" onclick="cistellaPDF('dual')" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="PDF PVD + PVP suggerit de venda al client final">📄 PDF PVD+PVP</button>
+      <button type="button" onclick="copiarCistellaPVD(false)" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text en preu taller (PVD) per enganxar a WhatsApp o mail">📋 Text PVD</button>
+      <button type="button" onclick="copiarCistellaPVD(true)" style="padding:8px 14px;border:1px solid var(--border2);border-radius:7px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--muted)" title="Copiar el text PVD + PVP suggerit per enganxar a WhatsApp o mail">📋 Text PVD+PVP</button>
       <button type="button" onclick="cistellaFD('pressupost')" class="albara-btn albara-pres" title="Generar pressupost (estimate) a Factura Directa; usa PVD si el client és de taller">Pressupost FD</button>
       <button type="button" onclick="cistellaFD('albara','cost')" class="albara-btn albara-cost">Albarà PVD</button>
       <button type="button" onclick="cistellaFD('albara','pvp')" class="albara-btn albara-pvp">Albarà PVP</button>
