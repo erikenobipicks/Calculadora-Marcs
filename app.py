@@ -9570,6 +9570,34 @@ def admin_fd_debug():
     path = (request.args.get('path') or 'deliveryNotes').strip().lstrip('/')
     return jsonify(_fd_get(path))
 
+
+@app.route('/admin/fd-recarrec-codi')
+@admin_required
+def admin_fd_recarrec_codi():
+    """Diagnòstic (només admin): cerca als documents recents de FD (pressupostos,
+    factures, albarans) línies amb més d'un impost (IVA + recàrrec) i retorna els
+    codis d'impost trobats, per descobrir el codi real del recàrrec."""
+    if not _FD_TOKEN or not _FD_COMPANY:
+        return jsonify({'ok': False, 'error': 'Factura Directa no configurat.'}), 503
+    trobats, exemples = {}, []
+    for recurs in ('estimates', 'invoices', 'deliveryNotes'):
+        data = _fd_get(recurs)
+        if not isinstance(data, dict):
+            continue
+        for it in (data.get('items') or []):
+            main = ((it.get('content') or {}).get('main') or {})
+            for ln in (main.get('lines') or []):
+                taxes = ln.get('tax') or []
+                if isinstance(taxes, list) and len(taxes) > 1:
+                    for code in taxes:
+                        trobats[code] = trobats.get(code, 0) + 1
+                    if len(exemples) < 8:
+                        exemples.append({'recurs': recurs, 'doc': main.get('title'),
+                                         'tax': taxes, 'text': ln.get('text')})
+    return jsonify({'ok': True, 'codis_trobats': trobats, 'exemples': exemples,
+                    'nota': 'El codi que NO és S_IVA_21 és el del recàrrec.'})
+
+
 def _fd_docnumber(series):
     """Construeix el docNumber per a l'API de FD. Sempre ha d'anar present;
     si no forcem cap sèrie (buida), FD aplica la sèrie per defecte del compte."""
