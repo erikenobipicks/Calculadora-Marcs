@@ -1,9 +1,10 @@
-"""Correcció del recàrrec d'equivalència a Factura Directa.
+"""Recàrrec d'equivalència a Factura Directa.
 
-FacturaDirecta rebutja el recàrrec com a impost de línia amb l'error
-"Impuesto desconocido: 'S_REQ_52'": el recàrrec d'equivalència és un RÈGIM del
-contacte, no una taxa per línia. Per tant _fd_line_tax mai hi afegeix el codi de
-recàrrec (només l'IVA); FD aplica el recàrrec des del règim del contacte.
+A FacturaDirecta el recàrrec d'equivalència es representa com un impost extra a
+la línia, JUNT amb l'IVA. El codi real del compte és 'S_IVA_RE_5.2' (verificat
+en documents existents; FD el rebutjava abans perquè fèiem servir 'S_REQ_52',
+inexistent). FD no l'aplica sol als documents fets per API, així que
+_fd_line_tax l'afegeix per als clients en règim de recàrrec.
 """
 import app
 
@@ -12,7 +13,11 @@ def test_fd_line_tax_nomes_iva():
     assert app._fd_line_tax(False) == [app._FD_IVA_CODE]
 
 
-def test_fd_line_tax_recarrec_no_afegeix_codi():
-    # Encara que el client sigui de recàrrec, la línia porta només l'IVA.
-    assert app._fd_line_tax(True) == [app._FD_IVA_CODE]
-    assert app._FD_RE_CODE not in app._fd_line_tax(True)
+def test_fd_line_tax_afegeix_recarrec():
+    assert app._fd_line_tax(True) == [app._FD_IVA_CODE, app._FD_RE_CODE]
+    assert app._FD_RE_CODE in app._fd_line_tax(True)
+
+
+def test_fd_re_code_default():
+    # Codi verificat en documents reals del compte de FacturaDirecta.
+    assert app._FD_RE_CODE == 'S_IVA_RE_5.2'
