@@ -9541,19 +9541,21 @@ _FD_INVOICE_SERIES  = os.environ.get('FD_INVOICE_SERIES', '')
 # règim de RE). 5,2% correspon a l'IVA 21%. El codi es pot ajustar amb FD_RE_CODE
 # si el compte usa un identificador diferent.
 _FD_IVA_CODE = os.environ.get('FD_IVA_CODE', 'S_IVA_21')
-_FD_RE_CODE  = os.environ.get('FD_RE_CODE', 'S_REQ_52')
+_FD_RE_CODE  = os.environ.get('FD_RE_CODE', 'S_IVA_RE_5.2')
 
 def _fd_line_tax(recarrec=False):
-    """Codis de taxa d'una línia FD. Retorna només l'IVA (p. ex. S_IVA_21).
+    """Codis de taxa d'una línia FD: IVA (S_IVA_21) i, per als clients en règim
+    de recàrrec d'equivalència, també el recàrrec (S_IVA_RE_5.2).
 
-    IMPORTANT: a FacturaDirecta el recàrrec d'equivalència NO és un impost que
-    s'afegeixi per línia, sinó un RÈGIM del CONTACTE. Si el contacte està marcat
-    com a recàrrec d'equivalència a FD, FD aplica el recàrrec automàticament a
-    tots els seus documents de venda. Afegir un codi de recàrrec a la línia (com
-    fèiem abans amb S_REQ_52) el rebutja amb l'error "Impuesto desconocido". Per
-    això aquí NO l'afegim; el recàrrec es gestiona des del règim del contacte a
-    FD. El paràmetre `recarrec` es manté per compatibilitat amb les crides."""
-    return [_FD_IVA_CODE]
+    Nota: FacturaDirecta NO aplica el recàrrec automàticament als documents fets
+    per l'API (només el 'proposa' a la UI manual, tot i tenir el contacte en
+    règim de recàrrec), així que cal afegir-lo explícitament aquí. El codi real
+    del compte és S_IVA_RE_5.2 (verificat en documents existents); es pot ajustar
+    amb la variable d'entorn FD_RE_CODE si mai canvia."""
+    tax = [_FD_IVA_CODE]
+    if recarrec:
+        tax.append(_FD_RE_CODE)
+    return tax
 
 
 @app.route('/admin/fd-debug')
