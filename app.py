@@ -8040,6 +8040,18 @@ def _wa_client_text(op, emp_nom, emp_adr, emp_tel):
     return '\n'.join(L)
 
 
+def _hist_client_display(com, client_nom):
+    """Nom del client per mostrar a l'historial: si el client habitual té nom
+    comercial i no és ja dins del nom desat, l'anteposa ('Comercial · Nom desat').
+    Així els pressupostos desats amb només el nom de pila també mostren el
+    comercial."""
+    cn = (client_nom or '').strip()
+    com = (com or '').strip()
+    if com and com.lower() not in cn.lower():
+        return (com + ' · ' + cn) if cn else com
+    return cn
+
+
 @app.route('/historial')
 @login_required
 def historial():
@@ -8092,6 +8104,15 @@ def historial():
     _fins = _parse_date_input(request.args.get('fins'))
     if _desde or _fins:
         comandes = [c for c in comandes if _comanda_in_range(c, _desde, _fins)]
+    # Nom comercial per client habitual (per mostrar-lo als pressupostos desats,
+    # que sovint només porten el nom de pila desat a client_nom).
+    _ensure_nom_comercial_column()
+    com_map = {}
+    try:
+        for _r in (query('SELECT id, nom_comercial FROM clients_externs') or []):
+            com_map[_r['id']] = (_row_get(_r, 'nom_comercial') or '').strip()
+    except Exception:
+        com_map = {}
     # Dades d'empresa (per a la firma del missatge de WhatsApp al client).
     _emp = query('SELECT nom_empresa, empresa_adreca, empresa_tel FROM usuaris WHERE id=?',
                  [session['user_id']], one=True)
@@ -8119,6 +8140,8 @@ def historial():
         grp[0]['estat']    = _derive_estat(grp[0])
         grp[0]['urgent']   = _comanda_es_urgent(grp[0])
         grp[0]['es_taller'] = _comanda_es_taller(grp[0])
+        grp[0]['client_display'] = _hist_client_display(
+            com_map.get(grp[0].get('client_extern_id')), grp[0].get('client_nom'))
     # Filtre d'estat (F2), aplicat en Python sobre els grups perquè no cal
     # tocar les branques SQL ni perdre el filtre per albarà/client/usuari.
     filtre_estat = request.args.get('estat', '').strip().lower()
@@ -8142,7 +8165,7 @@ def historial():
         key = (str(c0.get('client_nom') or '').strip().lower(), _norm_tel(c0.get('client_tel')))
         g = _cli_map.get(key)
         if g is None:
-            g = {'nom': c0.get('client_nom') or '(sense nom)',
+            g = {'nom': c0.get('client_display') or c0.get('client_nom') or '(sense nom)',
                  'tel': c0.get('client_tel') or '',
                  'sessions': [], 'n': 0, 'pendent': 0.0}
             _cli_map[key] = g
