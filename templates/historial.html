@@ -259,14 +259,14 @@ tr:hover td{background:#fbf8f3}
     {% set c0 = opcions[0] %}
     {% set sessio_id = c0.sessio_id or c0.id %}
     {% set multi = opcions|length > 1 %}
-    <div class="sessio-card" data-text="{{ c0.client_nom }} {{ c0.marc_principal }}">
+    <div class="sessio-card" data-text="{{ c0.client_display or c0.client_nom }} {{ c0.marc_principal }}">
       <div class="sessio-head" onclick="toggleSessio(this)">
         <div style="flex:1;min-width:0">
           {% if session.is_admin %}
       <input type="checkbox" class="sessio-chk" data-sid="{{ sessio_id }}"
              onchange="updateSeleccio()" style="margin-right:.5rem;cursor:pointer">
       {% endif %}
-      <div class="sessio-client">{{ c0.client_nom or '(sense nom)' }}</div>
+      <div class="sessio-client">{{ c0.client_display or c0.client_nom or '(sense nom)' }}</div>
           <div class="sessio-meta">
             {% if c0.num_pressupost %}<span style="font-weight:700;color:var(--green);margin-right:6px">{{ c0.num_pressupost }}</span>{% endif %}
             {{ c0.data }}{% if session.is_admin %} · {{ c0.usuari_nom }}{% endif %} · {{ c0.marc_principal or 'sense marc' }}

@@ -2155,6 +2155,16 @@ function filterClients(){
   box.classList.add('open');
 }
 
+// Nom del client per mostrar/desar: prioritza el nom comercial i, si també hi
+// ha nom de pila diferent, els combina "Comercial (Nom)". Així els pressupostos
+// desats identifiquen el client pel nom comercial i no només pel nom de pila.
+function _clientDisplayNom(c){
+  var com = (c.nom_comercial || '').trim();
+  var nom = (c.nom || '').trim();
+  if(com && nom && com !== nom) return com + ' (' + nom + ')';
+  return com || nom;
+}
+
 function selectClient(id){
   var c = null;
   for(var i=0;i<CLIENTS_EXTERNS.length;i++){ if(CLIENTS_EXTERNS[i].id===id){ c=CLIENTS_EXTERNS[i]; break; } }
@@ -2165,7 +2175,7 @@ function selectClient(id){
   hid.dataset.nom = c.nom || '';
   hid.dataset.telefon = c.telefon || '';
   var nomInp = document.getElementById('client_nom'), telInp = document.getElementById('client_tel');
-  if(nomInp){ nomInp.value = c.nom || ''; nomInp.readOnly = true; }
+  if(nomInp){ nomInp.value = _clientDisplayNom(c); nomInp.readOnly = true; }
   // En seleccionar un client habitual (també de taller/PVD), la seva fitxa és
   // l'origen autoritatiu del telèfon: l'hi posem sempre. Si la fitxa no en té,
   // buidem el camp per no arrossegar el telèfon d'un client anterior (evita
