@@ -9556,15 +9556,19 @@ def _fd_line_tax(recarrec=False):
     return [_FD_IVA_CODE]
 
 
-@app.route('/admin/fd-taxes')
+@app.route('/admin/fd-debug')
 @admin_required
-def admin_fd_taxes():
-    """Diagnòstic (només admin): llista els codis d'impost vàlids del compte de
-    Factura Directa. Serveix per confirmar quins codis accepta FD (IVA,
-    recàrrec, etc.) sense endevinar."""
+def admin_fd_debug():
+    """Diagnòstic (només admin, NOMÉS lectura GET): consulta l'API de Factura
+    Directa al 'path' indicat i retorna el JSON tal qual. Serveix per descobrir
+    codis d'impost reals, l'estructura de contactes/documents, etc. Exemples:
+      /admin/fd-debug?path=deliveryNotes
+      /admin/fd-debug?path=invoices
+      /admin/fd-debug?path=contacts"""
     if not _FD_TOKEN or not _FD_COMPANY:
         return jsonify({'ok': False, 'error': 'Factura Directa no configurat.'}), 503
-    return jsonify(_fd_get('taxes'))
+    path = (request.args.get('path') or 'deliveryNotes').strip().lstrip('/')
+    return jsonify(_fd_get(path))
 
 def _fd_docnumber(series):
     """Construeix el docNumber per a l'API de FD. Sempre ha d'anar present;
