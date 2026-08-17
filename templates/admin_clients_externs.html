@@ -127,7 +127,7 @@ function toggleMobileNav(btn){ var nav = btn.closest('nav'); if(nav) nav.classLi
           </td>
           <td>
             <div class="actions-cell">
-              <button class="btn btn-ghost btn-sm" onclick="openEditModal({{ c.id }}, '{{ c.nom|e }}', '{{ c.nif or ''|e }}', '{{ c.tipus or 'pvp' }}', '{{ c.telefon or ''|e }}', '{{ c.email or ''|e }}', '{{ c.usuari_id or '' }}', '{{ c.dropbox_url or ''|e }}', {{ 'true' if c.recarrec_equiv else 'false' }}, '{{ c.nom_comercial or ''|e }}')">Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick='openEditModal({{ c.id }}, {{ c.nom|tojson }}, {{ (c.nif or "")|tojson }}, {{ (c.tipus or "pvp")|tojson }}, {{ (c.telefon or "")|tojson }}, {{ (c.email or "")|tojson }}, {{ (c.usuari_id or "")|tojson }}, {{ (c.dropbox_url or "")|tojson }}, {{ "true" if c.recarrec_equiv else "false" }}, {{ (c.nom_comercial or "")|tojson }})'>Editar</button>
               <button class="btn btn-ghost btn-sm" data-id="{{ c.id }}" onclick="toggleClient(this)" style="{% if c.actiu %}color:var(--red){% else %}color:var(--green){% endif %}">
                 {% if c.actiu %}Desactivar{% else %}Reactivar{% endif %}
               </button>
