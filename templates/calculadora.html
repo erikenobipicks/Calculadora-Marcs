@@ -2950,9 +2950,12 @@ function applyIncompatibilities(){
   var hasPasspartu = interior==='passpartu'||interior==='doble_pas';
   var hasProeco    = interior==='proeco';
   var hasDoblVidre = proteccio==='doble_vidre';
-  // Qualsevol protecció de vidre (simple, doble, mirall o conservar)
-  // és incompatible amb foam/protter — el marc ja porta protecció.
-  var hasVidre     = proteccio==='vidre'||proteccio==='doble_vidre'||proteccio==='mirall'||proteccio==='conservar';
+  // El foam (encolat) SÍ que es pot combinar amb VIDRE SIMPLE: la peça va
+  // encolada sobre foam i, a més, protegida amb un vidre (p. ex. punt de creu o
+  // una pintura). La resta de vidres (doble, mirall, conservar) i el Protter
+  // segueixen sent incompatibles amb el foam.
+  var hasVidre       = proteccio==='vidre'||proteccio==='doble_vidre'||proteccio==='mirall'||proteccio==='conservar';
+  var hasVidreNoFoam = proteccio==='doble_vidre'||proteccio==='mirall'||proteccio==='conservar';
   var hasMarc      = document.getElementById('marc_principal').value.trim()!=='';
   var fw = parseFloat(document.getElementById('amplada').value)||0;
   var fh = parseFloat(document.getElementById('alcada').value)||0;
@@ -3008,7 +3011,7 @@ function applyIncompatibilities(){
   }
 
   var rules = {
-    encolat:           hasProeco||hasPasspartu||hasVidre,
+    encolat:           hasProeco||hasPasspartu||hasVidreNoFoam,
     protter:           hasProeco||hasPasspartu||hasVidre,
     laminat:           hasProeco||hasDoblVidre||hasPasspartu,
     'muntatge-cap':    false,
