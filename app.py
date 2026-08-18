@@ -5369,6 +5369,11 @@ def _autoregister_client_pvp(nom, tel, usuari_id=None):
 def guardar():
     d = request.json
     comanda_id = d.get('comanda_id')  # if set → UPDATE existing row
+    # Concepte complet (descripció que veu el client). El desem a part perquè els
+    # documents (albarà/factura/PDF) mostrin TOTS els conceptes tal com es
+    # configuren, sense reconstruir-los des de referències que poden quedar buides.
+    concepte = (d.get('concepte') or '').strip()[:400]
+    _ensure_concepte_column()
 
     # Snapshot dels marges del professional en el moment de guardar.
     # marge_pro_snap congela el % aplicat perquè futurs canvis a usuaris.marge_pro_pct
@@ -5440,6 +5445,7 @@ def guardar():
                 client_extern_id=?
                 WHERE id=? AND user_id=?''',
                 vals_comuns + [comanda_id, session['user_id']])
+            execute("UPDATE comandes SET concepte=? WHERE id=?", [concepte or None, existing['id']])
             return jsonify({'ok': True, 'id': existing['id'],
                             'sessio_id': existing['sessio_id'],
                             'num': existing['num_pressupost']})
@@ -5462,6 +5468,8 @@ def guardar():
         vals_comuns[:27] + [sessio_id] + [vals_comuns[27]] + [num_pressupost] + [vals_comuns[28]] +
         vals_comuns[29:32] + [vals_comuns[32]]
     )
+    if concepte:
+        execute("UPDATE comandes SET concepte=? WHERE id=?", [concepte, cid])
     return jsonify({'ok': True, 'id': cid, 'sessio_id': sessio_id, 'num': num_pressupost})
 
 
@@ -6007,6 +6015,7 @@ def admin_ensure_clients_externs():
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_actiu ON clients_externs(actiu)",
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS concepte TEXT",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
     ]
     for sql in sentencies:
@@ -6252,6 +6261,7 @@ def admin_run_migrations():
         "CREATE INDEX IF NOT EXISTS idx_clients_externs_tipus ON clients_externs(tipus)",
         # FK a comandes (nul·lable: les comandes existents queden a NULL).
         "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS client_extern_id INTEGER",
+        "ALTER TABLE comandes ADD COLUMN IF NOT EXISTS concepte TEXT",
         "CREATE INDEX IF NOT EXISTS idx_comandes_client_extern ON comandes(client_extern_id)",
         # Clients privats dels distribuïdors (els seus clients finals).
         # Separats de clients_externs, que és la llista del laboratori per a
@@ -8297,6 +8307,13 @@ def _marc_comp(v):
 def _comanda_linia_desc(com):
     """Descripció d'una línia de comanda per al document/resum conjunt, conscient
     del tipus (producte, fotografia impresa només, o marc)."""
+    # Concepte complet desat (la descripció que veu el client). Si hi és, mana:
+    # garanteix que el document mostra TOTS els conceptes (encolat foam, vidre,
+    # passpartú…) tal com es van configurar, sense dependre de reconstruir-los
+    # des de referències que de vegades queden buides.
+    concepte = (_row_get(com, 'concepte', '') or '').strip()
+    if concepte:
+        return concepte
     marc        = _marc_comp(_row_get(com, 'marc_principal', ''))
     pre_marc    = _marc_comp(_row_get(com, 'pre_marc', ''))
     passpartout = _marc_comp(_row_get(com, 'passpartout', ''))
@@ -10959,6 +10976,21 @@ def _ensure_recarrec_column():
         _recarrec_col_ready = True
     except Exception as e:
         print(f"[recarrec] ensure column skip: {e}")
+
+
+_concepte_col_ready = False
+def _ensure_concepte_column():
+    """Assegura que existeix comandes.concepte (descripció completa que veu el
+    client, per no dependre de reconstruir-la des de referències que poden
+    quedar buides). Idempotent i cached per procés."""
+    global _concepte_col_ready
+    if _concepte_col_ready:
+        return
+    try:
+        execute("ALTER TABLE comandes ADD COLUMN IF NOT EXISTS concepte TEXT")
+        _concepte_col_ready = True
+    except Exception as e:
+        print(f"[concepte] ensure column skip: {e}")
 
 
 def _client_extern_recarrec(client_extern_id):
