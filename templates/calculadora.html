@@ -1594,6 +1594,7 @@ var T = {
     piece: "Peca a emmarcar",
     marc: "Marc",
     midaFinal: "Mida final",
+    marc: "Marc",
     premarcLabel: "pre-marc",
     mides: "Mides peça",
     muntatge: "Muntatge",
@@ -1625,6 +1626,7 @@ var T = {
     piece: "Pieza a enmarcar",
     marc: "Marco",
     midaFinal: "Medida final",
+    marc: "Marco",
     premarcLabel: "pre-marco",
     mides: "Medidas pieza",
     muntatge: "Montaje",
@@ -1656,6 +1658,7 @@ var T = {
     piece: "Item to frame",
     marc: "Frame",
     midaFinal: "Final size",
+    marc: "Frame",
     premarcLabel: "inner frame",
     mides: "Item size",
     muntatge: "Mounting",
@@ -5946,8 +5949,16 @@ function buildWAtext(){
     if(empresa_tel) lines.push('Tel: ' + empresa_tel);
     return encodeURIComponent(lines.join('\n'));
   }
+  // Marc: referència + descripció de la motllura (perquè el client sàpiga quin
+  // marc s'ha pressupostat).
+  var marcDesc = (marc ? (document.getElementById('desc-marc')||{}).textContent
+                       : (premarc ? (document.getElementById('desc-pre')||{}).textContent : '')) || '';
+  marcDesc = marcDesc.trim();
+  var marcRef = marc || premarc;
+  var marcLine = marcRef ? (marcRef + (marcDesc ? (' · ' + marcDesc) : '')) : marcDesc;
   lines = [t.hola+(num?' ('+t.ref+' '+num+')':''),'',t.client+': '+client];
   if(pieceLabel) lines.push(t.piece+': '+pieceLabel);
+  if(marcLine)   lines.push(t.marc+': '+marcLine);
   if(midaFinal) lines.push(t.midaFinal+': '+midaFinal);
   if(midaFoto) lines.push(t.mides+': '+midaFoto);
   if(nomMuntatge)  lines.push(t.muntatge+': '+nomMuntatge);
