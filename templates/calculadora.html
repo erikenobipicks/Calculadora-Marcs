@@ -1358,7 +1358,19 @@ body{
           <div class="r-row"><span class="r-lbl" id="r-lbl-net">Preu net PVP (sense IVA)</span><span class="r-val" id="r-net">0,00 €</span></div>
           <div class="r-row" id="r-row-desc" style="display:none"><span class="r-lbl" id="r-lbl-desc">Descompte</span><span class="r-val" style="color:var(--amber)" id="r-desc">— €</span></div>
           <div class="r-row"><span class="r-lbl">IVA 21%</span><span class="r-val" id="r-iva">0,00 €</span></div>
-          <div class="r-row"><span class="r-lbl" id="r-lbl-final">Total amb IVA</span><span class="r-val big" id="r-final">0,00 €</span></div>
+          <div class="r-row" id="r-row-round" style="display:none"><span class="r-lbl" id="r-lbl-round">Arrodoniment</span><span class="r-val" style="color:var(--amber)" id="r-round">— €</span></div>
+          <div class="r-row">
+            <span class="r-lbl" id="r-lbl-final">Total amb IVA</span>
+            <span style="display:flex;align-items:center;gap:7px">
+              <span style="display:inline-flex;gap:3px" title="Arrodonir el total a l'euro sencer">
+                <button type="button" id="btn-round-down" onclick="setArrodoniment('down')" data-on="0" title="Arrodonir a la baixa (€ sencer)"
+                  style="width:23px;height:23px;border:1px solid #E5E2DB;border-radius:6px;background:#fff;color:#6B6860;cursor:pointer;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all .15s">▼</button>
+                <button type="button" id="btn-round-up" onclick="setArrodoniment('up')" data-on="0" title="Arrodonir a l'alça (€ sencer)"
+                  style="width:23px;height:23px;border:1px solid #E5E2DB;border-radius:6px;background:#fff;color:#6B6860;cursor:pointer;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all .15s">▲</button>
+              </span>
+              <span class="r-val big" id="r-final">0,00 €</span>
+            </span>
+          </div>
           <div class="e-row"><label>Entrega a compte</label><input type="number" id="entrega" value="0" min="0" step="0.01" oninput="onEntregaInput()"></div>
           <div class="r-row"><span class="r-lbl">Pendent de cobrar</span><span class="r-val red" id="r-pend">0,00 €</span></div>
         </div>
@@ -1511,6 +1523,8 @@ var DESCATALOGADA = {pre:false, marc:false};
 var CLOSEST = {};
 var muntatge_actiu = 'cap';
 var marge = MARGE_PRO, marge_impressio = MARGE_IMPRESSIO_PRO, rmode = 'pvp', uid = null;
+// Arrodoniment del total a l'euro sencer (només PVP): '' cap, 'up' a l'alça, 'down' a la baixa.
+var _arrodoniment = '';
 // Descomptes combo (% sobre subtotal PVP). Defaults sincronitzats amb config BD;
 // /api/marge sobreescriu amb els valors actuals.
 // minim_pvp: si el subtotal PVP és inferior a aquest mínim, no s'aplica el combo.
@@ -3723,6 +3737,30 @@ function calcular(){
   var isCost=rmode==='cost';
   var cTotQty=cTot*qty;
 
+  // ── Arrodoniment del total a l'euro sencer (només PVP) ──────────────────
+  // Plega TOTS els descomptes dins la xifra final arrodonida. Aigües avall
+  // (pressupost, albarà, factura, WhatsApp) s'hi envia preu_net = total/1.21 i
+  // descompte 0, de manera que tots els documents mostren la mateixa xifra.
+  // Nota: la línia d'IVA del resum es manté amb el valor original; la diferència
+  // fins al total arrodonit es mostra a la fila "Arrodoniment".
+  var _roundAdj = 0;
+  if(_arrodoniment && !isCost && pFin > 0){
+    var _pfOrig = pFin;
+    var _r = _arrodoniment==='up' ? Math.ceil(pFin - 1e-6) : Math.floor(pFin + 1e-6);
+    if(_r > 0){
+      pFin      = _r;
+      pend      = pFin - ent;
+      _roundAdj = pFin - _pfOrig;
+    }
+  }
+  var elRoundRow = document.getElementById('r-row-round');
+  var showRound  = !!_arrodoniment && !isCost && Math.abs(_roundAdj) > 0.0001;
+  if(elRoundRow) elRoundRow.style.display = showRound ? '' : 'none';
+  if(showRound){
+    document.getElementById('r-lbl-round').textContent = 'Arrodoniment ' + (_arrodoniment==='up' ? '(a l\'alça)' : '(a la baixa)');
+    document.getElementById('r-round').textContent = (_roundAdj>=0?'+ ':'- ') + fmt(Math.abs(_roundAdj));
+  }
+
   // Descompte per volum de la impressió: només afecta el cost/PVD. Calculem
   // l'estalvi (preu base − preu descomptat) × unitats per fer-lo visible al resum.
   var impBaseUnit = (document.getElementById('chk-impressio').checked && CLOSEST.impressio) ? (CLOSEST.impressio.preu||0) : 0;
@@ -3809,6 +3847,9 @@ function calcular(){
     document.getElementById('ac-marge-pvp').textContent = fmt(margePvp) + ' (' + pctPvp.toFixed(1) + '%)';
   }
 
+  // Amb arrodoniment actiu, el net que va als documents es deriva del total
+  // arrodonit (total/1.21) i el descompte queda a 0 (ja plegat dins el total).
+  var _roundOn = !!_arrodoniment && !isCost && pFin > 0;
   window._c={
     preu_net:pNet,
     preu_final:pFin,
@@ -3818,7 +3859,10 @@ function calcular(){
     combo_eur:comboEur,
     combo_label:comboLbl,
     cost_produccio: cTot*qty,
-    revers_peu_preu: parseFloat(((((cRevers*(1+marge/100))*1.21)*qty) || 0).toFixed(2))
+    revers_peu_preu: parseFloat(((((cRevers*(1+marge/100))*1.21)*qty) || 0).toFixed(2)),
+    // Valors per als documents (pressupost/albarà/factura/FD):
+    doc_net:  _roundOn ? pFin/1.21 : pNet,
+    doc_desc: _roundOn ? 0 : desc
   };
 }
 
@@ -3833,6 +3877,25 @@ function toggleCost(){
   var cp=document.getElementById('cost-panel'); if(cp) cp.style.display=on?'block':'none';
   updateBtnPreus();
   updateReversPeu();
+  calcular();
+}
+
+// ── Arrodoniment del total ──────────────────────────────────────────────────
+// Sincronitza l'estat visual dels botons ▼ / ▲ segons _arrodoniment.
+function _syncArrodonimentBtns(){
+  [['btn-round-down','down'],['btn-round-up','up']].forEach(function(x){
+    var b=document.getElementById(x[0]); if(!b) return;
+    var on = _arrodoniment===x[1];
+    b.dataset.on = on?'1':'0';
+    b.style.background  = on ? '#1A6B45' : '#fff';
+    b.style.color       = on ? '#fff'    : '#6B6860';
+    b.style.borderColor = on ? '#1A6B45' : '#E5E2DB';
+  });
+}
+// Tornar a clicar el botó actiu treu l'arrodoniment (toggle).
+function setArrodoniment(mode){
+  _arrodoniment = (_arrodoniment===mode) ? '' : mode;
+  _syncArrodonimentBtns();
   calcular();
 }
 
@@ -3924,13 +3987,13 @@ function guardar(){
     revers_peu:document.getElementById('chk-revers-peu').checked,
     revers_peu_preu: window._c ? parseFloat((window._c.revers_peu_preu||0).toFixed(2)) : 0,
     marge:marge,
-    descompte:parseFloat(document.getElementById('descompte').value)||0,
+    descompte:(window._c && window._c.doc_desc!=null) ? window._c.doc_desc : (parseFloat(document.getElementById('descompte').value)||0),
     quantitat:parseFloat(document.getElementById('quantitat').value)||1,
     entrega:parseFloat(document.getElementById('entrega').value)||0,
     observacions:document.getElementById('observacions').value,
     finestres_extra:document.getElementById('finestres-extra').value||'0',
     lang:_lang,
-    preu_net:       window._c ? parseFloat(window._c.preu_net.toFixed(2))       : 0,
+    preu_net:       window._c ? parseFloat((window._c.doc_net!=null?window._c.doc_net:window._c.preu_net).toFixed(2)) : 0,
     preu_final:     window._c ? parseFloat(window._c.preu_final.toFixed(2))     : 0,
     pendent:        window._c ? parseFloat(window._c.pendent.toFixed(2))        : 0,
     cost_produccio: window._c ? parseFloat((window._c.cost_produccio||0).toFixed(2)) : 0,
@@ -4348,7 +4411,7 @@ function crearAlbaraFD(modePreu, docType){
     observacions:  document.getElementById('observacions').value||'',
     num_pressupost: window._numPressupost||'',
     cost_produccio: c.cost_produccio||0,
-    preu_net:       c.preu_net||0,
+    preu_net:       (c.doc_net!=null?c.doc_net:c.preu_net)||0,
     preu_final:     c.preu_final||0,
     quantitat:      parseFloat(document.getElementById('quantitat').value)||1,
     final_amplada:  parseFloat(document.getElementById('marc-w').value)||0,
@@ -5904,6 +5967,7 @@ function novaComanda(){
   document.getElementById('btn-wa-objectiu').disabled=true;
   // Reset: el cm-passpartu torna a auto-ajustar el default al següent canvi.
   _cmPasspartuTouched = false;
+  _arrodoniment = ''; _syncArrodonimentBtns();
   netejar(); renderTabs();
 }
 

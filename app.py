@@ -13659,6 +13659,12 @@ def _imp_closest(fw, fh, paper='lustre'):
 
     calib_low = None    # max àrea entre les ≤ area_sol
     calib_high = None   # min àrea entre les ≥ area_sol
+    # Veïns ESTRICTES (àrea < i > a la sol·licitada). Serveixen de blindatge
+    # contra files "verí": una fila mal introduïda (preu molt per sota de la
+    # tendència) just a l'àrea sol·licitada faria col·lapsar calib_low i
+    # calib_high sobre ella i el MAX no la podria rescatar.
+    calib_low_strict = None
+    calib_high_strict = None
     smallest = None
     for r in rows:
         try:
@@ -13677,6 +13683,10 @@ def _imp_closest(fw, fh, paper='lustre'):
             calib_low = (r, a, preu_r)
         if a >= area_sol and (calib_high is None or a < calib_high[1]):
             calib_high = (r, a, preu_r)
+        if a < area_sol and (calib_low_strict is None or a > calib_low_strict[1]):
+            calib_low_strict = (r, a, preu_r)
+        if a > area_sol and (calib_high_strict is None or a < calib_high_strict[1]):
+            calib_high_strict = (r, a, preu_r)
 
     if calib_low is None and calib_high is None:
         calib_low = smallest
@@ -13693,6 +13703,18 @@ def _imp_closest(fw, fh, paper='lustre'):
     candidates = [p for p in (_preu_from_calib(calib_low), _preu_from_calib(calib_high))
                   if p is not None]
     preu_formula = max(candidates) if candidates else 0.0
+
+    # Blindatge anti-verí: si el preu principal cau MOLT per sota del que
+    # prediuen els veïns estrictes (< 50%), vol dir que la mida sol·licitada
+    # coincideix amb una fila mal introduïda. En aquest cas fem servir la
+    # tendència dels veïns. El llindar del 50% és prou ample per no tocar cap
+    # preu legítim (el €/cm² del catàleg varia com a molt ~1,7× entre mides).
+    neigh = [p for p in (_preu_from_calib(calib_low_strict), _preu_from_calib(calib_high_strict))
+             if p is not None]
+    if neigh:
+        preu_neighbors = max(neigh)
+        if preu_neighbors > 0 and preu_formula < 0.5 * preu_neighbors:
+            preu_formula = preu_neighbors
 
     # Blindatge de l'extrapolació cap avall: si la mida sol·licitada és més petita
     # que TOTES les anques d'aquest paper (cas dels papers només de gran format,
