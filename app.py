@@ -13745,6 +13745,27 @@ def _imp_closest(fw, fh, paper='lustre'):
         except (TypeError, ValueError):
             pass
 
+    # El Pòster Mate és un paper més econòmic que el Lustre i NO ha de sortir mai
+    # més car a cap mida. Com que només té tarifa de gran format, el blindatge de
+    # dalt clavava les mides petites al preu de l'anca 40x50 (8 €), per sobre del
+    # Lustre. El capem a una fracció del preu Lustre equivalent: les mides grans
+    # mantenen la seva anca (ja més barata que aquest límit) i les petites baixen
+    # per sota del Lustre. Ratio configurable (imp_poster_mate_max_ratio, 0.80).
+    if paper == 'poster_mate':
+        try:
+            _ref_lu = _imp_closest(fw, fh, paper='lustre')
+            _lp = float(_ref_lu['preu']) if _ref_lu else 0.0
+        except Exception:
+            _lp = 0.0
+        if _lp > 0:
+            try:
+                _ratio = float(get_config_value('imp_poster_mate_max_ratio', '0.80'))
+            except (TypeError, ValueError):
+                _ratio = 0.80
+            _cap = round(_lp * _ratio, 2)
+            if _cap > 0 and preu_formula > _cap:
+                preu_formula = _cap
+
     # Si existeix una ref exacta al catàleg per aquesta mida, la usem
     # com a etiqueta (millor per a facturació); si no, generem imp-WxH.
     if fila:
