@@ -11629,10 +11629,18 @@ def _resolve_fd_contact_for_request(d, force_fresh=False):
     return cid, nom_fd, None
 
 
-def _linies_de_cistella(items, mode_preu, recarrec=False):
+def _linies_de_cistella(items, mode_preu, recarrec=False, descompte_global=0):
     """Construeix les linies FD a partir de la cistella de marcs del pressupost
-    multi-marc. Cada item: {text, quantity, preu_net, cost_produccio}. Segons
-    mode_preu fa servir el PVP net o el cost de produccio."""
+    multi-marc. Cada item: {text, quantity, preu_net, cost_produccio, descompte}.
+    Segons mode_preu fa servir el PVP net o el cost de produccio.
+
+    Aplica els descomptes (per línia i el global del pressupost) igual que la
+    cistella a pantalla, el PDF (crear_pdf_marcs) i el desat (api_desar_cistella),
+    perquè el document de Factura Directa no sobrefacturi respecte d'aquells."""
+    try:
+        dg = max(0.0, min(100.0, float(descompte_global or 0)))
+    except (TypeError, ValueError):
+        dg = 0.0
     linies = []
     for it in (items or []):
         if not isinstance(it, dict):
@@ -11646,7 +11654,14 @@ def _linies_de_cistella(items, mode_preu, recarrec=False):
             base = float(it.get('preu_net') or 0) if mode_preu == 'pvp' else float(it.get('cost_produccio') or 0)
         except (TypeError, ValueError):
             base = 0.0
-        unit = round(base / qty, 2) if qty > 0 else round(base, 2)
+        try:
+            line_dp = max(0.0, min(100.0, float(it.get('descompte') or 0)))
+        except (TypeError, ValueError):
+            line_dp = 0.0
+        # Descompte efectiu = combinació del descompte de línia i el global.
+        eff_dp = 100.0 * (1 - (1 - line_dp / 100.0) * (1 - dg / 100.0))
+        net = base * (1 - eff_dp / 100.0)
+        unit = round(net / qty, 2) if qty > 0 else round(net, 2)
         linies.append({'text': text, 'quantity': qty, 'unitPrice': unit, 'tax': _fd_line_tax(recarrec)})
     return linies
 
@@ -11671,7 +11686,8 @@ def api_crear_doc_marcs():
         return err
 
     recarrec = _client_extern_recarrec((d.get('client_extern_id') or '').strip() or None)
-    linies = _linies_de_cistella(items, mode_preu, recarrec=recarrec)
+    linies = _linies_de_cistella(items, mode_preu, recarrec=recarrec,
+                                 descompte_global=d.get('descompte_global') or 0)
     if not linies:
         return jsonify({'ok': False, 'error': 'No s\'han pogut construir les línies del pressupost.'}), 400
 

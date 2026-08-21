@@ -3364,10 +3364,14 @@ function setBudgetMode(mode){
   var cmot = document.getElementById('card-motllures');
   if(cmot) cmot.style.display = (isImp || isCustom) ? 'none' : '';
   // Seccions només-marc dins de Materials: s'amaguen en "només impressió".
-  ['grup-muntatge','grup-proteccio','grup-interior','grup-revers-peu','camp-tipus-peca'].forEach(function(id){
+  // El muntatge (encolat/foam) SÍ es manté visible: una còpia es pot muntar en
+  // foam sense marc, i cal poder-ho triar perquè entri al preu i als documents.
+  ['grup-proteccio','grup-interior','grup-revers-peu','camp-tipus-peca'].forEach(function(id){
     var el = document.getElementById(id);
     if(el) el.style.display = isImp ? 'none' : '';
   });
+  var gMunt = document.getElementById('grup-muntatge');
+  if(gMunt) gMunt.style.display = isCustom ? 'none' : '';
   if(isDigital){ if(typeof recalcDigital === 'function') recalcDigital(); return; }
   if(isOrla){ if(typeof recalcOrla === 'function') recalcOrla(); return; }
   if(isRegals){ if(typeof recalcRegals === 'function') recalcRegals(); return; }
@@ -3379,7 +3383,9 @@ function setBudgetMode(mode){
     if(typeof PREUS === 'object'){ PREUS.marc = 0; PREUS.pre = 0; }
     var mp = document.getElementById('marc_principal'); if(mp) mp.value = '';
     var pm = document.getElementById('pre_marc'); if(pm) pm.value = '';
-    if(typeof setGroupValue === 'function'){ setGroupValue('muntatge',''); setGroupValue('proteccio',''); setGroupValue('interior',''); }
+    // Es netegen proteccio/interior (no apliquen a una còpia) però NO el muntatge:
+    // el foam (encolat) és un acabat vàlid per a una fotografia impresa.
+    if(typeof setGroupValue === 'function'){ setGroupValue('proteccio',''); setGroupValue('interior',''); }
     // Peça = fotografia, impressió al laboratori i activada.
     var tp = document.getElementById('tipus-peca');
     if(tp && tp.value !== 'fotografia'){ tp.value = 'fotografia'; if(typeof onPieceTypeChange === 'function') onPieceTypeChange(); }
@@ -4472,7 +4478,11 @@ function _descripcioMarcActual(){
     var paperRadio = document.querySelector('input[name="impressio-paper"]:checked');
     var _paperNoms = {baryta:'Hahnemühle Baryta', poster_mate:'Pòster Mate', lustre:'Paper Lustre'};
     var paper = paperRadio ? (_paperNoms[paperRadio.value] || 'Paper Lustre') : '';
-    return 'Còpia' + ((pw && ph) ? (' ' + _gNum(pw) + 'x' + _gNum(ph)) : '') + (paper ? (' · ' + paper) : '');
+    // Muntatge (encolat/foam) si s'ha triat: ha de constar al concepte perquè
+    // entri a la cistella, al PDF i als documents de Factura Directa.
+    var muntImp = _optLabel('muntatge');
+    return 'Còpia' + ((pw && ph) ? (' ' + _gNum(pw) + 'x' + _gNum(ph)) : '') + (paper ? (' · ' + paper) : '')
+           + (muntImp ? (' + ' + muntImp) : '');
   }
   var ref = ((document.getElementById('marc_principal')||{}).value || '').trim();
   var premarc = ((document.getElementById('pre_marc')||{}).value || '').trim();
@@ -4515,10 +4525,18 @@ function afegirACistella(){
   // que el PDF multi-marc mostri la imatge de mostra de cada marc.
   var _mref = ((document.getElementById('marc_principal')||{}).value||'').trim()
               || ((document.getElementById('pre_marc')||{}).value||'').trim();
+  // Descompte manual del client (camp principal): s'ha de conservar a la línia
+  // perquè es reflecteixi a la cistella, al PDF, a l'historial i a Factura
+  // Directa (abans es perdia en afegir a la cistella). El descompte pack (combo)
+  // es plega dins el preu net perquè el preu de la línia coincideixi amb el
+  // resum individual.
+  var _descLinia = parseFloat((document.getElementById('descompte')||{}).value)||0;
+  var _netCombo = (c.preu_net||0) - (c.combo_eur||0);
   _cistella.push({
     text: _descripcioMarcActual(),
     quantity: qty,
-    preu_net: c.preu_net||0,
+    preu_net: _netCombo,
+    descompte: _descLinia,
     cost_produccio: c.cost_produccio||0,
     ref: _mref,
     // Detall estructurat perquè l'historial mostri mides i materials (i no 0×0):
